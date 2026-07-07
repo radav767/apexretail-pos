@@ -2,7 +2,7 @@ import uuid
 from fastapi import HTTPException
 
 from app.models import Company, Shop, Branch, User, Employee, Device
-from app.repositories.auth_repository import AuthRepository
+from app.auth.repository import AuthRepository
 from app.auth.security import hash_password, verify_password, create_access_token
 
 
