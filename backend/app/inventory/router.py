@@ -11,6 +11,7 @@ from app.inventory.schema import (
     InventoryProductOut,
     InventoryValuationOut,
     StockAdjustmentCreate,
+    StockTakeCreate,
 )
 from app.inventory.service import InventoryService
 
@@ -81,3 +82,14 @@ async def adjust_stock(
     service: InventoryService = Depends(get_service),
 ):
     return await service.adjust_stock(data)
+
+
+@router.post(
+    "/stock-take",
+    response_model=list[InventoryMovementOut],
+)
+async def stock_take(
+    data: StockTakeCreate,
+    service: InventoryService = Depends(get_service),
+):
+    return await service.stock_take(data)

@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from fastapi import HTTPException
 
+from app.models.inventory_movement import InventoryMovement
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.sales.repository import SalesRepository
@@ -16,28 +17,46 @@ class SalesService:
 
     async def create_sale(self, data: SaleCreate):
         if not data.items:
-            raise HTTPException(400, "Sale must contain at least one item")
+            raise HTTPException(
+                400,
+                "Sale must contain at least one item",
+            )
 
         payment_method = data.payment_method.strip().lower()
 
-        if payment_method not in {"cash", "card", "mobile", "credit"}:
-            raise HTTPException(400, "Unsupported payment method")
+        if payment_method not in {
+            "cash",
+            "card",
+            "mobile",
+            "credit",
+        }:
+            raise HTTPException(
+                400,
+                "Unsupported payment method",
+            )
 
         sale_id = uuid.uuid4()
+
         receipt_number = (
             f"APR-{datetime.now(timezone.utc):%Y%m%d}-"
             f"{str(sale_id)[:8].upper()}"
         )
 
         total = Decimal("0")
-        sale_items: list[SaleItem] = []
+        sale_items = []
         products_to_update = []
+        inventory_movements = []
 
         for item in data.items:
-            product = await self.repo.get_product(item.product_id)
+            product = await self.repo.get_product(
+                item.product_id,
+            )
 
             if not product:
-                raise HTTPException(404, "Product not found")
+                raise HTTPException(
+                    404,
+                    "Product not found",
+                )
 
             if product.company_id != data.company_id:
                 raise HTTPException(
@@ -45,16 +64,19 @@ class SalesService:
                     "Product does not belong to this company",
                 )
 
-            if product.stock_qty < item.quantity:
+            before_qty = Decimal(product.stock_qty or 0)
+
+            if before_qty < item.quantity:
                 raise HTTPException(
                     400,
                     f"Not enough stock for {product.name}",
                 )
 
+            after_qty = before_qty - item.quantity
             line_total = product.selling_price * item.quantity
-            total += line_total
 
-            product.stock_qty -= item.quantity
+            total += line_total
+            product.stock_qty = after_qty
             products_to_update.append(product)
 
             sale_items.append(
@@ -68,8 +90,29 @@ class SalesService:
                 )
             )
 
+            inventory_movements.append(
+                InventoryMovement(
+                    company_id=data.company_id,
+                    product_id=product.id,
+                    product_name=product.name,
+                    movement_type="sale",
+                    quantity=item.quantity,
+                    before_qty=before_qty,
+                    after_qty=after_qty,
+                    unit_cost=Decimal(product.cost_price or 0),
+                    reference=receipt_number,
+                    reason="POS sale",
+                    notes=(
+                        f"Stock deducted by receipt "
+                        f"{receipt_number}"
+                    ),
+                )
+            )
+
         if payment_method == "cash":
-            amount_received = data.amount_received or Decimal("0")
+            amount_received = (
+                data.amount_received or Decimal("0")
+            )
 
             if amount_received < total:
                 raise HTTPException(
@@ -97,7 +140,15 @@ class SalesService:
             sale,
             sale_items,
             products_to_update,
+            inventory_movements,
         )
 
-    async def list_sales(self, company_id, limit: int = 100):
-        return await self.repo.list_sales(company_id, limit)
+    async def list_sales(
+        self,
+        company_id,
+        limit: int = 100,
+    ):
+        return await self.repo.list_sales(
+            company_id,
+            limit,
+        )

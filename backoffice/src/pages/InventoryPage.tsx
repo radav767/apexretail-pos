@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import "./inventory.css";
+import StockTakePanel from "./StockTakePanel";
 
 type InventoryProduct = {
   product_id: string;
@@ -42,6 +43,7 @@ type InventoryTab =
   | "overview"
   | "grn"
   | "adjustment"
+  | "stocktake"
   | "valuation"
   | "history";
 
@@ -251,6 +253,7 @@ export default function InventoryPage({
           ["overview", "Overview"],
           ["grn", "Goods Received"],
           ["adjustment", "Stock Adjustment"],
+          ["stocktake", "Stock Take"],
           ["valuation", "Valuation"],
           ["history", "History"],
         ].map(([value, label]) => (
@@ -556,6 +559,17 @@ export default function InventoryPage({
             {loading ? "Saving..." : "Save Adjustment"}
           </button>
         </section>
+      )}
+
+
+      {tab === "stocktake" && (
+        <StockTakePanel
+          companyId={companyId}
+          onDataChanged={() => {
+            void loadInventory();
+            onDataChanged?.();
+          }}
+        />
       )}
 
       {tab === "valuation" && (

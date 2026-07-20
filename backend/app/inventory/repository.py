@@ -34,6 +34,7 @@ class InventoryRepository:
         movement: InventoryMovement,
     ):
         try:
+            self.db.add(product)
             self.db.add(movement)
 
             await self.db.commit()
@@ -41,6 +42,25 @@ class InventoryRepository:
             await self.db.refresh(movement)
 
             return movement
+        except Exception:
+            await self.db.rollback()
+            raise
+
+    async def apply_movements(
+        self,
+        products,
+        movements,
+    ):
+        try:
+            self.db.add_all(products)
+            self.db.add_all(movements)
+
+            await self.db.commit()
+
+            for movement in movements:
+                await self.db.refresh(movement)
+
+            return movements
         except Exception:
             await self.db.rollback()
             raise
@@ -78,10 +98,14 @@ class InventoryRepository:
         result = await self.db.execute(
             select(
                 func.count(Product.id),
-                func.coalesce(func.sum(Product.stock_qty), 0),
+                func.coalesce(
+                    func.sum(Product.stock_qty),
+                    0,
+                ),
                 func.coalesce(
                     func.sum(
-                        Product.stock_qty * Product.cost_price
+                        Product.stock_qty
+                        * Product.cost_price
                     ),
                     0,
                 ),
