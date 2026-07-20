@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -25,6 +26,7 @@ class SaleOut(BaseModel):
     change_due: Decimal
     payment_method: str
     status: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

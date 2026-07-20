@@ -32,3 +32,12 @@ class SalesRepository:
         await self.db.commit()
         await self.db.refresh(sale)
         return sale
+
+    async def list_sales(self, company_id, limit: int = 100):
+        result = await self.db.execute(
+            select(Sale)
+            .where(Sale.company_id == company_id)
+            .order_by(Sale.created_at.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()

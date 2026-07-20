@@ -98,3 +98,6 @@ class SalesService:
             sale_items,
             products_to_update,
         )
+
+    async def list_sales(self, company_id, limit: int = 100):
+        return await self.repo.list_sales(company_id, limit)

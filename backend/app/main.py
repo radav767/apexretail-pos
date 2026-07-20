@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth import router as auth
 from app.products import router as products
 from app.sales import router as sales
+from app.dashboard import router as dashboard
 
 app = FastAPI(title="ApexRetail POS API")
 
@@ -10,6 +11,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://pos.apexpos.cloud",
+        "https://backoffice.apexpos.cloud",
         "http://localhost:5173",
     ],
     allow_credentials=True,
@@ -20,6 +22,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(sales.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
 
 @app.get("/api/health")
 async def health():
