@@ -1,3 +1,4 @@
+from sqlalchemy import ForeignKey
 import uuid
 
 from sqlalchemy import Column, String, Numeric, DateTime, func
@@ -11,6 +12,21 @@ class Sale(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id = Column(UUID(as_uuid=True), nullable=False)
+
+
+    shop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("shops.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    branch_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("branches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     receipt_number = Column(String(40), unique=True, nullable=False)
 

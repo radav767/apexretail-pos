@@ -12,6 +12,7 @@ class SaleItemCreate(BaseModel):
 
 class SaleCreate(BaseModel):
     company_id: UUID
+    branch_id: UUID | None = None
     payment_method: str = "cash"
     amount_received: Decimal | None = None
     items: list[SaleItemCreate]

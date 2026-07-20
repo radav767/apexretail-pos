@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class GRNCreate(BaseModel):
     company_id: UUID
+    branch_id: UUID | None = None
     product_id: UUID
     quantity: Decimal = Field(gt=0)
     unit_cost: Decimal | None = Field(default=None, ge=0)
@@ -18,6 +19,7 @@ class GRNCreate(BaseModel):
 
 class StockAdjustmentCreate(BaseModel):
     company_id: UUID
+    branch_id: UUID | None = None
     product_id: UUID
     adjustment_type: Literal["add", "remove", "set"]
     quantity: Decimal = Field(ge=0)
@@ -33,14 +35,38 @@ class StockTakeItem(BaseModel):
 
 class StockTakeCreate(BaseModel):
     company_id: UUID
+    branch_id: UUID | None = None
     items: list[StockTakeItem] = Field(min_length=1)
     reference: str | None = Field(default=None, max_length=80)
     notes: str | None = Field(default=None, max_length=1000)
 
 
+
+class StockTransferItem(BaseModel):
+    product_id: UUID
+    quantity: Decimal = Field(gt=0)
+
+
+class StockTransferCreate(BaseModel):
+    company_id: UUID
+    source_branch_id: UUID
+    destination_branch_id: UUID
+    items: list[StockTransferItem] = Field(min_length=1)
+    reference: str | None = Field(
+        default=None,
+        max_length=80,
+    )
+    notes: str | None = Field(
+        default=None,
+        max_length=1000,
+    )
+
+
 class InventoryMovementOut(BaseModel):
     id: UUID
     company_id: UUID
+    shop_id: UUID | None = None
+    branch_id: UUID | None = None
     product_id: UUID
     product_name: str
     movement_type: str

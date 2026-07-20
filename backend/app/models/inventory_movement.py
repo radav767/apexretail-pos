@@ -1,3 +1,4 @@
+from sqlalchemy import ForeignKey
 import uuid
 
 from sqlalchemy import Column, DateTime, Numeric, String, Text, func
@@ -18,6 +19,21 @@ class InventoryMovement(Base):
     company_id = Column(
         UUID(as_uuid=True),
         nullable=False,
+        index=True,
+    )
+
+
+    shop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("shops.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    branch_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("branches.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
 
