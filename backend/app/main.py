@@ -4,6 +4,7 @@ from app.auth import router as auth
 from app.products import router as products
 from app.sales import router as sales
 from app.dashboard import router as dashboard
+from app.inventory import router as inventory
 
 app = FastAPI(title="ApexRetail POS API")
 
@@ -23,6 +24,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(products.router, prefix="/api")
 app.include_router(sales.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(inventory.router, prefix="/api")
 
 @app.get("/api/health")
 async def health():
