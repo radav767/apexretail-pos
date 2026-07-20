@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api/client";
 import "./App.css";
+import ProductsPage from "./pages/ProductsPage";
 
 type DashboardSummary = {
   today_sales: string;
@@ -43,7 +44,7 @@ function App() {
 
   const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [page, setPage] = useState<"dashboard" | "sales">("dashboard");
+  const [page, setPage] = useState<"dashboard" | "sales" | "products">("dashboard");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -189,7 +190,12 @@ function App() {
             Sales History
           </button>
 
-          <button disabled>Products</button>
+          <button
+            className={page === "products" ? "active" : ""}
+            onClick={() => setPage("products")}
+          >
+            Products
+          </button>
           <button disabled>Inventory</button>
           <button disabled>Employees</button>
           <button disabled>Reports</button>
@@ -208,7 +214,9 @@ function App() {
             <h1>
               {page === "dashboard"
                 ? "Business Dashboard"
-                : "Sales History"}
+                : page === "sales"
+                  ? "Sales History"
+                  : "Products & Categories"}
             </h1>
 
             <p>Live data from ApexRetail POS</p>
@@ -286,6 +294,16 @@ function App() {
 
             <SalesTable sales={sales} />
           </section>
+        )}
+
+
+        {page === "products" && (
+          <ProductsPage
+            companyId={companyId}
+            onDataChanged={() =>
+              void loadBackofficeData(companyId)
+            }
+          />
         )}
 
         <p className="status-message">{message}</p>

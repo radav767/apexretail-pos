@@ -1,11 +1,17 @@
 from decimal import Decimal
 from uuid import UUID
-from pydantic import BaseModel
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CategoryCreate(BaseModel):
     company_id: UUID
-    name: str
+    name: str = Field(min_length=1, max_length=120)
+
+
+class CategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    active: bool | None = None
 
 
 class CategoryOut(BaseModel):
@@ -14,21 +20,33 @@ class CategoryOut(BaseModel):
     name: str
     active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProductCreate(BaseModel):
     company_id: UUID
     category_id: UUID | None = None
-    name: str
-    sku: str | None = None
-    barcode: str | None = None
-    unit: str = "each"
-    cost_price: Decimal = Decimal("0")
-    selling_price: Decimal = Decimal("0")
-    stock_qty: Decimal = Decimal("0")
-    reorder_level: Decimal = Decimal("0")
+    name: str = Field(min_length=1, max_length=160)
+    sku: str | None = Field(default=None, max_length=80)
+    barcode: str | None = Field(default=None, max_length=80)
+    unit: str = Field(default="each", max_length=20)
+    cost_price: Decimal = Field(default=Decimal("0"), ge=0)
+    selling_price: Decimal = Field(default=Decimal("0"), ge=0)
+    stock_qty: Decimal = Field(default=Decimal("0"), ge=0)
+    reorder_level: Decimal = Field(default=Decimal("0"), ge=0)
+
+
+class ProductUpdate(BaseModel):
+    category_id: UUID | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    sku: str | None = Field(default=None, max_length=80)
+    barcode: str | None = Field(default=None, max_length=80)
+    unit: str | None = Field(default=None, max_length=20)
+    cost_price: Decimal | None = Field(default=None, ge=0)
+    selling_price: Decimal | None = Field(default=None, ge=0)
+    stock_qty: Decimal | None = Field(default=None, ge=0)
+    reorder_level: Decimal | None = Field(default=None, ge=0)
+    active: bool | None = None
 
 
 class ProductOut(BaseModel):
@@ -45,5 +63,4 @@ class ProductOut(BaseModel):
     reorder_level: Decimal
     active: bool
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
