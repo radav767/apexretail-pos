@@ -17,24 +17,36 @@ class InventoryService:
         self.repo = repo
 
     async def receive_stock(self, data: GRNCreate):
+        branch = await self.repo.resolve_branch(
+            data.company_id,
+            data.branch_id,
+        )
+
         product = await self.repo.get_product_for_update(
             data.company_id,
             data.product_id,
         )
 
-        if not product:
-            raise HTTPException(404, "Product not found")
+        balance = await self.repo.get_balance_for_update(
+            data.company_id,
+            branch,
+            product,
+        )
 
-        before_qty = Decimal(product.stock_qty or 0)
+        before_qty = Decimal(balance.quantity or 0)
         after_qty = before_qty + data.quantity
+
+        balance.quantity = after_qty
 
         if data.unit_cost is not None:
             product.cost_price = data.unit_cost
 
-        product.stock_qty = after_qty
+        await self.repo.sync_product_total(product)
 
         movement = InventoryMovement(
             company_id=data.company_id,
+            shop_id=branch.shop_id,
+            branch_id=branch.id,
             product_id=product.id,
             product_name=product.name,
             movement_type="grn",
@@ -49,6 +61,7 @@ class InventoryService:
 
         return await self.repo.apply_movement(
             product,
+            balance,
             movement,
         )
 
@@ -56,15 +69,23 @@ class InventoryService:
         self,
         data: StockAdjustmentCreate,
     ):
+        branch = await self.repo.resolve_branch(
+            data.company_id,
+            data.branch_id,
+        )
+
         product = await self.repo.get_product_for_update(
             data.company_id,
             data.product_id,
         )
 
-        if not product:
-            raise HTTPException(404, "Product not found")
+        balance = await self.repo.get_balance_for_update(
+            data.company_id,
+            branch,
+            product,
+        )
 
-        before_qty = Decimal(product.stock_qty or 0)
+        before_qty = Decimal(balance.quantity or 0)
 
         if data.adjustment_type == "add":
             if data.quantity <= 0:
@@ -85,17 +106,21 @@ class InventoryService:
             if data.quantity > before_qty:
                 raise HTTPException(
                     400,
-                    "Cannot remove more than available stock",
+                    "Cannot remove more than branch stock",
                 )
 
             after_qty = before_qty - data.quantity
+
         else:
             after_qty = data.quantity
 
-        product.stock_qty = after_qty
+        balance.quantity = after_qty
+        await self.repo.sync_product_total(product)
 
         movement = InventoryMovement(
             company_id=data.company_id,
+            shop_id=branch.shop_id,
+            branch_id=branch.id,
             product_id=product.id,
             product_name=product.name,
             movement_type=(
@@ -112,6 +137,7 @@ class InventoryService:
 
         return await self.repo.apply_movement(
             product,
+            balance,
             movement,
         )
 
@@ -119,8 +145,14 @@ class InventoryService:
         self,
         data: StockTakeCreate,
     ):
+        branch = await self.repo.resolve_branch(
+            data.company_id,
+            data.branch_id,
+        )
+
         seen_products = set()
         products = []
+        balances = []
         movements = []
 
         for item in data.items:
@@ -137,29 +169,36 @@ class InventoryService:
                 item.product_id,
             )
 
-            if not product:
-                raise HTTPException(
-                    404,
-                    f"Product not found: {item.product_id}",
-                )
+            balance = await self.repo.get_balance_for_update(
+                data.company_id,
+                branch,
+                product,
+            )
 
-            before_qty = Decimal(product.stock_qty or 0)
+            before_qty = Decimal(balance.quantity or 0)
             after_qty = item.physical_qty
             variance = after_qty - before_qty
 
-            product.stock_qty = after_qty
+            balance.quantity = after_qty
+            await self.repo.sync_product_total(product)
+
             products.append(product)
+            balances.append(balance)
 
             movements.append(
                 InventoryMovement(
                     company_id=data.company_id,
+                    shop_id=branch.shop_id,
+                    branch_id=branch.id,
                     product_id=product.id,
                     product_name=product.name,
                     movement_type="stock_take",
                     quantity=abs(variance),
                     before_qty=before_qty,
                     after_qty=after_qty,
-                    unit_cost=Decimal(product.cost_price or 0),
+                    unit_cost=Decimal(
+                        product.cost_price or 0
+                    ),
                     reference=self._clean(data.reference),
                     reason="Physical stock count",
                     notes=self._clean(data.notes),
@@ -168,6 +207,7 @@ class InventoryService:
 
         return await self.repo.apply_movements(
             products,
+            balances,
             movements,
         )
 

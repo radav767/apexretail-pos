@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.inventory.stock_repository import BranchStockRepository
 from app.models.inventory_movement import InventoryMovement
 from app.models.product import Product
 
@@ -10,35 +11,55 @@ from app.models.product import Product
 class InventoryRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.stock = BranchStockRepository(db)
+
+    async def resolve_branch(
+        self,
+        company_id: UUID,
+        branch_id: UUID | None = None,
+    ):
+        return await self.stock.resolve_branch(
+            company_id,
+            branch_id,
+        )
 
     async def get_product_for_update(
         self,
         company_id: UUID,
         product_id: UUID,
     ):
-        result = await self.db.execute(
-            select(Product)
-            .where(
-                Product.id == product_id,
-                Product.company_id == company_id,
-                Product.deleted == False,
-            )
-            .with_for_update()
+        return await self.stock.get_product_for_update(
+            company_id,
+            product_id,
         )
 
-        return result.scalar_one_or_none()
+    async def get_balance_for_update(
+        self,
+        company_id: UUID,
+        branch,
+        product,
+    ):
+        return await self.stock.get_balance_for_update(
+            company_id,
+            branch,
+            product,
+        )
+
+    async def sync_product_total(self, product):
+        return await self.stock.sync_product_total(product)
 
     async def apply_movement(
         self,
-        product: Product,
+        product,
+        balance,
         movement: InventoryMovement,
     ):
         try:
             self.db.add(product)
+            self.db.add(balance)
             self.db.add(movement)
 
             await self.db.commit()
-            await self.db.refresh(product)
             await self.db.refresh(movement)
 
             return movement
@@ -49,10 +70,12 @@ class InventoryRepository:
     async def apply_movements(
         self,
         products,
+        balances,
         movements,
     ):
         try:
             self.db.add_all(products)
+            self.db.add_all(balances)
             self.db.add_all(movements)
 
             await self.db.commit()
@@ -104,8 +127,7 @@ class InventoryRepository:
                 ),
                 func.coalesce(
                     func.sum(
-                        Product.stock_qty
-                        * Product.cost_price
+                        Product.stock_qty * Product.cost_price
                     ),
                     0,
                 ),

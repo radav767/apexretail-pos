@@ -35,6 +35,11 @@ class SalesService:
                 "Unsupported payment method",
             )
 
+        branch = await self.repo.resolve_branch(
+            data.company_id,
+            data.branch_id,
+        )
+
         sale_id = uuid.uuid4()
 
         receipt_number = (
@@ -44,40 +49,56 @@ class SalesService:
 
         total = Decimal("0")
         sale_items = []
-        products_to_update = []
+        products = []
+        balances = []
         inventory_movements = []
+        seen_products = set()
 
         for item in data.items:
+            if item.product_id in seen_products:
+                raise HTTPException(
+                    400,
+                    "The same product appears more than once",
+                )
+
+            seen_products.add(item.product_id)
+
             product = await self.repo.get_product(
+                data.company_id,
                 item.product_id,
             )
 
-            if not product:
-                raise HTTPException(
-                    404,
-                    "Product not found",
-                )
+            balance = await self.repo.get_balance(
+                data.company_id,
+                branch,
+                product,
+            )
 
-            if product.company_id != data.company_id:
-                raise HTTPException(
-                    403,
-                    "Product does not belong to this company",
-                )
-
-            before_qty = Decimal(product.stock_qty or 0)
+            before_qty = Decimal(balance.quantity or 0)
 
             if before_qty < item.quantity:
                 raise HTTPException(
                     400,
-                    f"Not enough stock for {product.name}",
+                    (
+                        f"Not enough stock for {product.name} "
+                        f"in the selected branch"
+                    ),
                 )
 
             after_qty = before_qty - item.quantity
-            line_total = product.selling_price * item.quantity
 
+            selling_price = Decimal(
+                product.selling_price or 0
+            )
+
+            line_total = selling_price * item.quantity
             total += line_total
-            product.stock_qty = after_qty
-            products_to_update.append(product)
+
+            balance.quantity = after_qty
+            await self.repo.sync_product_total(product)
+
+            products.append(product)
+            balances.append(balance)
 
             sale_items.append(
                 SaleItem(
@@ -85,7 +106,7 @@ class SalesService:
                     product_id=product.id,
                     product_name=product.name,
                     quantity=item.quantity,
-                    unit_price=product.selling_price,
+                    unit_price=selling_price,
                     line_total=line_total,
                 )
             )
@@ -93,13 +114,17 @@ class SalesService:
             inventory_movements.append(
                 InventoryMovement(
                     company_id=data.company_id,
+                    shop_id=branch.shop_id,
+                    branch_id=branch.id,
                     product_id=product.id,
                     product_name=product.name,
                     movement_type="sale",
                     quantity=item.quantity,
                     before_qty=before_qty,
                     after_qty=after_qty,
-                    unit_cost=Decimal(product.cost_price or 0),
+                    unit_cost=Decimal(
+                        product.cost_price or 0
+                    ),
                     reference=receipt_number,
                     reason="POS sale",
                     notes=(
@@ -111,7 +136,9 @@ class SalesService:
 
         if payment_method == "cash":
             amount_received = (
-                data.amount_received or Decimal("0")
+                data.amount_received
+                if data.amount_received is not None
+                else Decimal("0")
             )
 
             if amount_received < total:
@@ -128,6 +155,8 @@ class SalesService:
         sale = Sale(
             id=sale_id,
             company_id=data.company_id,
+            shop_id=branch.shop_id,
+            branch_id=branch.id,
             receipt_number=receipt_number,
             total_amount=total,
             amount_received=amount_received,
@@ -139,7 +168,8 @@ class SalesService:
         return await self.repo.save_sale(
             sale,
             sale_items,
-            products_to_update,
+            products,
+            balances,
             inventory_movements,
         )
 
