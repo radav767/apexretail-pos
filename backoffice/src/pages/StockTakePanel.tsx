@@ -11,9 +11,11 @@ type Product = {
 
 export default function StockTakePanel({
   companyId,
+  branchId,
   onDataChanged,
 }: {
   companyId: string;
+  branchId: string;
   onDataChanged?: () => void;
 }) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -38,10 +40,23 @@ export default function StockTakePanel({
       setLoading(true);
 
       const response = await api.get(
-        `/inventory/overview/${companyId}`,
+        `/inventory/branch-overview/${companyId}`,
+        {
+          params: {
+            branch_id: branchId,
+          },
+        },
       );
 
-      setProducts(response.data);
+      setProducts(
+        response.data.map((item: any) => ({
+          product_id: item.product_id,
+          name: item.product_name,
+          sku: item.sku,
+          unit: item.unit,
+          stock_qty: item.quantity,
+        })),
+      );
     } catch (error: any) {
       setMessage(
         error.response?.data?.detail ||
@@ -95,6 +110,7 @@ export default function StockTakePanel({
 
       await api.post("/inventory/stock-take", {
         company_id: companyId,
+        branch_id: branchId,
         reference: reference.trim() || null,
         notes: notes.trim() || null,
         items: countedProducts.map((product) => ({
@@ -125,7 +141,7 @@ export default function StockTakePanel({
 
   useEffect(() => {
     void loadProducts();
-  }, [companyId]);
+  }, [companyId, branchId]);
 
   return (
     <section className="inventory-form-card">

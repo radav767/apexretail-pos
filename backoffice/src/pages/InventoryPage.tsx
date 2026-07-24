@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import BranchTransferPanel from "./BranchTransferPanel";
 import "./inventory.css";
 import StockTakePanel from "./StockTakePanel";
 
@@ -39,11 +40,20 @@ type Movement = {
   created_at: string;
 };
 
+
+type InventoryBranch = {
+  id: string;
+  shop_id: string;
+  shop_name: string;
+  name: string;
+};
+
 type InventoryTab =
   | "overview"
   | "grn"
   | "adjustment"
   | "stocktake"
+  | "transfers"
   | "valuation"
   | "history";
 
@@ -62,6 +72,13 @@ export default function InventoryPage({
   onDataChanged?: () => void;
 }) {
   const [tab, setTab] = useState<InventoryTab>("overview");
+
+  const [branches, setBranches] =
+    useState<InventoryBranch[]>([]);
+
+  const [selectedBranchId, setSelectedBranchId] =
+    useState("");
+
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [history, setHistory] = useState<Movement[]>([]);
   const [valuation, setValuation] =
@@ -87,6 +104,35 @@ export default function InventoryPage({
     reference: "",
     notes: "",
   });
+
+
+  async function loadBranches() {
+    if (!companyId) return;
+
+    try {
+      const response = await api.get(
+        `/inventory/branches/${companyId}`,
+      );
+
+      const loadedBranches: InventoryBranch[] =
+        response.data;
+
+      setBranches(loadedBranches);
+
+      setSelectedBranchId((current) => {
+        return loadedBranches.some(
+          (branch) => branch.id === current,
+        )
+          ? current
+          : loadedBranches[0]?.id || "";
+      });
+    } catch (error: any) {
+      setMessage(
+        error.response?.data?.detail ||
+          "Failed to load branches",
+      );
+    }
+  }
 
   async function loadInventory() {
     if (!companyId) return;
@@ -148,6 +194,7 @@ export default function InventoryPage({
 
       await api.post("/inventory/grn", {
         company_id: companyId,
+        branch_id: selectedBranchId || null,
         product_id: grn.product_id,
         quantity: grn.quantity,
         unit_cost: grn.unit_cost || null,
@@ -205,6 +252,7 @@ export default function InventoryPage({
 
       await api.post("/inventory/adjustments", {
         company_id: companyId,
+        branch_id: selectedBranchId || null,
         product_id: adjustment.product_id,
         adjustment_type: adjustment.adjustment_type,
         quantity: adjustment.quantity,
@@ -243,17 +291,51 @@ export default function InventoryPage({
   }
 
   useEffect(() => {
+    void loadBranches();
     void loadInventory();
   }, [companyId]);
 
   return (
     <div className="inventory-page">
+
+      <section className="inventory-branch-toolbar">
+        <div>
+          <span>Working branch</span>
+          <strong>
+            {branches.find(
+              (branch) =>
+                branch.id === selectedBranchId,
+            )?.name || "No branch selected"}
+          </strong>
+        </div>
+
+        <label>
+          Select branch
+          <select
+            value={selectedBranchId}
+            onChange={(event) =>
+              setSelectedBranchId(event.target.value)
+            }
+          >
+            {branches.map((branch) => (
+              <option
+                key={branch.id}
+                value={branch.id}
+              >
+                {branch.shop_name} — {branch.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </section>
+
       <div className="inventory-tabs">
         {[
           ["overview", "Overview"],
           ["grn", "Goods Received"],
           ["adjustment", "Stock Adjustment"],
           ["stocktake", "Stock Take"],
+          ["transfers", "Branches & Transfers"],
           ["valuation", "Valuation"],
           ["history", "History"],
         ].map(([value, label]) => (
@@ -565,8 +647,21 @@ export default function InventoryPage({
       {tab === "stocktake" && (
         <StockTakePanel
           companyId={companyId}
+            branchId={selectedBranchId}
           onDataChanged={() => {
             void loadInventory();
+            onDataChanged?.();
+          }}
+        />
+      )}
+
+
+      {tab === "transfers" && (
+        <BranchTransferPanel
+          companyId={companyId}
+          onDataChanged={async () => {
+            await loadBranches();
+            await loadInventory();
             onDataChanged?.();
           }}
         />
