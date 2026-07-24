@@ -1,6 +1,7 @@
+from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.branch import Branch
@@ -36,6 +37,101 @@ class BranchInventoryRepository:
         )
 
         return result.mappings().all()
+
+    async def get_shop(
+        self,
+        company_id: UUID,
+        shop_id: UUID | None,
+    ):
+        query = select(Shop).where(
+            Shop.company_id == company_id,
+            Shop.active == True,
+            Shop.deleted == False,
+        )
+
+        if shop_id is not None:
+            query = query.where(Shop.id == shop_id)
+
+        result = await self.db.execute(
+            query.order_by(Shop.created_at.asc()).limit(1)
+        )
+
+        return result.scalar_one_or_none()
+
+    async def find_branch_name(
+        self,
+        company_id: UUID,
+        shop_id: UUID,
+        name: str,
+    ):
+        result = await self.db.execute(
+            select(Branch).where(
+                Branch.company_id == company_id,
+                Branch.shop_id == shop_id,
+                func.lower(Branch.name) == name.lower(),
+                Branch.deleted == False,
+            )
+        )
+
+        return result.scalar_one_or_none()
+
+    async def create_branch(
+        self,
+        company_id: UUID,
+        shop: Shop,
+        name: str,
+    ):
+        try:
+            branch = Branch(
+                company_id=company_id,
+                shop_id=shop.id,
+                name=name,
+                active=True,
+                deleted=False,
+            )
+
+            self.db.add(branch)
+            await self.db.flush()
+
+            product_result = await self.db.execute(
+                select(Product).where(
+                    Product.company_id == company_id,
+                    Product.active == True,
+                    Product.deleted == False,
+                )
+            )
+
+            products = product_result.scalars().all()
+
+            balances = [
+                InventoryBalance(
+                    company_id=company_id,
+                    shop_id=shop.id,
+                    branch_id=branch.id,
+                    product_id=product.id,
+                    quantity=Decimal("0"),
+                    reorder_level=Decimal(
+                        product.reorder_level or 0
+                    ),
+                    active=True,
+                    deleted=False,
+                )
+                for product in products
+            ]
+
+            self.db.add_all(balances)
+            await self.db.commit()
+            await self.db.refresh(branch)
+
+            return {
+                "id": branch.id,
+                "shop_id": shop.id,
+                "shop_name": shop.name,
+                "name": branch.name,
+            }
+        except Exception:
+            await self.db.rollback()
+            raise
 
     async def list_balances(
         self,

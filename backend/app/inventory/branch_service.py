@@ -1,9 +1,12 @@
 from decimal import Decimal
 from uuid import UUID
 
+from fastapi import HTTPException
+
 from app.inventory.branch_repository import (
     BranchInventoryRepository,
 )
+from app.inventory.branch_schema import BranchCreate
 
 
 class BranchInventoryService:
@@ -15,6 +18,44 @@ class BranchInventoryService:
 
     async def branches(self, company_id: UUID):
         return await self.repo.list_branches(company_id)
+
+    async def create_branch(self, data: BranchCreate):
+        name = data.name.strip()
+
+        if not name:
+            raise HTTPException(
+                400,
+                "Branch name is required",
+            )
+
+        shop = await self.repo.get_shop(
+            data.company_id,
+            data.shop_id,
+        )
+
+        if not shop:
+            raise HTTPException(
+                404,
+                "Shop not found or inactive",
+            )
+
+        duplicate = await self.repo.find_branch_name(
+            data.company_id,
+            shop.id,
+            name,
+        )
+
+        if duplicate:
+            raise HTTPException(
+                409,
+                "A branch with this name already exists",
+            )
+
+        return await self.repo.create_branch(
+            data.company_id,
+            shop,
+            name,
+        )
 
     async def overview(
         self,

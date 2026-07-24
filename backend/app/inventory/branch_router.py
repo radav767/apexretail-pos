@@ -8,6 +8,7 @@ from app.inventory.branch_repository import (
     BranchInventoryRepository,
 )
 from app.inventory.branch_schema import (
+    BranchCreate,
     BranchInventoryOut,
     InventoryBranchOut,
 )
@@ -28,6 +29,17 @@ def get_service(
     return BranchInventoryService(
         BranchInventoryRepository(db)
     )
+
+
+@router.post(
+    "/branches",
+    response_model=InventoryBranchOut,
+)
+async def create_inventory_branch(
+    data: BranchCreate,
+    service: BranchInventoryService = Depends(get_service),
+):
+    return await service.create_branch(data)
 
 
 @router.get(

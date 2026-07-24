@@ -1,7 +1,13 @@
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class BranchCreate(BaseModel):
+    company_id: UUID
+    shop_id: UUID | None = None
+    name: str = Field(min_length=1, max_length=120)
 
 
 class InventoryBranchOut(BaseModel):
