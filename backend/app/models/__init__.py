@@ -10,3 +10,4 @@ from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.inventory_movement import InventoryMovement
 from app.models.inventory_balance import InventoryBalance
+from app.models.company_settings import CompanySetting

@@ -6,6 +6,7 @@ import InventoryPage from "./pages/InventoryPage";
 import ShopsDevicesPage from "./pages/ShopsDevicesPage";
 import EmployeesPage from "./pages/EmployeesPage";
 import ReportsPage from "./pages/ReportsPage";
+import SettingsPage from "./pages/SettingsPage";
 
 type DashboardSummary = {
   today_sales: string;
@@ -48,7 +49,7 @@ function App() {
 
   const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [page, setPage] = useState<"dashboard" | "sales" | "products" | "inventory" | "devices" | "employees" | "reports">("dashboard");
+  const [page, setPage] = useState<"dashboard" | "sales" | "products" | "inventory" | "devices" | "employees" | "reports" | "settings">("dashboard");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -224,7 +225,12 @@ function App() {
           >
             Shops &amp; Devices
           </button>
-          <button disabled>Settings</button>
+          <button
+          className={page === "settings" ? "active" : ""}
+          onClick={() => setPage("settings")}
+        >
+          Settings
+        </button>
         </nav>
 
         <button className="logout-button" onClick={logout}>
@@ -249,6 +255,8 @@ function App() {
               :
                   page === "reports"
                     ? "Sales Reports"
+                    : page === "settings"
+                    ? "Business Settings"
                     : "Shops & Devices"}
             </h1>
 
@@ -358,6 +366,15 @@ function App() {
 
 
 
+
+        {page === "settings" && (
+          <SettingsPage
+            companyId={companyId}
+            onDataChanged={() =>
+              void loadBackofficeData(companyId)
+            }
+          />
+        )}
 
         {page === "devices" && (
           <ShopsDevicesPage companyId={companyId} />
