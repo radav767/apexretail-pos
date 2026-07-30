@@ -26,6 +26,16 @@ type Receipt = {
   status: string;
 };
 
+
+type CashierSession = {
+  id: string;
+  name: string;
+  role: string;
+  branch_id: string;
+  permissions?: Record<string, boolean>;
+};
+
+
 function App() {
   const [email, setEmail] = useState("owner001@example.com");
   const [password, setPassword] = useState("12345678");
@@ -52,6 +62,12 @@ const [loggedIn, setLoggedIn] = useState(
   const [amountReceived, setAmountReceived] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [receiptItems, setReceiptItems] = useState<CartItem[]>([]);
+
+  const [cashier, setCashier] =
+    useState<CashierSession | null>(null);
+  const [cashierPin, setCashierPin] = useState("");
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinMessage, setPinMessage] = useState("");
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -138,6 +154,91 @@ const [loggedIn, setLoggedIn] = useState(
     }
   }
 
+  async function loginWithEmployeePin() {
+    if (!companyId) {
+      setPinMessage("Business session is not available");
+      return;
+    }
+
+    if (!branchId) {
+      setPinMessage("This POS device is not assigned to a branch");
+      return;
+    }
+
+    if (!/^\d{4}$/.test(cashierPin)) {
+      setPinMessage("Enter your four-digit employee PIN");
+      return;
+    }
+
+    try {
+      setPinLoading(true);
+      setPinMessage("");
+
+      const response = await api.post(
+        "/employees/pin-login",
+        {
+          company_id: companyId,
+          branch_id: branchId,
+          pin: cashierPin,
+        },
+      );
+
+      const result =
+        response.data?.employee || response.data;
+
+      const employeeId =
+        result?.id || result?.employee_id || "";
+
+      if (!employeeId) {
+        throw new Error(
+          "Employee login response has no employee ID",
+        );
+      }
+
+      if (result.permissions?.sales === false) {
+        setPinMessage(
+          "This employee does not have permission to make sales",
+        );
+        return;
+      }
+
+      setCashier({
+        id: employeeId,
+        name: result.name || "Employee",
+        role: result.role || "cashier",
+        branch_id: result.branch_id || branchId,
+        permissions: result.permissions || {},
+      });
+
+      setCashierPin("");
+      setMessage("");
+    } catch (error: any) {
+      setCashierPin("");
+
+      setPinMessage(
+        error.response?.data?.detail ||
+          error.message ||
+          "Invalid employee PIN",
+      );
+    } finally {
+      setPinLoading(false);
+    }
+  }
+
+  function switchCashier() {
+    setCashier(null);
+    setCashierPin("");
+    setPinMessage("");
+    setCart([]);
+    setShowTender(false);
+    setAmountReceived("");
+    setReceipt(null);
+    setReceiptItems([]);
+    setMessage("");
+  }
+
+
+
   function addToCart(product: Product) {
     const availableStock = Number(product.stock_qty);
 
@@ -210,6 +311,11 @@ const [loggedIn, setLoggedIn] = useState(
   async function submitSale(cashAmount?: number) {
     if (!cart.length || processing) return;
 
+    if (!cashier) {
+      setMessage("Cashier PIN is required");
+      return;
+    }
+
     try {
       setProcessing(true);
       setMessage("");
@@ -217,6 +323,7 @@ const [loggedIn, setLoggedIn] = useState(
       const payload: {
         company_id: string;
       branch_id?: string | null;
+      employee_id: string;
         payment_method: string;
         amount_received?: string;
         items: Array<{
@@ -226,6 +333,7 @@ const [loggedIn, setLoggedIn] = useState(
       } = {
         company_id: companyId,
       branch_id: branchId || null,
+      employee_id: cashier.id,
         payment_method: paymentMethod,
         items: cart.map((item) => ({
           product_id: item.id,
@@ -403,6 +511,9 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     setBranchId("");
+    setCashier(null);
+    setCashierPin("");
+    setPinMessage("");
     setLoggedIn(false);
     setProducts([]);
     setCart([]);
@@ -493,6 +604,117 @@ const [loggedIn, setLoggedIn] = useState(
     );
   }
 
+
+  if (loggedIn && !branchId) {
+    return (
+      <div style={pageCenter}>
+        <div style={loginCard}>
+          <h1 style={brand}>Preparing POS</h1>
+
+          <p style={{ textAlign: "center" }}>
+            Synchronizing this device with its assigned branch.
+          </p>
+
+          {message && (
+            <p style={{ textAlign: "center", color: "#b42318" }}>
+              {message}
+            </p>
+          )}
+
+          <button
+            type="button"
+            style={secondaryButton}
+            onClick={logout}
+          >
+            Full Logout
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loggedIn && !cashier) {
+    return (
+      <div style={pageCenter}>
+        <div style={loginCard}>
+          <h1 style={brand}>Cashier Sign In</h1>
+
+          <p style={{ textAlign: "center" }}>
+            Enter your four-digit employee PIN
+          </p>
+
+          <p
+            style={{
+              textAlign: "center",
+              margin: "6px 0 18px",
+              color: "#667085",
+            }}
+          >
+            {localStorage.getItem("branch_name") ||
+              "Assigned branch"}
+          </p>
+
+          <input
+            style={{
+              ...input,
+              textAlign: "center",
+              fontSize: 28,
+              letterSpacing: 12,
+            }}
+            type="password"
+            inputMode="numeric"
+            autoFocus
+            maxLength={4}
+            value={cashierPin}
+            placeholder="••••"
+            onChange={(event) =>
+              setCashierPin(
+                event.target.value
+                  .replace(/\D/g, "")
+                  .slice(0, 4),
+              )
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                void loginWithEmployeePin();
+              }
+            }}
+          />
+
+          <button
+            type="button"
+            style={primaryButton}
+            disabled={pinLoading}
+            onClick={() => void loginWithEmployeePin()}
+          >
+            {pinLoading ? "Signing in..." : "Open POS"}
+          </button>
+
+          {pinMessage && (
+            <p
+              style={{
+                textAlign: "center",
+                color: "#b42318",
+                fontWeight: 700,
+              }}
+            >
+              {pinMessage}
+            </p>
+          )}
+
+          <button
+            type="button"
+            style={secondaryButton}
+            onClick={logout}
+          >
+            Use Email Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+
   return (
     <div style={appShell}>
       <main style={mainArea}>
@@ -501,10 +723,36 @@ const [loggedIn, setLoggedIn] = useState(
             <h1 style={{ margin: 0, fontSize: 32 }}>
               ApexRetail POS
             </h1>
-            <p style={{ margin: "4px 0 0" }}>Sales screen</p>
+            <p style={{ margin: "4px 0 0" }}>
+            Sales screen
+          </p>
+          <p
+            style={{
+              margin: "5px 0 0",
+              color: "#667085",
+              fontSize: 14,
+            }}
+          >
+            Cashier: <strong>{cashier?.name || "Employee"}</strong>
+            {" · "}
+            {localStorage.getItem("branch_name") ||
+              "Assigned branch"}
+          </p>
           </div>
 
           <button
+          type="button"
+          onClick={switchCashier}
+          style={{
+            ...secondaryButton,
+            width: 150,
+            marginTop: 0,
+          }}
+        >
+          Switch Cashier
+        </button>
+
+        <button
             onClick={logout}
             style={{
               ...secondaryButton,

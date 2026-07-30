@@ -16,6 +16,7 @@ class SalesService:
         self.repo = repo
 
     async def create_sale(self, data: SaleCreate):
+        employee = None
         if not data.items:
             raise HTTPException(
                 400,
@@ -116,16 +117,6 @@ class SalesService:
                     company_id=data.company_id,
                     shop_id=branch.shop_id,
                     branch_id=branch.id,
-            employee_id=(
-                employee.id
-                if employee is not None
-                else None
-            ),
-            cashier_name=(
-                employee.name
-                if employee is not None
-                else None
-            ),
                     product_id=product.id,
                     product_name=product.name,
                     movement_type="sale",
@@ -163,13 +154,12 @@ class SalesService:
             change_due = Decimal("0")
 
 
-        employee = None
 
         if data.employee_id is not None:
             employee = await self.repo.get_employee(
-                data.company_id,
-                data.employee_id,
-            )
+                                 employee_id=data.employee_id,
+                                 company_id=data.company_id,
+                             )
 
             if not employee:
                 raise HTTPException(
@@ -192,6 +182,7 @@ class SalesService:
             company_id=data.company_id,
             shop_id=branch.shop_id,
             branch_id=branch.id,
+            employee_id=employee.id if employee else None,
             receipt_number=receipt_number,
             total_amount=total,
             amount_received=amount_received,

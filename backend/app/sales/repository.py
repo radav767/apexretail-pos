@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.stock_repository import BranchStockRepository
 from app.models.sale import Sale
+from app.models.employee import Employee
 
 
 class SalesRepository:
@@ -81,3 +82,28 @@ class SalesRepository:
         )
 
         return result.scalars().all()
+
+    async def get_employee(
+        self,
+        employee_id,
+        company_id=None,
+        branch_id=None,
+    ):
+        query = select(Employee).where(
+            Employee.id == employee_id,
+            Employee.active.is_(True),
+            Employee.deleted.is_(False),
+        )
+
+        if company_id is not None:
+            query = query.where(
+                Employee.company_id == company_id
+            )
+
+        if branch_id is not None:
+            query = query.where(
+                Employee.branch_id == branch_id
+            )
+
+        result = await self.db.execute(query)
+        return result.scalar_one_or_none()
