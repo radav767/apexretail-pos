@@ -13,3 +13,6 @@ class SaleItem(Base):
     quantity = Column(Numeric(12, 3), default=1)
     unit_price = Column(Numeric(12, 2), default=0)
     line_total = Column(Numeric(12, 2), default=0)
+
+    unit_cost = Column(Numeric(12, 2), default=0)
+    line_cost = Column(Numeric(12, 2), default=0)

@@ -9,6 +9,7 @@ from app.inventory import branch_router
 from app.inventory import transfer_router
 from app.devices import router as devices
 from app.employees import router as employees
+from app.reports import router as reports
 
 app = FastAPI(title="ApexRetail POS API")
 
@@ -33,6 +34,7 @@ app.include_router(branch_router.router, prefix="/api")
 app.include_router(transfer_router.router, prefix="/api")
 app.include_router(devices.router, prefix="/api")
 app.include_router(employees.router, prefix="/api")
+app.include_router(reports, prefix="/api")
 
 @app.get("/api/health")
 async def health():

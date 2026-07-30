@@ -92,6 +92,11 @@ class SalesService:
                 product.selling_price or 0
             )
 
+            unit_cost = Decimal(product.cost_price or 0)
+
+            line_cost = unit_cost * item.quantity
+
+
             line_total = selling_price * item.quantity
             total += line_total
 
@@ -109,6 +114,8 @@ class SalesService:
                     quantity=item.quantity,
                     unit_price=selling_price,
                     line_total=line_total,
+                    unit_cost=unit_cost,
+                    line_cost=line_cost,
                 )
             )
 
