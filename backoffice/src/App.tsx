@@ -3,6 +3,7 @@ import { api } from "./api/client";
 import "./App.css";
 import ProductsPage from "./pages/ProductsPage";
 import InventoryPage from "./pages/InventoryPage";
+import ShopsDevicesPage from "./pages/ShopsDevicesPage";
 
 type DashboardSummary = {
   today_sales: string;
@@ -45,7 +46,7 @@ function App() {
 
   const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [page, setPage] = useState<"dashboard" | "sales" | "products" | "inventory">("dashboard");
+  const [page, setPage] = useState<"dashboard" | "sales" | "products" | "inventory" | "devices">("dashboard");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -205,7 +206,12 @@ function App() {
           </button>
           <button disabled>Employees</button>
           <button disabled>Reports</button>
-          <button disabled>Shops & Devices</button>
+          <button
+            className={page === "devices" ? "active" : ""}
+            onClick={() => setPage("devices")}
+          >
+            Shops &amp; Devices
+          </button>
           <button disabled>Settings</button>
         </nav>
 
@@ -224,7 +230,9 @@ function App() {
                   ? "Sales History"
                   : page === "products"
                     ? "Products & Categories"
-                    : "Inventory Management"}
+                    : page === "inventory"
+                      ? "Inventory Management"
+                      : "Shops & Devices"}
             </h1>
 
             <p>Live data from ApexRetail POS</p>
@@ -322,6 +330,11 @@ function App() {
               void loadBackofficeData(companyId)
             }
           />
+        )}
+
+
+        {page === "devices" && (
+          <ShopsDevicesPage companyId={companyId} />
         )}
 
         <p className="status-message">{message}</p>

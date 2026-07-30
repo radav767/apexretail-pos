@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { api } from "./api/client";
+import { registerCurrentDevice } from "./device";
 
 type Product = {
   id: string;
@@ -31,7 +32,12 @@ function App() {
   const [companyId, setCompanyId] = useState(
     localStorage.getItem("company_id") || "",
   );
-  const [loggedIn, setLoggedIn] = useState(
+  
+  const [branchId, setBranchId] = useState(
+    localStorage.getItem("branch_id") || "",
+  );
+
+const [loggedIn, setLoggedIn] = useState(
     Boolean(localStorage.getItem("token")),
   );
 
@@ -65,14 +71,49 @@ function App() {
   const numericAmountReceived = Number(amountReceived || 0);
   const previewChange = Math.max(0, numericAmountReceived - total);
 
-  async function loadProducts(id = companyId) {
+  async function loadProducts(
+    id = companyId,
+    selectedBranchId = branchId,
+  ) {
     if (!id) return;
 
     try {
-      const response = await api.get(`/products/${id}`);
-      setProducts(response.data);
-    } catch {
-      setMessage("Failed to load products");
+      const productResponse = await api.get(
+        `/products/${id}`,
+      );
+
+      let loadedProducts = productResponse.data;
+
+      if (selectedBranchId) {
+        const balanceResponse = await api.get(
+          `/inventory/branch-overview/${id}`,
+          {
+            params: {
+              branch_id: selectedBranchId,
+            },
+          },
+        );
+
+        const balances = new Map<string, string>(
+          balanceResponse.data.map((balance: any) => [
+            balance.product_id,
+            balance.quantity,
+          ]),
+        );
+
+        loadedProducts = loadedProducts.map(
+          (product: Product) => ({
+            ...product,
+            stock_qty:
+              balances.get(product.id) || "0",
+          }),
+        );
+      }
+
+      setProducts(loadedProducts);
+    } catch (error) {
+      console.error(error);
+      setMessage("Failed to load branch products");
     }
   }
 
@@ -175,6 +216,7 @@ function App() {
 
       const payload: {
         company_id: string;
+      branch_id?: string | null;
         payment_method: string;
         amount_received?: string;
         items: Array<{
@@ -183,6 +225,7 @@ function App() {
         }>;
       } = {
         company_id: companyId,
+      branch_id: branchId || null,
         payment_method: paymentMethod,
         items: cart.map((item) => ({
           product_id: item.id,
@@ -211,7 +254,7 @@ function App() {
       setAmountReceived("");
       setMessage("Sale completed successfully");
 
-      await loadProducts(companyId);
+      await loadProducts(companyId, branchId);
     } catch (error: any) {
       setMessage(error.response?.data?.detail || "Sale failed");
     } finally {
@@ -347,7 +390,19 @@ function App() {
   }
 
   function logout() {
+    const savedDeviceKey =
+      localStorage.getItem("device_key");
+
     localStorage.clear();
+
+    if (savedDeviceKey) {
+      localStorage.setItem(
+        "device_key",
+        savedDeviceKey,
+      );
+    }
+
+    setBranchId("");
     setLoggedIn(false);
     setProducts([]);
     setCart([]);
@@ -357,10 +412,52 @@ function App() {
   }
 
   useEffect(() => {
-    if (loggedIn && companyId) {
-      void loadProducts(companyId);
+    if (!loggedIn || !companyId) {
+      return;
     }
-  }, []);
+
+    let cancelled = false;
+
+    async function synchronizeDevice() {
+      try {
+        const device = await registerCurrentDevice(
+          companyId,
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        const assignedBranchId =
+          device.branch_id || "";
+
+        setBranchId(assignedBranchId);
+
+        await loadProducts(
+          companyId,
+          assignedBranchId,
+        );
+      } catch (error: any) {
+        console.error(
+          "POS device synchronization failed:",
+          error,
+        );
+
+        if (!cancelled) {
+          setMessage(
+            error.response?.data?.detail ||
+              "POS device synchronization failed",
+          );
+        }
+      }
+    }
+
+    void synchronizeDevice();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn, companyId]);
 
   if (!loggedIn) {
     return (
