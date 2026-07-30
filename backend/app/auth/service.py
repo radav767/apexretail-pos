@@ -53,7 +53,7 @@ class AuthService:
             branch_id=branch_id,
             name="Owner",
             email=data.email.lower(),
-            pin="1234",
+            pin=hash_password("1234"),
             role="owner",
         )
 
@@ -81,7 +81,11 @@ class AuthService:
             "shop": {"id": str(shop.id), "name": shop.name},
             "branch": {"id": str(branch.id), "name": branch.name},
             "user": {"id": str(user.id), "email": user.email, "role": user.role},
-            "employee": {"id": str(employee.id), "name": employee.name, "pin": employee.pin},
+            "employee": {
+                "id": str(employee.id),
+                "name": employee.name,
+                "role": employee.role,
+            },
             "device": {"id": str(device.id), "name": device.name, "device_key": device.device_key},
         }
 

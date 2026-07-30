@@ -116,6 +116,16 @@ class SalesService:
                     company_id=data.company_id,
                     shop_id=branch.shop_id,
                     branch_id=branch.id,
+            employee_id=(
+                employee.id
+                if employee is not None
+                else None
+            ),
+            cashier_name=(
+                employee.name
+                if employee is not None
+                else None
+            ),
                     product_id=product.id,
                     product_name=product.name,
                     movement_type="sale",
@@ -151,6 +161,31 @@ class SalesService:
         else:
             amount_received = total
             change_due = Decimal("0")
+
+
+        employee = None
+
+        if data.employee_id is not None:
+            employee = await self.repo.get_employee(
+                data.company_id,
+                data.employee_id,
+            )
+
+            if not employee:
+                raise HTTPException(
+                    400,
+                    "Employee not found or inactive",
+                )
+
+            if (
+                employee.branch_id != branch.id
+                and employee.role
+                not in {"owner", "manager"}
+            ):
+                raise HTTPException(
+                    400,
+                    "Employee is not assigned to this branch",
+                )
 
         sale = Sale(
             id=sale_id,

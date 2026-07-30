@@ -28,6 +28,19 @@ class Sale(Base):
         index=True,
     )
 
+
+    employee_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("employees.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    cashier_name = Column(
+        String(160),
+        nullable=True,
+    )
+
     receipt_number = Column(String(40), unique=True, nullable=False)
 
     total_amount = Column(Numeric(12, 2), nullable=False, default=0)

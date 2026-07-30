@@ -1,0 +1,244 @@
+.employees-page {
+  display: grid;
+  gap: 22px;
+}
+
+.employee-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 15px;
+}
+
+.employee-summary-grid article {
+  min-height: 128px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border: 1px solid #e3e8f0;
+  border-radius: 17px;
+  background: white;
+}
+
+.employee-summary-grid span {
+  color: #667085;
+  font-weight: 700;
+}
+
+.employee-summary-grid strong {
+  margin: 12px 0 8px;
+  font-size: 29px;
+}
+
+.employee-summary-grid small {
+  margin-top: auto;
+  color: #8a94a6;
+}
+
+.employee-editor,
+.employee-list-panel {
+  padding: 24px;
+  border: 1px solid #e3e8f0;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 8px 25px rgba(15, 23, 42, 0.05);
+}
+
+.employee-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 21px;
+}
+
+.employee-section-header h2,
+.employee-section-header p {
+  margin: 0;
+}
+
+.employee-section-header p {
+  margin-top: 5px;
+  color: #687386;
+}
+
+.employee-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.employee-form-grid label {
+  display: grid;
+  gap: 7px;
+  color: #344054;
+  font-weight: 750;
+}
+
+.employee-form-grid input,
+.employee-form-grid select {
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid #d5dce7;
+  border-radius: 10px;
+  background: white;
+  color: #101828;
+  font: inherit;
+}
+
+.employee-permissions {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid #e3e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.employee-permissions h3 {
+  margin: 0 0 14px;
+}
+
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.permission-grid label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #e3e8f0;
+  border-radius: 10px;
+  background: white;
+  font-weight: 650;
+}
+
+.permission-grid input {
+  width: 18px;
+  height: 18px;
+}
+
+.employee-primary-button,
+.employee-secondary-button,
+.employee-actions button {
+  border: 1px solid #d4dae4;
+  border-radius: 10px;
+  background: white;
+  color: #111827;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.employee-primary-button {
+  width: 100%;
+  margin-top: 20px;
+  padding: 14px;
+  border-color: #111827;
+  background: #111827;
+  color: white;
+}
+
+.employee-secondary-button {
+  padding: 10px 15px;
+}
+
+.employee-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.employee-table-wrapper td strong,
+.employee-table-wrapper td small {
+  display: block;
+}
+
+.employee-table-wrapper td small {
+  margin-top: 4px;
+  color: #667085;
+}
+
+.employee-role {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #e8eef8;
+  color: #263955;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: capitalize;
+}
+
+.employee-active,
+.employee-inactive {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.employee-active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.employee-inactive {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.employee-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.employee-actions button {
+  padding: 8px 10px;
+}
+
+.employee-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.employee-delete-button {
+  color: #b42318 !important;
+}
+
+.employee-empty {
+  padding: 40px !important;
+  color: #667085;
+  text-align: center;
+}
+
+.employee-message {
+  min-height: 24px;
+  margin: 0;
+  color: #344054;
+  font-weight: 750;
+}
+
+@media (max-width: 1100px) {
+  .employee-summary-grid,
+  .permission-grid {
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
+  }
+
+  .employee-form-grid {
+    grid-template-columns: repeat(2, minmax(200px, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .employee-summary-grid,
+  .permission-grid,
+  .employee-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .employee-section-header {
+    flex-direction: column;
+  }
+}

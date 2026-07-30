@@ -4,6 +4,7 @@ import "./App.css";
 import ProductsPage from "./pages/ProductsPage";
 import InventoryPage from "./pages/InventoryPage";
 import ShopsDevicesPage from "./pages/ShopsDevicesPage";
+import EmployeesPage from "./pages/EmployeesPage";
 
 type DashboardSummary = {
   today_sales: string;
@@ -46,7 +47,7 @@ function App() {
 
   const [summary, setSummary] = useState<DashboardSummary>(emptySummary);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [page, setPage] = useState<"dashboard" | "sales" | "products" | "inventory" | "devices">("dashboard");
+  const [page, setPage] = useState<"dashboard" | "sales" | "products" | "inventory" | "devices" | "employees">("dashboard");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -204,7 +205,12 @@ function App() {
           >
             Inventory
           </button>
-          <button disabled>Employees</button>
+          <button
+            className={page === "employees" ? "active" : ""}
+            onClick={() => setPage("employees")}
+          >
+            Employees
+          </button>
           <button disabled>Reports</button>
           <button
             className={page === "devices" ? "active" : ""}
@@ -231,8 +237,10 @@ function App() {
                   : page === "products"
                     ? "Products & Categories"
                     : page === "inventory"
-                      ? "Inventory Management"
-                      : "Shops & Devices"}
+            ? "Inventory Management"
+            : page === "employees"
+              ? "Employees & Permissions"
+              : "Shops & Devices"}
             </h1>
 
             <p>Live data from ApexRetail POS</p>
@@ -331,6 +339,11 @@ function App() {
             }
           />
         )}
+        {page === "employees" && (
+          <EmployeesPage companyId={companyId} />
+        )}
+
+
 
 
         {page === "devices" && (
