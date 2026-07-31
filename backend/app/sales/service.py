@@ -1,6 +1,7 @@
+from app.business_settings.service import BusinessSettingsService
 import uuid
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import HTTPException
 
@@ -47,6 +48,35 @@ class SalesService:
             f"APR-{datetime.now(timezone.utc):%Y%m%d}-"
             f"{str(sale_id)[:8].upper()}"
         )
+
+        # Load the tax configuration used for this transaction.
+
+        settings = await BusinessSettingsService(self.repo.db).get(
+
+            data.company_id
+
+        )
+
+        tax_name = str(
+
+            settings.get("tax_name") or "Tax"
+
+        ).strip() or "Tax"
+
+        tax_rate = Decimal(
+
+            str(settings.get("tax_rate") or 0)
+
+        )
+
+        tax_inclusive = bool(
+
+            settings.get("tax_inclusive", False)
+
+        )
+
+        money_quantum = Decimal("0.01")
+
 
         total = Decimal("0")
         sale_items = []
@@ -142,6 +172,57 @@ class SalesService:
                 )
             )
 
+        # Calculate the final tax snapshot.
+        raw_item_total = total
+
+        if tax_rate > 0:
+            tax_fraction = tax_rate / Decimal("100")
+
+            if tax_inclusive:
+                total_amount = raw_item_total.quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+                subtotal_amount = (
+                    total_amount
+                    / (Decimal("1") + tax_fraction)
+                ).quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+                tax_amount = (
+                    total_amount - subtotal_amount
+                ).quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+            else:
+                subtotal_amount = raw_item_total.quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+                tax_amount = (
+                    subtotal_amount * tax_fraction
+                ).quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+                total_amount = (
+                    subtotal_amount + tax_amount
+                ).quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+        else:
+            subtotal_amount = raw_item_total.quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            tax_amount = Decimal("0.00")
+            total_amount = subtotal_amount
+
+        total = total_amount
+
         if payment_method == "cash":
             amount_received = (
                 data.amount_received
@@ -191,6 +272,11 @@ class SalesService:
             branch_id=branch.id,
             employee_id=employee.id if employee else None,
             receipt_number=receipt_number,
+            subtotal_amount=subtotal_amount,
+            tax_name=tax_name,
+            tax_rate=tax_rate,
+            tax_amount=tax_amount,
+            tax_inclusive=tax_inclusive,
             total_amount=total,
             amount_received=amount_received,
             change_due=change_due,

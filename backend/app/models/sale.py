@@ -1,3 +1,4 @@
+from sqlalchemy import Boolean
 from sqlalchemy import ForeignKey
 import uuid
 
@@ -42,6 +43,49 @@ class Sale(Base):
     )
 
     receipt_number = Column(String(40), unique=True, nullable=False)
+
+    subtotal_amount = Column(
+
+        Numeric(12, 2),
+
+        nullable=False,
+
+        default=0,
+
+    )
+
+    tax_name = Column(String(40), nullable=True)
+
+    tax_rate = Column(
+
+        Numeric(7, 3),
+
+        nullable=False,
+
+        default=0,
+
+    )
+
+    tax_amount = Column(
+
+        Numeric(12, 2),
+
+        nullable=False,
+
+        default=0,
+
+    )
+
+    tax_inclusive = Column(
+
+        Boolean,
+
+        nullable=False,
+
+        default=False,
+
+    )
+
 
     total_amount = Column(Numeric(12, 2), nullable=False, default=0)
     amount_received = Column(Numeric(12, 2), nullable=False, default=0)

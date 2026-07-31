@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { api } from "./api/client";
+import PosModulePage, { type PosModuleName } from "./PosModulePage";
 import { registerCurrentDevice } from "./device";
 
 type Product = {
@@ -19,6 +20,11 @@ type CartItem = Product & {
 type Receipt = {
   id: string;
   receipt_number: string;
+  subtotal_amount?: string;
+  tax_name?: string | null;
+  tax_rate?: string;
+  tax_amount?: string;
+  tax_inclusive?: boolean;
   total_amount: string;
   amount_received: string;
   change_due: string;
@@ -26,6 +32,20 @@ type Receipt = {
   status: string;
 };
 
+
+type BusinessSettings = {
+  currency_code?: string;
+  currency_symbol?: string;
+  decimal_places?: number;
+  tax_name?: string;
+  tax_rate?: string;
+  tax_inclusive?: boolean;
+  receipt_header?: string | null;
+  receipt_footer?: string | null;
+  paper_size?: string;
+  auto_print?: boolean;
+  payment_methods?: string[];
+};
 
 type CashierSession = {
   id: string;
@@ -57,11 +77,15 @@ const [loggedIn, setLoggedIn] = useState(
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [message, setMessage] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activePosModule, setActivePosModule] = useState<PosModuleName>("Sales");
 
   const [showTender, setShowTender] = useState(false);
   const [amountReceived, setAmountReceived] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [receiptItems, setReceiptItems] = useState<CartItem[]>([]);
+  const [businessSettings, setBusinessSettings] =
+    useState<BusinessSettings | null>(null);
 
   const [cashier, setCashier] =
     useState<CashierSession | null>(null);
@@ -79,13 +103,123 @@ const [loggedIn, setLoggedIn] = useState(
     );
   }, [products, search]);
 
-  const total = cart.reduce(
-    (sum, item) => sum + Number(item.selling_price) * item.qty,
-    0,
+  const roundSaleAmount = (value: number) =>
+    Math.round((value + Number.EPSILON) * 100) / 100;
+
+  const cartAmount = roundSaleAmount(
+    cart.reduce(
+      (sum, item) =>
+        sum + Number(item.selling_price) * item.qty,
+      0,
+    ),
   );
+
+  const configuredTaxRate = Math.max(
+    0,
+    Number(businessSettings?.tax_rate || 0),
+  );
+
+  const taxInclusive = Boolean(
+    businessSettings?.tax_inclusive,
+  );
+
+  const taxName =
+    businessSettings?.tax_name?.trim() || "Tax";
+
+  let subtotal = cartAmount;
+  let taxAmount = 0;
+  let total = cartAmount;
+
+  if (configuredTaxRate > 0) {
+    if (taxInclusive) {
+      total = cartAmount;
+
+      taxAmount = roundSaleAmount(
+        total *
+          (configuredTaxRate /
+            (100 + configuredTaxRate)),
+      );
+
+      subtotal = roundSaleAmount(
+        total - taxAmount,
+      );
+    } else {
+      subtotal = cartAmount;
+
+      taxAmount = roundSaleAmount(
+        subtotal *
+          (configuredTaxRate / 100),
+      );
+
+      total = roundSaleAmount(
+        subtotal + taxAmount,
+      );
+    }
+  }
 
   const numericAmountReceived = Number(amountReceived || 0);
   const previewChange = Math.max(0, numericAmountReceived - total);
+
+  async function loadBusinessSettings(
+    selectedCompanyId: string,
+  ) {
+    if (!selectedCompanyId) {
+      return;
+    }
+
+    const response = await api.get(
+      `/settings/${selectedCompanyId}`,
+    );
+
+    const loadedSettings =
+      response.data as BusinessSettings;
+
+    setBusinessSettings(loadedSettings);
+
+    const methods = (
+      loadedSettings.payment_methods || []
+    )
+      .map((method) =>
+        String(method).trim().toLowerCase(),
+      )
+      .filter(Boolean);
+
+    if (methods.length) {
+      setPaymentMethod((currentMethod) =>
+        methods.includes(currentMethod)
+          ? currentMethod
+          : methods[0],
+      );
+    }
+  }
+
+  const currencySymbol =
+    businessSettings?.currency_symbol || "$";
+
+  const decimalPlaces =
+    businessSettings?.decimal_places ?? 2;
+
+  function formatMoney(value: number | string) {
+    const numericValue = Number(value || 0);
+
+    return `${currencySymbol}${numericValue.toFixed(
+      decimalPlaces,
+    )}`;
+  }
+
+  const enabledPaymentMethods = useMemo(() => {
+    const methods = (
+      businessSettings?.payment_methods || []
+    )
+      .map((method) =>
+        String(method).trim().toLowerCase(),
+      )
+      .filter(Boolean);
+
+    return methods.length
+      ? methods
+      : ["cash", "card", "mobile", "credit"];
+  }, [businessSettings]);
 
   async function loadProducts(
     id = companyId,
@@ -149,6 +283,7 @@ const [loggedIn, setLoggedIn] = useState(
       setLoggedIn(true);
 
       await loadProducts(response.data.company_id);
+      await loadBusinessSettings(response.data.company_id);
     } catch (error: any) {
       setMessage(error.response?.data?.detail || "Login failed");
     }
@@ -497,6 +632,24 @@ const [loggedIn, setLoggedIn] = useState(
     setSearch("");
   }
 
+  function showPosModule(
+    moduleName: PosModuleName,
+  ) {
+    setActivePosModule(moduleName);
+    setMenuOpen(false);
+    setMessage("");
+  }
+
+  function openBackoffice() {
+    setMenuOpen(false);
+
+    window.open(
+      "https://backoffice.apexpos.cloud",
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
+
   function logout() {
     const savedDeviceKey =
       localStorage.getItem("device_key");
@@ -548,6 +701,7 @@ const [loggedIn, setLoggedIn] = useState(
           companyId,
           assignedBranchId,
         );
+        await loadBusinessSettings(companyId);
       } catch (error: any) {
         console.error(
           "POS device synchronization failed:",
@@ -574,7 +728,203 @@ const [loggedIn, setLoggedIn] = useState(
     return (
       <div style={pageCenter}>
         <div style={loginCard}>
-          <h1 style={brand}>ApexRetail POS</h1>
+          <button
+
+            type="button"
+
+            aria-label="Open POS menu"
+
+            aria-expanded={menuOpen}
+
+            style={posMenuTrigger}
+
+            onClick={() => setMenuOpen((current) => !current)}
+
+          >
+
+            ☰
+
+          </button>
+
+
+          {menuOpen && (
+
+            <>
+
+              <button
+
+                type="button"
+
+                aria-label="Close POS menu"
+
+                style={posMenuOverlay}
+
+                onClick={() => setMenuOpen(false)}
+
+              />
+
+
+              <aside style={posMenuPanel}>
+
+                <div style={posMenuHeader}>
+
+                  <strong style={posMenuBrand}>ApexRetail POS</strong>
+
+                  <span style={posMenuSubtitle}>Point of Sale Menu</span>
+
+                </div>
+
+
+                <div style={posMenuSession}>
+
+                  <strong>{cashier?.name || "Cashier"}</strong>
+
+                  <span>{cashier?.role || "employee"}</span>
+
+                </div>
+
+
+                <nav style={posMenuNavigation}>
+
+                  <button
+
+                    type="button"
+
+                    style={{ ...posMenuButton, ...posMenuActiveButton }}
+
+                    onClick={() => showPosModule("Sales")}
+
+                  >
+
+                    Sales
+
+                  </button>
+
+
+                  <button
+
+                    type="button"
+
+                    style={posMenuButton}
+
+                    onClick={() => showPosModule("Sales Management")}
+
+                  >
+
+                    Sales Management
+
+                  </button>
+
+
+                  <button
+
+                    type="button"
+
+                    style={posMenuButton}
+
+                    onClick={() => showPosModule("Products")}
+
+                  >
+
+                    Products
+
+                  </button>
+
+
+                  <button
+
+                    type="button"
+
+                    style={posMenuButton}
+
+                    onClick={() => showPosModule("Inventory")}
+
+                  >
+
+                    Inventory
+
+                  </button>
+
+
+                  <button
+
+                    type="button"
+
+                    style={posMenuButton}
+
+                    onClick={() => showPosModule("Reports")}
+
+                  >
+
+                    Reports
+
+                  </button>
+
+
+                  <button
+
+                    type="button"
+
+                    style={posMenuButton}
+
+                    onClick={() => showPosModule("Settings")}
+
+                  >
+
+                    Settings
+
+                  </button>
+
+
+                  <button
+
+                    type="button"
+
+                    style={{ ...posMenuButton, ...posMenuBackofficeButton }}
+
+                    onClick={openBackoffice}
+
+                  >
+
+                    Backoffice
+
+                  </button>
+
+                </nav>
+
+
+                <button
+
+                  type="button"
+
+                  style={posMenuLogoutButton}
+
+                  onClick={() => {
+
+                    setMenuOpen(false);
+
+                    logout();
+
+                  }}
+
+                >
+
+                  Log out
+
+                </button>
+
+              </aside>
+
+            </>
+
+          )}
+
+
+          <div style={{ paddingLeft: 58 }}>
+
+            <h1 style={brand}>ApexRetail POS</h1>
+
+          </div>
           <p style={{ textAlign: "center" }}>
             Sign in to your shop
           </p>
@@ -717,6 +1067,211 @@ const [loggedIn, setLoggedIn] = useState(
 
   return (
     <div style={appShell}>
+      <button
+
+                  type="button"
+
+                  aria-label="Open POS menu"
+
+                  aria-expanded={menuOpen}
+
+                  style={posMenuTrigger}
+
+                  onClick={() => setMenuOpen((current) => !current)}
+
+                >
+
+                  ☰
+
+                </button>
+
+
+                {menuOpen && (
+
+                  <>
+
+                    <button
+
+                      type="button"
+
+                      aria-label="Close POS menu"
+
+                      style={posMenuOverlay}
+
+                      onClick={() => setMenuOpen(false)}
+
+                    />
+
+
+                    <aside style={posMenuPanel}>
+
+                      <div style={posMenuHeader}>
+
+                        <strong style={posMenuBrand}>ApexRetail POS</strong>
+
+                        <span style={posMenuSubtitle}>Point of Sale Menu</span>
+
+                      </div>
+
+
+                      <div style={posMenuSession}>
+
+                        <strong>{cashier?.name || "Cashier"}</strong>
+
+                        <span>{cashier?.role || "employee"}</span>
+
+                      </div>
+
+
+                      <nav style={posMenuNavigation}>
+
+                        <button
+
+                          type="button"
+
+                          style={{ ...posMenuButton, ...posMenuActiveButton }}
+
+                          onClick={() => showPosModule("Sales")}
+
+                        >
+
+                          Sales
+
+                        </button>
+
+
+                        <button
+
+                          type="button"
+
+                          style={posMenuButton}
+
+                          onClick={() => showPosModule("Sales Management")}
+
+                        >
+
+                          Sales Management
+
+                        </button>
+
+
+                        <button
+
+                          type="button"
+
+                          style={posMenuButton}
+
+                          onClick={() => showPosModule("Products")}
+
+                        >
+
+                          Products
+
+                        </button>
+
+
+                        <button
+
+                          type="button"
+
+                          style={posMenuButton}
+
+                          onClick={() => showPosModule("Inventory")}
+
+                        >
+
+                          Inventory
+
+                        </button>
+
+
+                        <button
+
+                          type="button"
+
+                          style={posMenuButton}
+
+                          onClick={() => showPosModule("Reports")}
+
+                        >
+
+                          Reports
+
+                        </button>
+
+
+                        <button
+
+                          type="button"
+
+                          style={posMenuButton}
+
+                          onClick={() => showPosModule("Settings")}
+
+                        >
+
+                          Settings
+
+                        </button>
+
+
+                        <button
+
+                          type="button"
+
+                          style={{ ...posMenuButton, ...posMenuBackofficeButton }}
+
+                          onClick={openBackoffice}
+
+                        >
+
+                          Backoffice
+
+                        </button>
+
+                      </nav>
+
+
+                      <button
+
+                        type="button"
+
+                        style={posMenuLogoutButton}
+
+                        onClick={() => {
+
+                          setMenuOpen(false);
+
+                          logout();
+
+                        }}
+
+                      >
+
+                        Log out
+
+                      </button>
+
+                    </aside>
+
+                  </>
+
+                )}
+
+      {activePosModule !== "Sales" && (
+        <PosModulePage
+          activeModule={activePosModule}
+          companyId={companyId}
+          branchId={branchId}
+          currencySymbol={currencySymbol}
+          decimalPlaces={decimalPlaces}
+          onBackToSales={() => {
+            setActivePosModule("Sales");
+            setMessage("");
+          }}
+        />
+      )}
+
       <main style={mainArea}>
         <div style={topBar}>
           <div>
@@ -782,7 +1337,7 @@ const [loggedIn, setLoggedIn] = useState(
               <h3>{product.name}</h3>
               <p>SKU: {product.sku || "-"}</p>
               <p>Stock: {product.stock_qty}</p>
-              <h2>${Number(product.selling_price).toFixed(2)}</h2>
+              <h2>{formatMoney(product.selling_price)}</h2>
             </button>
           ))}
         </div>
@@ -807,7 +1362,7 @@ const [loggedIn, setLoggedIn] = useState(
               <div>
                 <strong>{item.name}</strong>
                 <p style={{ margin: "5px 0 0" }}>
-                  ${Number(item.selling_price).toFixed(2)}
+                  {formatMoney(item.selling_price)}
                 </p>
               </div>
 
@@ -839,12 +1394,56 @@ const [loggedIn, setLoggedIn] = useState(
           ))}
         </div>
 
-        <h1 style={{ fontSize: 42 }}>
-          Total: ${total.toFixed(2)}
-        </h1>
+        <div data-tax-summary="true"
+          style={{
+            marginTop: 22,
+            marginBottom: 20,
+            display: "grid",
+            gap: 9,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 18,
+            }}
+          >
+            <span>Subtotal</span>
+            <strong>{formatMoney(subtotal)}</strong>
+          </div>
+
+          {configuredTaxRate > 0 && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 18,
+              }}
+            >
+              <span>
+                {taxName} ({configuredTaxRate}%)
+                {taxInclusive ? " included" : ""}
+              </span>
+              <strong>{formatMoney(taxAmount)}</strong>
+            </div>
+          )}
+
+          <h1
+            style={{
+              fontSize: 42,
+              margin: "10px 0 0",
+              display: "flex",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>Total:</span>
+            <span>{formatMoney(total)}</span>
+          </h1>
+        </div>
 
         <div style={paymentGrid}>
-          {["cash", "card", "mobile", "credit"].map((method) => (
+          {enabledPaymentMethods.map((method) => (
             <button
               key={method}
               onClick={() => setPaymentMethod(method)}
@@ -1284,3 +1883,124 @@ const errorText: CSSProperties = {
 };
 
 export default App;
+
+
+const posMenuTrigger: CSSProperties = {
+  position: "fixed",
+  top: 24,
+  left: 24,
+  width: 46,
+  height: 46,
+  border: "none",
+  borderRadius: 10,
+  background: "#0f172a",
+  color: "#ffffff",
+  fontSize: 25,
+  fontWeight: 700,
+  cursor: "pointer",
+  zIndex: 1102,
+  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.22)",
+};
+
+const posMenuOverlay: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  border: "none",
+  padding: 0,
+  background: "rgba(15, 23, 42, 0.54)",
+  cursor: "default",
+  zIndex: 1100,
+};
+
+const posMenuPanel: CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  width: "min(340px, 88vw)",
+  height: "100vh",
+  padding: "28px 22px",
+  boxSizing: "border-box",
+  background: "#ffffff",
+  zIndex: 1101,
+  display: "flex",
+  flexDirection: "column",
+  boxShadow: "18px 0 50px rgba(15, 23, 42, 0.24)",
+  overflowY: "auto",
+};
+
+const posMenuHeader: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 3,
+  paddingLeft: 58,
+  minHeight: 50,
+  justifyContent: "center",
+  marginBottom: 22,
+};
+
+const posMenuBrand: CSSProperties = {
+  fontSize: 22,
+  color: "#0f172a",
+};
+
+const posMenuSubtitle: CSSProperties = {
+  fontSize: 13,
+  color: "#64748b",
+};
+
+const posMenuSession: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 3,
+  padding: 14,
+  marginBottom: 18,
+  borderRadius: 10,
+  background: "#f1f5f9",
+  color: "#0f172a",
+};
+
+const posMenuNavigation: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 8,
+};
+
+const posMenuButton: CSSProperties = {
+  width: "100%",
+  minHeight: 46,
+  padding: "11px 14px",
+  border: "1px solid #dbe3ec",
+  borderRadius: 9,
+  background: "#ffffff",
+  color: "#172033",
+  fontSize: 15,
+  fontWeight: 650,
+  textAlign: "left",
+  cursor: "pointer",
+};
+
+const posMenuActiveButton: CSSProperties = {
+  background: "#0f172a",
+  borderColor: "#0f172a",
+  color: "#ffffff",
+};
+
+const posMenuBackofficeButton: CSSProperties = {
+  marginTop: 8,
+  borderColor: "#0f172a",
+  color: "#0f172a",
+};
+
+const posMenuLogoutButton: CSSProperties = {
+  width: "100%",
+  minHeight: 48,
+  marginTop: "auto",
+  padding: "12px 14px",
+  border: "1px solid #fecaca",
+  borderRadius: 9,
+  background: "#fff1f2",
+  color: "#b42318",
+  fontSize: 15,
+  fontWeight: 700,
+  cursor: "pointer",
+};

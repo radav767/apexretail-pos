@@ -29,6 +29,16 @@ class SaleOut(BaseModel):
     cashier_name: str | None = None
 
     receipt_number: str
+
+    subtotal_amount: Decimal
+
+    tax_name: str | None = None
+
+    tax_rate: Decimal
+
+    tax_amount: Decimal
+
+    tax_inclusive: bool
     total_amount: Decimal
     amount_received: Decimal
     change_due: Decimal
