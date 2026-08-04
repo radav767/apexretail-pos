@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { api } from "./api/client";
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
-import { registerCurrentDevice } from "./device";
+import { getOrCreateDeviceKey, registerCurrentDevice } from "./device";
 
 import "./sales-responsive.css";
 type Product = {
@@ -58,8 +58,8 @@ type CashierSession = {
 
 
 function App() {
-  const [email, setEmail] = useState("owner001@example.com");
-  const [password, setPassword] = useState("12345678");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [companyId, setCompanyId] = useState(
     localStorage.getItem("company_id") || "",
   );
@@ -71,6 +71,19 @@ function App() {
 const [loggedIn, setLoggedIn] = useState(
     Boolean(localStorage.getItem("token")),
   );
+
+  const [authMode, setAuthMode] =
+    useState<"login" | "register">("login");
+
+  const [ownerName, setOwnerName] = useState("");
+  const [ownerPin, setOwnerPin] = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [businessType, setBusinessType] = useState("Retail");
+  const [country, setCountry] = useState("Zimbabwe");
+  const [phone, setPhone] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+
 
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -268,25 +281,191 @@ const [loggedIn, setLoggedIn] = useState(
     }
   }
 
+  async function completeAuthentication(data: any) {
+    const nextCompanyId = String(
+      data?.company_id || data?.company?.id || "",
+    );
+
+    if (!data?.token || !nextCompanyId) {
+      throw new Error(
+        "Authentication response did not contain a token and company",
+      );
+    }
+
+    const previousCompanyId =
+      localStorage.getItem("company_id");
+
+    if (
+      previousCompanyId &&
+      previousCompanyId !== nextCompanyId
+    ) {
+      localStorage.removeItem("device_key");
+      localStorage.removeItem("branch_id");
+      localStorage.removeItem("branch_name");
+    }
+
+    localStorage.setItem("token", String(data.token));
+    localStorage.setItem("company_id", nextCompanyId);
+
+    const shopId = String(
+      data?.shop?.id || data?.shop_id || "",
+    );
+
+    const shopName = String(
+      data?.shop?.name || data?.shop_name || "",
+    );
+
+    const nextBranchId = String(
+      data?.branch?.id || data?.branch_id || "",
+    );
+
+    const branchName = String(
+      data?.branch?.name || data?.branch_name || "",
+    );
+
+    const employeeId = String(
+      data?.employee?.id ||
+      data?.employee_id ||
+      "",
+    );
+
+    const deviceKey = String(
+      data?.device?.device_key ||
+      data?.device_key ||
+      "",
+    );
+
+    if (shopId) {
+      localStorage.setItem("shop_id", shopId);
+    }
+
+    if (shopName) {
+      localStorage.setItem("shop_name", shopName);
+    }
+
+    if (nextBranchId) {
+      localStorage.setItem("branch_id", nextBranchId);
+    }
+
+    if (branchName) {
+      localStorage.setItem("branch_name", branchName);
+    }
+
+    if (employeeId) {
+      localStorage.setItem("employee_id", employeeId);
+    }
+
+    if (deviceKey) {
+      localStorage.setItem("device_key", deviceKey);
+    }
+
+    setCompanyId(nextCompanyId);
+    setBranchId(nextBranchId);
+    setLoggedIn(true);
+
+    if (data?.employee && nextBranchId) {
+      setCashier({
+        id: employeeId,
+        name: data.employee.name || ownerName || "Owner",
+        role: data.employee.role || "owner",
+        branch_id: nextBranchId,
+        permissions: data.employee.permissions || {},
+      });
+    } else {
+      setCashier(null);
+    }
+
+    await loadProducts(
+      nextCompanyId,
+      nextBranchId || undefined,
+    );
+
+    await loadBusinessSettings(nextCompanyId);
+  }
+
   async function login() {
     try {
+      setAuthLoading(true);
       setMessage("");
 
+      if (!email.trim() || !password) {
+        throw new Error(
+          "Enter your email address and password",
+        );
+      }
+
       const response = await api.post("/auth/login", {
-        email,
+        email: email.trim().toLowerCase(),
         password,
       });
 
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("company_id", response.data.company_id);
-
-      setCompanyId(response.data.company_id);
-      setLoggedIn(true);
-
-      await loadProducts(response.data.company_id);
-      await loadBusinessSettings(response.data.company_id);
+      await completeAuthentication(response.data);
     } catch (error: any) {
-      setMessage(error.response?.data?.detail || "Login failed");
+      setMessage(
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Login failed",
+      );
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function registerBusiness() {
+    try {
+      setAuthLoading(true);
+      setMessage("");
+
+      if (!ownerName.trim()) {
+        throw new Error("Enter the business owner's name");
+      }
+
+      if (!/^\d{4}$/.test(ownerPin)) {
+        throw new Error(
+          "Owner PIN must contain exactly 4 digits",
+        );
+      }
+
+      if (!businessName.trim()) {
+        throw new Error("Enter the business name");
+      }
+
+      if (!email.trim()) {
+        throw new Error("Enter an email address");
+      }
+
+      if (password.length < 8) {
+        throw new Error(
+          "Password must contain at least 8 characters",
+        );
+      }
+
+      if (password !== confirmPassword) {
+        throw new Error("Passwords do not match");
+      }
+
+      const response = await api.post("/auth/register", {
+        owner_name: ownerName.trim(),
+        owner_pin: ownerPin,
+        business_name: businessName.trim(),
+        business_type: businessType.trim(),
+        country: country.trim(),
+        phone: phone.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        confirm_password: confirmPassword,
+        device_key: getOrCreateDeviceKey(),
+      });
+
+      await completeAuthentication(response.data);
+    } catch (error: any) {
+      setMessage(
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Business registration failed",
+      );
+    } finally {
+      setAuthLoading(false);
     }
   }
 
@@ -652,17 +831,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   function logout() {
-    const savedDeviceKey =
-      localStorage.getItem("device_key");
-
     localStorage.clear();
-
-    if (savedDeviceKey) {
-      localStorage.setItem(
-        "device_key",
-        savedDeviceKey,
-      );
-    }
 
     setBranchId("");
     setCashier(null);
@@ -673,7 +842,12 @@ const [loggedIn, setLoggedIn] = useState(
     setCart([]);
     setReceipt(null);
     setReceiptItems([]);
+    setBusinessSettings(null);
     setCompanyId("");
+    setMessage("");
+    setShowTender(false);
+    setAmountReceived("");
+    setAuthMode("login");
   }
 
   useEffect(() => {
@@ -685,34 +859,70 @@ const [loggedIn, setLoggedIn] = useState(
 
     async function synchronizeDevice() {
       try {
-        const device = await registerCurrentDevice(
-          companyId,
+        const response =
+          await registerCurrentDevice(companyId);
+
+        const device =
+          response?.device || response || {};
+
+        const synchronizedBranchId = String(
+          device?.branch_id ||
+          device?.branch?.id ||
+          response?.branch_id ||
+          response?.branch?.id ||
+          localStorage.getItem("branch_id") ||
+          "",
         );
+
+        const synchronizedBranchName = String(
+          device?.branch_name ||
+          device?.branch?.name ||
+          response?.branch_name ||
+          response?.branch?.name ||
+          localStorage.getItem("branch_name") ||
+          "",
+        );
+
+        if (!synchronizedBranchId) {
+          throw new Error(
+            "This POS device has not been assigned to a branch",
+          );
+        }
 
         if (cancelled) {
           return;
         }
 
-        const assignedBranchId =
-          device.branch_id || "";
+        localStorage.setItem(
+          "branch_id",
+          synchronizedBranchId,
+        );
 
-        setBranchId(assignedBranchId);
+        if (synchronizedBranchName) {
+          localStorage.setItem(
+            "branch_name",
+            synchronizedBranchName,
+          );
+        }
+
+        setBranchId(synchronizedBranchId);
 
         await loadProducts(
           companyId,
-          assignedBranchId,
-        );
-        await loadBusinessSettings(companyId);
-      } catch (error: any) {
-        console.error(
-          "POS device synchronization failed:",
-          error,
+          synchronizedBranchId,
         );
 
+        await loadBusinessSettings(companyId);
+
+        if (!cancelled) {
+          setMessage("");
+        }
+      } catch (error: any) {
         if (!cancelled) {
           setMessage(
-            error.response?.data?.detail ||
-              "POS device synchronization failed",
+            error?.response?.data?.detail ||
+            error?.message ||
+            "POS device synchronization failed",
           );
         }
       }
@@ -728,233 +938,284 @@ const [loggedIn, setLoggedIn] = useState(
   if (!loggedIn) {
     return (
       <div style={pageCenter}>
-        <div style={loginCard}>
-          <button
+        <div
+          style={{
+            ...loginCard,
+            width: authMode === "register" ? 760 : 430,
+          }}
+        >
+          <h1 style={brand}>ApexRetail POS</h1>
 
-            type="button"
-
-            aria-label="Open POS menu"
-
-            aria-expanded={menuOpen}
-
-            style={posMenuTrigger}
-
-            onClick={() => setMenuOpen((current) => !current)}
-
+          <p
+            style={{
+              textAlign: "center",
+              color: "#667085",
+              marginBottom: 22,
+            }}
           >
-
-            ☰
-
-          </button>
-
-
-          {menuOpen && (
-
-            <>
-
-              <button
-
-                type="button"
-
-                aria-label="Close POS menu"
-
-                style={posMenuOverlay}
-
-                onClick={() => setMenuOpen(false)}
-
-              />
-
-
-              <aside style={posMenuPanel}>
-
-                <div style={posMenuHeader}>
-
-                  <strong style={posMenuBrand}>ApexRetail POS</strong>
-
-                  <span style={posMenuSubtitle}>Point of Sale Menu</span>
-
-                </div>
-
-
-                <div style={posMenuSession}>
-
-                  <strong>{cashier?.name || "Cashier"}</strong>
-
-                  <span>{cashier?.role || "employee"}</span>
-
-                </div>
-
-
-                <nav style={posMenuNavigation}>
-
-                  <button
-
-                    type="button"
-
-                    style={{ ...posMenuButton, ...posMenuActiveButton }}
-
-                    onClick={() => showPosModule("Sales")}
-
-                  >
-
-                    Sales
-
-                  </button>
-
-
-                  <button
-
-                    type="button"
-
-                    style={posMenuButton}
-
-                    onClick={() => showPosModule("Sales Management")}
-
-                  >
-
-                    Sales Management
-
-                  </button>
-
-
-                  <button
-
-                    type="button"
-
-                    style={posMenuButton}
-
-                    onClick={() => showPosModule("Products")}
-
-                  >
-
-                    Products
-
-                  </button>
-
-
-                  <button
-
-                    type="button"
-
-                    style={posMenuButton}
-
-                    onClick={() => showPosModule("Inventory")}
-
-                  >
-
-                    Inventory
-
-                  </button>
-
-
-                  <button
-
-                    type="button"
-
-                    style={posMenuButton}
-
-                    onClick={() => showPosModule("Reports")}
-
-                  >
-
-                    Reports
-
-                  </button>
-
-
-                  <button
-
-                    type="button"
-
-                    style={posMenuButton}
-
-                    onClick={() => showPosModule("Settings")}
-
-                  >
-
-                    Settings
-
-                  </button>
-
-
-                  <button
-
-                    type="button"
-
-                    style={{ ...posMenuButton, ...posMenuBackofficeButton }}
-
-                    onClick={openBackoffice}
-
-                  >
-
-                    Backoffice
-
-                  </button>
-
-                </nav>
-
-
-                <button
-
-                  type="button"
-
-                  style={posMenuLogoutButton}
-
-                  onClick={() => {
-
-                    setMenuOpen(false);
-
-                    logout();
-
-                  }}
-
-                >
-
-                  Log out
-
-                </button>
-
-              </aside>
-
-            </>
-
-          )}
-
-
-          <div style={{ paddingLeft: 58 }}>
-
-            <h1 style={brand}>ApexRetail POS</h1>
-
-          </div>
-          <p style={{ textAlign: "center" }}>
-            Sign in to your shop
+            Sign in to your business or register a new one.
           </p>
 
-          <input
-            style={input}
-            value={email}
-            placeholder="Email"
-            onChange={(event) => setEmail(event.target.value)}
-          />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 8,
+              marginBottom: 20,
+            }}
+          >
+            <button
+              type="button"
+              style={
+                authMode === "login"
+                  ? activePaymentButton
+                  : secondaryButton
+              }
+              onClick={() => {
+                setAuthMode("login");
+                setMessage("");
+              }}
+            >
+              Sign in
+            </button>
 
-          <input
-            style={input}
-            type="password"
-            value={password}
-            placeholder="Password"
-            onChange={(event) => setPassword(event.target.value)}
-          />
+            <button
+              type="button"
+              style={
+                authMode === "register"
+                  ? activePaymentButton
+                  : secondaryButton
+              }
+              onClick={() => {
+                setAuthMode("register");
+                setMessage("");
+              }}
+            >
+              Register business
+            </button>
+          </div>
 
-          <button style={primaryButton} onClick={login}>
-            Login
-          </button>
+          {authMode === "login" ? (
+            <>
+              <label style={modalLabel}>
+                Email address
+                <input
+                  style={input}
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  placeholder="owner@business.com"
+                  onChange={(event) =>
+                    setEmail(event.target.value)
+                  }
+                />
+              </label>
 
-          <p style={errorText}>{message}</p>
+              <label style={modalLabel}>
+                Password
+                <input
+                  style={input}
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  placeholder="Password"
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
+                />
+              </label>
+
+              <button
+                type="button"
+                style={primaryButton}
+                disabled={authLoading}
+                onClick={() => void login()}
+              >
+                {authLoading
+                  ? "Signing in..."
+                  : "Sign in"}
+              </button>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(220px, 1fr))",
+                  columnGap: 16,
+                }}
+              >
+                <label style={modalLabel}>
+                  Owner name
+                  <input
+                    style={input}
+                    value={ownerName}
+                    placeholder="Full name"
+                    onChange={(event) =>
+                      setOwnerName(event.target.value)
+                    }
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Owner PIN
+                  <input
+                    style={input}
+                    value={ownerPin}
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="4-digit PIN"
+                    onChange={(event) =>
+                      setOwnerPin(
+                        event.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 4),
+                      )
+                    }
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Business name
+                  <input
+                    style={input}
+                    value={businessName}
+                    placeholder="Business name"
+                    onChange={(event) =>
+                      setBusinessName(event.target.value)
+                    }
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Business type
+                  <select
+                    style={input}
+                    value={businessType}
+                    onChange={(event) =>
+                      setBusinessType(event.target.value)
+                    }
+                  >
+                    <option value="Retail">Retail</option>
+                    <option value="Restaurant">
+                      Restaurant
+                    </option>
+                    <option value="Wholesale">
+                      Wholesale
+                    </option>
+                    <option value="Pharmacy">
+                      Pharmacy
+                    </option>
+                    <option value="Services">
+                      Services
+                    </option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+
+                <label style={modalLabel}>
+                  Country
+                  <input
+                    style={input}
+                    value={country}
+                    placeholder="Country"
+                    onChange={(event) =>
+                      setCountry(event.target.value)
+                    }
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Phone number
+                  <input
+                    style={input}
+                    value={phone}
+                    placeholder="Phone number"
+                    onChange={(event) =>
+                      setPhone(event.target.value)
+                    }
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Email address
+                  <input
+                    style={input}
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    placeholder="owner@business.com"
+                    onChange={(event) =>
+                      setEmail(event.target.value)
+                    }
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Password
+                  <input
+                    style={input}
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    placeholder="At least 8 characters"
+                    onChange={(event) =>
+                      setPassword(event.target.value)
+                    }
+                  />
+                </label>
+
+                <label style={modalLabel}>
+                  Confirm password
+                  <input
+                    style={input}
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    placeholder="Repeat password"
+                    onChange={(event) =>
+                      setConfirmPassword(
+                        event.target.value,
+                      )
+                    }
+                  />
+                </label>
+              </div>
+
+              <button
+                type="button"
+                style={primaryButton}
+                disabled={authLoading}
+                onClick={() => void registerBusiness()}
+              >
+                {authLoading
+                  ? "Creating business..."
+                  : "Create business and open POS"}
+              </button>
+            </>
+          )}
+
+          {message && (
+            <p style={errorText}>{message}</p>
+          )}
+
+          <p
+            style={{
+              textAlign: "center",
+              color: "#667085",
+              fontSize: 13,
+              marginTop: 18,
+              marginBottom: 0,
+            }}
+          >
+            The same email and password are used for
+            Backoffice.
+          </p>
         </div>
       </div>
     );
   }
-
 
   if (loggedIn && !branchId) {
     return (

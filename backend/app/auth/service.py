@@ -14,9 +14,25 @@ class AuthService:
         if data.password != data.confirm_password:
             raise HTTPException(400, "Passwords do not match")
 
+        owner_name = data.owner_name.strip()
+        owner_pin = data.owner_pin.strip()
+
+        if len(owner_name) < 2:
+            raise HTTPException(400, "Owner name is required")
+
+        if len(owner_pin) != 4 or not owner_pin.isdigit():
+            raise HTTPException(400, "Owner PIN must contain exactly 4 digits")
+
         existing = await self.repo.get_user_by_email(data.email.lower())
         if existing:
             raise HTTPException(409, "Email already registered")
+
+        owner_name = (
+            data.owner_name.strip()
+            if data.owner_name and data.owner_name.strip()
+            else data.email.split("@")[0]
+        )
+        owner_pin = data.owner_pin or "1234"
 
         company_id = uuid.uuid4()
         shop_id = uuid.uuid4()
@@ -28,7 +44,7 @@ class AuthService:
         company = Company(
             id=company_id,
             name=data.business_name,
-            owner_name=data.email.split("@")[0],
+            owner_name=data.owner_name.strip(),
             owner_email=data.email.lower(),
             business_type=data.business_type,
             country=data.country,
@@ -51,9 +67,9 @@ class AuthService:
             company_id=company_id,
             shop_id=shop_id,
             branch_id=branch_id,
-            name="Owner",
+            name=data.owner_name.strip(),
             email=data.email.lower(),
-            pin=hash_password("1234"),
+            pin=hash_password(data.owner_pin),
             role="owner",
         )
 
@@ -63,7 +79,7 @@ class AuthService:
             shop_id=shop_id,
             branch_id=branch_id,
             name="Main Device",
-            device_key=str(uuid.uuid4()),
+            device_key=data.device_key or str(uuid.uuid4()),
             platform="Web",
             app_version="1.0.0",
         )

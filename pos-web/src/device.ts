@@ -9,18 +9,14 @@ export function getOrCreateDeviceKey(): string {
 
   const generated =
     globalThis.crypto?.randomUUID?.() ||
-    `web-${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2)}`;
+    `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   localStorage.setItem("device_key", generated);
 
   return generated;
 }
 
-export async function registerCurrentDevice(
-  companyId: string,
-) {
+export async function registerCurrentDevice(companyId: string) {
   const response = await api.post("/devices/register", {
     company_id: companyId,
     device_key: getOrCreateDeviceKey(),
@@ -29,16 +25,34 @@ export async function registerCurrentDevice(
     app_version: "1.0.0",
   });
 
-  const device = response.data;
+  const result = response.data?.device || response.data;
 
-  localStorage.setItem("device_id", device.id || "");
-  localStorage.setItem("shop_id", device.shop_id || "");
-  localStorage.setItem("branch_id", device.branch_id || "");
-  localStorage.setItem("device_name", device.name || "Web POS");
-  localStorage.setItem(
-    "branch_name",
-    device.branch_name || "",
-  );
+  if (result?.device_key) {
+    localStorage.setItem(
+      "device_key",
+      String(result.device_key),
+    );
+  }
 
-  return device;
+  const branchId =
+    result?.branch_id ||
+    result?.branch?.id ||
+    response.data?.branch_id ||
+    response.data?.branch?.id;
+
+  const branchName =
+    result?.branch_name ||
+    result?.branch?.name ||
+    response.data?.branch_name ||
+    response.data?.branch?.name;
+
+  if (branchId) {
+    localStorage.setItem("branch_id", String(branchId));
+  }
+
+  if (branchName) {
+    localStorage.setItem("branch_name", String(branchName));
+  }
+
+  return response.data;
 }
