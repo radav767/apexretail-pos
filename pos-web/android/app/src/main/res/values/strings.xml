@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ApexRetail POS</string>
+    <string name="title_activity_main">ApexRetail POS</string>
+    <string name="package_name">cloud.apexpos.pos</string>
+    <string name="custom_url_scheme">cloud.apexpos.pos</string>
+</resources>
