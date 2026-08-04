@@ -18,6 +18,21 @@ class SalesService:
 
     async def create_sale(self, data: SaleCreate):
         employee = None
+
+        # An Android device may submit the same queued sale more than
+        # once when connectivity returns. Return the existing sale
+        # instead of deducting stock again.
+        existing_client_sale = (
+            await self.repo.get_by_client_sale_id(
+                data.company_id,
+                data.client_sale_id,
+            )
+            if data.client_sale_id
+            else None
+        )
+
+        if existing_client_sale:
+            return existing_client_sale
         if not data.items:
             raise HTTPException(
                 400,
@@ -268,6 +283,12 @@ class SalesService:
         sale = Sale(
             id=sale_id,
             company_id=data.company_id,
+            client_sale_id=data.client_sale_id,
+            client_created_at=data.client_created_at,
+            created_at=(
+                data.client_created_at
+                or datetime.now(timezone.utc)
+            ),
             shop_id=branch.shop_id,
             branch_id=branch.id,
             employee_id=employee.id if employee else None,

@@ -16,12 +16,17 @@ class SaleCreate(BaseModel):
     employee_id: UUID | None = None
     payment_method: str = "cash"
     amount_received: Decimal | None = None
+    client_sale_id: UUID | None = None
+    client_created_at: datetime | None = None
     items: list[SaleItemCreate]
 
 
 class SaleOut(BaseModel):
     id: UUID
     company_id: UUID
+
+    client_sale_id: UUID | None = None
+    client_created_at: datetime | None = None
 
     shop_id: UUID | None = None
     branch_id: UUID | None = None

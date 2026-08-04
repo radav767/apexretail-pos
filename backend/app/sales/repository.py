@@ -46,6 +46,22 @@ class SalesRepository:
     async def sync_product_total(self, product):
         return await self.stock.sync_product_total(product)
 
+    async def get_by_client_sale_id(
+        self,
+        company_id,
+        client_sale_id,
+    ):
+        if client_sale_id is None:
+            return None
+
+        result = await self.db.execute(
+            select(Sale).where(
+                Sale.company_id == company_id,
+                Sale.client_sale_id == client_sale_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def save_sale(
         self,
         sale,
