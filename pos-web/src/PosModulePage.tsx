@@ -88,6 +88,33 @@ function extractRows<T>(value: unknown): T[] {
   return [];
 }
 
+function harareDateValue(date: Date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Harare",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year =
+    parts.find((part) => part.type === "year")?.value || "";
+  const month =
+    parts.find((part) => part.type === "month")?.value || "";
+  const day =
+    parts.find((part) => part.type === "day")?.value || "";
+
+  return `${year}-${month}-${day}`;
+}
+
+
+function localDateValue(date: Date = new Date()) {
+  const timezoneOffset = date.getTimezoneOffset() * 60_000;
+
+  return new Date(date.getTime() - timezoneOffset)
+    .toISOString()
+    .slice(0, 10);
+}
+
 export default function PosModulePage({
   activeModule,
   companyId,
@@ -103,6 +130,9 @@ export default function PosModulePage({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [salesDate, setSalesDate] = useState(
+    () => harareDateValue(),
+  );
   function money(value: string | number | undefined) {
     return `${currencySymbol}${Number(value || 0).toFixed(decimalPlaces)}`;
   }
@@ -120,10 +150,11 @@ export default function PosModulePage({
 
       try {
         if (activeModule === "Sales Management") {
-          const response = await api.get(`/sales/${companyId}`, {
+          const response = await api.get(`/sales/history/${companyId}`, {
             params: {
               limit: 100,
               branch_id: branchId || undefined,
+              sale_date: salesDate,
             },
           });
 
@@ -176,7 +207,7 @@ export default function PosModulePage({
     return () => {
       cancelled = true;
     };
-  }, [activeModule, companyId, branchId]);
+  }, [activeModule, companyId, branchId, salesDate]);
 
   const inventoryProducts = useMemo(() => {
     return [...products].sort(
@@ -221,8 +252,40 @@ export default function PosModulePage({
             <div className="pos-module-card-heading">
               <div>
                 <h2>Sales History</h2>
-                <p>{sales.length} transaction records loaded</p>
+
+              <div className="pos-module-date-filter">
+                <label htmlFor="sales-history-date">
+                  Transaction date
+                </label>
+
+                <div className="pos-module-date-actions">
+                  <input
+                    id="sales-history-date"
+                    type="date"
+                    value={salesDate}
+                    max={localDateValue()}
+                    onChange={(event) =>
+                      setSalesDate(event.target.value)
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSalesDate(localDateValue())
+                    }
+                  >
+                    Today
+                  </button>
+                </div>
               </div>
+
+                
+                <p>{sales.length} transaction records for {salesDate}</p>
+              </div>
+
+              
+
             </div>
 
             <div className="pos-module-table-wrap">
