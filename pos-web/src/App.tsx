@@ -4,6 +4,7 @@ import { api } from "./api/client";
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
 import { registerCurrentDevice } from "./device";
 
+import "./sales-responsive.css";
 type Product = {
   id: string;
   name: string;
@@ -1066,7 +1067,7 @@ const [loggedIn, setLoggedIn] = useState(
 
 
   return (
-    <div style={appShell}>
+    <div style={appShell} className="pos-sales-shell">
       <button
 
                   type="button"
@@ -1272,8 +1273,8 @@ const [loggedIn, setLoggedIn] = useState(
         />
       )}
 
-      <main style={mainArea}>
-        <div style={topBar}>
+      <main style={mainArea} className="pos-sales-main">
+        <div style={topBar} className="pos-sales-topbar">
           <div>
             <h1 style={{ margin: 0, fontSize: 32 }}>
               ApexRetail POS
@@ -1320,18 +1321,20 @@ const [loggedIn, setLoggedIn] = useState(
         </div>
 
         <input
+          className="pos-sales-search"
           style={searchBox}
           placeholder="Search product by name, SKU or barcode..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
 
-        <div style={productGrid}>
+        <div style={productGrid} className="pos-sales-product-grid">
           {filteredProducts.map((product) => (
             <button
               key={product.id}
               onClick={() => addToCart(product)}
               style={productCard}
+              className="pos-product-card"
               disabled={Number(product.stock_qty) <= 0}
             >
               <h3>{product.name}</h3>
@@ -1347,7 +1350,7 @@ const [loggedIn, setLoggedIn] = useState(
         )}
       </main>
 
-      <aside style={cartPanel}>
+      <aside style={cartPanel} className="pos-sales-cart">
         <h2 style={{ marginTop: 0 }}>Current Sale</h2>
 
         <div style={cartItemsArea}>
@@ -1442,7 +1445,7 @@ const [loggedIn, setLoggedIn] = useState(
           </h1>
         </div>
 
-        <div style={paymentGrid}>
+        <div style={paymentGrid} className="pos-payment-grid">
           {enabledPaymentMethods.map((method) => (
             <button
               key={method}

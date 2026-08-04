@@ -1,0 +1,367 @@
+/* =========================================================
+   ApexRetail POS — Responsive Sales Screen
+   Presentation only: no business logic is changed.
+   ========================================================= */
+
+.pos-sales-shell {
+  min-height: 100dvh !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 420px) !important;
+  background: #eef2f7 !important;
+  color: #111827;
+}
+
+.pos-sales-main {
+  min-width: 0 !important;
+  padding: 22px !important;
+  overflow-x: hidden;
+}
+
+.pos-sales-topbar {
+  min-height: 104px;
+  margin-bottom: 18px !important;
+  padding: 18px 20px 18px 72px !important;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.pos-sales-topbar h1 {
+  margin: 0 !important;
+  color: #0f172a;
+  font-size: clamp(25px, 2.2vw, 32px) !important;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+}
+
+.pos-sales-topbar p {
+  line-height: 1.45;
+}
+
+.pos-sales-topbar button {
+  min-height: 46px;
+  border-radius: 12px !important;
+  padding-left: 20px !important;
+  padding-right: 20px !important;
+  white-space: nowrap;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.pos-sales-topbar button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 16px rgba(15, 23, 42, 0.08);
+}
+
+.pos-sales-search {
+  width: 100% !important;
+  min-height: 54px;
+  margin-bottom: 20px !important;
+  padding: 0 18px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  color: #0f172a;
+  font-size: 16px;
+  outline: none;
+  box-shadow: 0 5px 15px rgba(15, 23, 42, 0.025);
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.pos-sales-search:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+.pos-sales-product-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)) !important;
+  gap: 15px !important;
+  align-items: stretch;
+}
+
+.pos-product-card {
+  min-width: 0;
+  min-height: 176px;
+  padding: 18px !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  color: #111827;
+  text-align: left;
+  box-shadow: 0 7px 18px rgba(15, 23, 42, 0.045);
+  transition:
+    transform 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.pos-product-card:not(:disabled):hover {
+  transform: translateY(-3px);
+  border-color: #93c5fd !important;
+  box-shadow: 0 13px 26px rgba(15, 23, 42, 0.09);
+}
+
+.pos-product-card:not(:disabled):active {
+  transform: translateY(-1px);
+}
+
+.pos-product-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  filter: grayscale(0.25);
+}
+
+.pos-product-card h3 {
+  margin: 0 0 14px;
+  color: #0f172a;
+  font-size: 18px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.pos-product-card p {
+  margin: 6px 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.pos-product-card h2 {
+  margin: 18px 0 0;
+  color: #0f172a;
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* Cart */
+.pos-sales-cart {
+  position: sticky !important;
+  top: 0;
+  height: 100dvh !important;
+  min-height: 100dvh;
+  padding: 24px !important;
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid #dbe3ee;
+  background: #ffffff !important;
+  box-shadow: -10px 0 30px rgba(15, 23, 42, 0.035);
+}
+
+.pos-sales-cart > h2 {
+  margin: 0 0 6px !important;
+  color: #0f172a;
+  font-size: 27px;
+  letter-spacing: -0.02em;
+}
+
+.pos-sales-cart button {
+  min-height: 44px;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    opacity 140ms ease;
+}
+
+.pos-sales-cart button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.pos-sales-cart button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.pos-sales-cart h1 {
+  margin: 14px 0 !important;
+  padding-top: 14px;
+  border-top: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-size: clamp(34px, 3vw, 44px) !important;
+  line-height: 1;
+}
+
+.pos-sales-cart h1 span:last-child {
+  text-align: right;
+}
+
+.pos-payment-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+
+.pos-payment-grid button {
+  width: 100% !important;
+  min-height: 54px;
+  margin: 0 !important;
+  padding: 11px 10px !important;
+  border-radius: 13px !important;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* Improve cart row usability */
+.pos-sales-cart [style*="border-bottom"] {
+  transition: background 120ms ease;
+}
+
+.pos-sales-cart [style*="border-bottom"]:hover {
+  background: #f8fafc;
+}
+
+/* Tablet */
+@media (max-width: 1100px) {
+  .pos-sales-shell {
+    grid-template-columns: minmax(0, 1fr) 350px !important;
+  }
+
+  .pos-sales-main {
+    padding: 18px !important;
+  }
+
+  .pos-sales-product-grid {
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)) !important;
+  }
+
+  .pos-sales-cart {
+    padding: 20px !important;
+  }
+}
+
+/* Small tablet and phone: cart moves underneath products */
+@media (max-width: 860px) {
+  .pos-sales-shell {
+    display: block !important;
+    min-height: 100dvh !important;
+  }
+
+  .pos-sales-main {
+    width: 100%;
+    padding: 14px !important;
+  }
+
+  .pos-sales-topbar {
+    min-height: auto;
+    padding: 16px 14px 16px 66px !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+
+  .pos-sales-cart {
+    position: relative !important;
+    top: auto;
+    width: 100%;
+    height: auto !important;
+    min-height: 520px;
+    padding: 20px 16px 28px !important;
+    overflow: visible;
+    border-top: 1px solid #dbe3ee;
+    border-left: 0;
+    box-shadow: 0 -10px 30px rgba(15, 23, 42, 0.04);
+  }
+
+  .pos-sales-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .pos-product-card {
+    min-height: 158px;
+    padding: 15px !important;
+  }
+}
+
+/* Narrow phones */
+@media (max-width: 560px) {
+  .pos-sales-main {
+    padding: 10px !important;
+  }
+
+  .pos-sales-topbar {
+    display: grid !important;
+    grid-template-columns: 1fr;
+    padding: 15px 12px 15px 62px !important;
+    border-radius: 14px;
+  }
+
+  .pos-sales-topbar > div:last-child {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+  }
+
+  .pos-sales-topbar button {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 10px 8px !important;
+    font-size: 13px;
+  }
+
+  .pos-sales-search {
+    min-height: 50px;
+    margin-bottom: 12px !important;
+    padding: 0 14px !important;
+    font-size: 14px;
+  }
+
+  .pos-sales-product-grid {
+    gap: 10px !important;
+  }
+
+  .pos-product-card {
+    min-height: 150px;
+    padding: 13px !important;
+    border-radius: 13px !important;
+  }
+
+  .pos-product-card h3 {
+    margin-bottom: 10px;
+    font-size: 16px;
+  }
+
+  .pos-product-card h2 {
+    margin-top: 13px;
+    font-size: 21px;
+  }
+
+  .pos-sales-cart {
+    min-height: 480px;
+    padding: 18px 12px 24px !important;
+  }
+
+  .pos-sales-cart > h2 {
+    font-size: 24px;
+  }
+
+  .pos-sales-cart h1 {
+    font-size: 32px !important;
+  }
+
+  .pos-payment-grid {
+    gap: 8px !important;
+  }
+
+  .pos-payment-grid button {
+    min-height: 50px;
+    font-size: 13px;
+  }
+}
+
+/* Very narrow devices */
+@media (max-width: 390px) {
+  .pos-sales-product-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .pos-product-card {
+    min-height: 138px;
+  }
+}
