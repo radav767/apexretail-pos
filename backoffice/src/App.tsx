@@ -36,8 +36,8 @@ const emptySummary: DashboardSummary = {
 };
 
 function App() {
-  const [email, setEmail] = useState("owner001@example.com");
-  const [password, setPassword] = useState("12345678");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const [loggedIn, setLoggedIn] = useState(
     Boolean(localStorage.getItem("backoffice_token")),

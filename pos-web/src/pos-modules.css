@@ -267,3 +267,111 @@
     gap: 4px;
   }
 }
+
+/* Sales Management daily transaction filter */
+.pos-module-date-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pos-module-date-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pos-module-date-controls input {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+}
+
+.pos-module-date-controls button {
+  min-height: 42px;
+  padding: 9px 18px;
+  border: 1px solid #0f172a;
+  border-radius: 9px;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .pos-module-date-controls {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .pos-module-date-controls label {
+    flex: 1;
+  }
+
+  .pos-module-date-controls input,
+  .pos-module-date-controls button {
+    width: 100%;
+  }
+}
+
+
+/* Daily Sales Management date selector */
+.pos-module-date-filter {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.pos-module-date-filter label {
+  font-size: 13px;
+  font-weight: 750;
+  color: #475569;
+}
+
+.pos-module-date-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-module-date-actions input {
+  min-height: 42px;
+  padding: 8px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+}
+
+.pos-module-date-actions button {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid #0f172a;
+  border-radius: 9px;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .pos-module-date-actions {
+    width: 100%;
+  }
+
+  .pos-module-date-actions input {
+    flex: 1;
+    min-width: 0;
+  }
+}
