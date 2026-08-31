@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from app.auth import router as auth
 from app.products import router as products
 from app.dashboard import router as dashboard
@@ -10,8 +12,47 @@ from app.devices import router as devices
 from app.employees import router as employees
 from app.reports import router as reports
 from app.business_settings import router as business_settings
+from app.subscriptions import router as subscriptions
 
 app = FastAPI(title="ApexRetail POS API")
+
+
+def serialize_validation_errors(errors: list[dict]) -> list[dict[str, str]]:
+    serialized: list[dict[str, str]] = []
+
+    for error in errors:
+        location = [
+            str(part)
+            for part in error.get("loc", [])
+            if part not in {"body", "query", "path"}
+        ]
+        field = ".".join(location)
+        message = str(error.get("msg", "Invalid value"))
+
+        serialized.append(
+            {
+                "field": field,
+                "message": message,
+            }
+        )
+
+    return serialized
+
+
+def error_payload(
+    detail: str,
+    *,
+    field_errors: list[dict[str, str]] | None = None,
+):
+    payload = {
+        "detail": detail,
+        "message": detail,
+    }
+
+    if field_errors:
+        payload["field_errors"] = field_errors
+
+    return payload
 
 app.add_middleware(
     CORSMiddleware,
@@ -19,6 +60,9 @@ app.add_middleware(
         "https://pos.apexpos.cloud",
         "https://backoffice.apexpos.cloud",
         "http://localhost:5173",
+        "http://localhost",
+        "https://localhost",
+        "capacitor://localhost",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -35,6 +79,52 @@ app.include_router(devices.router, prefix="/api")
 app.include_router(employees.router, prefix="/api")
 app.include_router(reports, prefix="/api")
 app.include_router(business_settings.router, prefix="/api")
+app.include_router(subscriptions.router, prefix="/api")
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(
+    _request: Request,
+    exc: RequestValidationError,
+):
+    field_errors = serialize_validation_errors(exc.errors())
+    primary_error = field_errors[0] if field_errors else None
+
+    if primary_error and primary_error["field"]:
+        detail = (
+            f"{primary_error['field']}: "
+            f"{primary_error['message']}"
+        )
+    elif primary_error:
+        detail = primary_error["message"]
+    else:
+        detail = "Request validation failed"
+
+    return JSONResponse(
+        status_code=422,
+        content=error_payload(
+            detail,
+            field_errors=field_errors,
+        ),
+    )
+
+
+@app.exception_handler(HTTPException)
+async def handle_http_exception(
+    _request: Request,
+    exc: HTTPException,
+):
+    detail = (
+        exc.detail
+        if isinstance(exc.detail, str)
+        else "Request failed"
+    )
+
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_payload(detail),
+        headers=exc.headers,
+    )
 
 @app.get("/api/health")
 async def health():
@@ -48,4 +138,3 @@ app.include_router(
     sales_router,
     prefix="/api",
 )
-

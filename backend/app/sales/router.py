@@ -5,10 +5,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import (
+    AuthActor,
+    get_optional_auth_actor,
+    require_billable_body_company,
+)
 from app.db.session import get_db
 from app.models.sale import Sale
 from app.sales.repository import SalesRepository
-from app.sales.schema import SaleCreate, SaleOut
+from app.sales.schema import RefundCreate, SaleCreate, SaleOut, SaleReceiptOut
 from app.sales.service import SalesService
 
 
@@ -31,8 +36,34 @@ def get_service(
 async def create_sale(
     data: SaleCreate,
     service: SalesService = Depends(get_service),
+    actor: AuthActor | None = Depends(
+        get_optional_auth_actor
+    ),
+    _entitlement: None = Depends(
+        require_billable_body_company
+    ),
 ):
-    return await service.create_sale(data)
+    return await service.create_sale(data, actor=actor)
+
+
+@router.post(
+    "/refunds",
+    response_model=SaleOut,
+)
+async def create_refund(
+    data: RefundCreate,
+    service: SalesService = Depends(get_service),
+    actor: AuthActor | None = Depends(
+        get_optional_auth_actor
+    ),
+    _entitlement: None = Depends(
+        require_billable_body_company
+    ),
+):
+    return await service.create_refund(
+        data,
+        actor=actor,
+    )
 
 
 # This specific route must remain above /{company_id}.
@@ -84,6 +115,25 @@ async def list_sales_history_by_date(
     result = await db.execute(statement)
 
     return list(result.scalars().all())
+
+
+@router.get(
+    "/receipt/{company_id}/{sale_id}",
+    response_model=SaleReceiptOut,
+)
+async def get_sale_receipt(
+    company_id: UUID,
+    sale_id: UUID,
+    service: SalesService = Depends(get_service),
+    actor: AuthActor | None = Depends(
+        get_optional_auth_actor
+    ),
+):
+    return await service.get_sale_receipt(
+        company_id,
+        sale_id,
+        actor=actor,
+    )
 
 
 @router.get(

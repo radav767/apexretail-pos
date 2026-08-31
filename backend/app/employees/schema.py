@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
-EmployeeRole = Literal["owner", "manager", "cashier"]
+EmployeeRole = Literal["owner", "administrator", "manager", "cashier"]
 
 
 class EmployeeCreate(BaseModel):
@@ -93,7 +93,10 @@ class EmployeeOut(BaseModel):
 
 class PinLoginRequest(BaseModel):
     company_id: UUID
-    branch_id: UUID
+    branch_id: UUID | None = None
+    shop_id: UUID | None = None
+    device_id: UUID | None = None
+    takeover: bool = False
 
     pin: str = Field(
         pattern=r"^\d{4}$",
@@ -103,9 +106,14 @@ class PinLoginRequest(BaseModel):
 class PinLoginOut(BaseModel):
     id: UUID
     company_id: UUID
-    shop_id: UUID
-    branch_id: UUID
+    shop_id: UUID | None = None
+    branch_id: UUID | None = None
 
     name: str
     role: str
     permissions: dict[str, bool]
+    access_token: str
+    device_id: UUID | None = None
+    selection_required: bool = False
+    shops: list[dict] = Field(default_factory=list)
+    terminals: list[dict] = Field(default_factory=list)

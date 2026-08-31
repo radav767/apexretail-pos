@@ -5,19 +5,48 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import HTTPException
 
+from app.auth.dependencies import AuthActor
+from app.employees.service import EmployeeService
 from app.models.inventory_movement import InventoryMovement
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
+from app.models.audit_event import AuditEvent
 from app.sales.repository import SalesRepository
-from app.sales.schema import SaleCreate
+from app.sales.schema import RefundCreate, SaleCreate
+
+
+VALID_WEIGHT_ENTRY_UNITS = {"kg", "litre"}
+VALID_PRODUCT_UNITS = {"each", "kg", "g", "litre", "ml"}
 
 
 class SalesService:
     def __init__(self, repo: SalesRepository):
         self.repo = repo
 
-    async def create_sale(self, data: SaleCreate):
+    async def create_sale(
+        self,
+        data: SaleCreate,
+        *,
+        actor: AuthActor | None,
+    ):
+        device = None
         employee = None
+
+        if actor is not None:
+            if actor.company_id != data.company_id:
+                raise HTTPException(403, "Forbidden")
+
+            if actor.actor_type == "employee":
+                if (
+                    not actor.permissions
+                    or actor.permissions.get("sales") is False
+                ):
+                    raise HTTPException(
+                        403,
+                        "Permission denied",
+                    )
+
+                data.employee_id = actor.employee.id
 
         # An Android device may submit the same queued sale more than
         # once when connectivity returns. Return the existing sale
@@ -57,6 +86,36 @@ class SalesService:
             data.branch_id,
         )
 
+        if data.device_id is not None or data.device_key:
+            device = await self.repo.get_device(
+                data.company_id,
+                device_id=data.device_id,
+                device_key=(
+                    data.device_key.strip()
+                    if data.device_key
+                    else None
+                ),
+            )
+
+            if device is None:
+                raise HTTPException(
+                    403,
+                    "Device not found or inactive",
+                )
+
+            blocked_at = device.removed_at or device.deactivated_at
+            if (
+                blocked_at is not None
+                and (
+                    data.client_created_at is None
+                    or data.client_created_at > blocked_at
+                )
+            ):
+                raise HTTPException(
+                    403,
+                    "Device access has been disabled",
+                )
+
         sale_id = uuid.uuid4()
 
         receipt_number = (
@@ -89,6 +148,24 @@ class SalesService:
             settings.get("tax_inclusive", False)
 
         )
+
+        shop = await self.repo.get_shop(
+            data.company_id,
+            branch.shop_id,
+        )
+        shop_address_snapshot = None
+        if shop is not None:
+            address_payload = {
+                "address_line_1": shop.address_line_1,
+                "address_line_2": shop.address_line_2,
+                "city": shop.city,
+                "state_province": shop.state_province,
+                "country": shop.country,
+                "phone": shop.phone,
+                "tax_vat_number": shop.tax_vat_number,
+            }
+            if any(address_payload.values()):
+                shop_address_snapshot = address_payload
 
         money_quantum = Decimal("0.01")
 
@@ -133,16 +210,46 @@ class SalesService:
 
             after_qty = before_qty - item.quantity
 
-            selling_price = Decimal(
-                product.selling_price or 0
+            selling_unit = (
+                str(
+                    item.selling_unit
+                    or getattr(product, "unit", None)
+                    or "each"
+                )
+                .strip()
+                .lower()
+            ) or "each"
+            if selling_unit not in VALID_PRODUCT_UNITS:
+                raise HTTPException(400, "Unsupported selling unit")
+            selling_price = (
+                Decimal(item.unit_price)
+                if item.unit_price is not None
+                else Decimal(product.selling_price or 0)
             )
+            if item.quantity <= 0:
+                raise HTTPException(400, "Quantity must be greater than zero")
+            if selling_price <= 0:
+                raise HTTPException(400, "Unit price must be greater than zero")
 
             unit_cost = Decimal(product.cost_price or 0)
 
-            line_cost = unit_cost * item.quantity
+            line_cost = (
+                unit_cost * item.quantity
+            ).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
 
-
-            line_total = selling_price * item.quantity
+            line_total = (
+                Decimal(item.line_total)
+                if item.line_total is not None
+                else selling_price * item.quantity
+            ).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            if line_total <= 0:
+                raise HTTPException(400, "Line total must be greater than zero")
             total += line_total
 
             balance.quantity = after_qty
@@ -157,6 +264,7 @@ class SalesService:
                     product_id=product.id,
                     product_name=product.name,
                     quantity=item.quantity,
+                    selling_unit=selling_unit,
                     unit_price=selling_price,
                     line_total=line_total,
                     unit_cost=unit_cost,
@@ -260,9 +368,9 @@ class SalesService:
 
         if data.employee_id is not None:
             employee = await self.repo.get_employee(
-                                 employee_id=data.employee_id,
-                                 company_id=data.company_id,
-                             )
+                employee_id=data.employee_id,
+                company_id=data.company_id,
+            )
 
             if not employee:
                 raise HTTPException(
@@ -280,6 +388,17 @@ class SalesService:
                     "Employee is not assigned to this branch",
                 )
 
+            permissions = EmployeeService.build_permissions(
+                employee.role,
+                employee.permissions,
+            )
+
+            if permissions.get("sales") is False:
+                raise HTTPException(
+                    403,
+                    "Permission denied",
+                )
+
         sale = Sale(
             id=sale_id,
             company_id=data.company_id,
@@ -291,7 +410,28 @@ class SalesService:
             ),
             shop_id=branch.shop_id,
             branch_id=branch.id,
+            device_id=device.id if device else None,
             employee_id=employee.id if employee else None,
+            cashier_name=employee.name if employee else None,
+            shop_name_snapshot=shop.name if shop else None,
+            shop_address_snapshot=shop_address_snapshot,
+            branch_name_snapshot=branch.name,
+            pos_name_snapshot=(
+                (
+                    device.friendly_name
+                    or device.name
+                )
+                if device
+                else None
+            ),
+            pos_number_snapshot=(
+                str(device.pos_number)
+                if device and device.pos_number is not None
+                else None
+            ),
+            receipt_footer_snapshot=settings.get(
+                "receipt_footer"
+            ),
             receipt_number=receipt_number,
             subtotal_amount=subtotal_amount,
             tax_name=tax_name,
@@ -313,6 +453,186 @@ class SalesService:
             inventory_movements,
         )
 
+    async def create_refund(
+        self,
+        data: RefundCreate,
+        *,
+        actor: AuthActor | None,
+    ):
+        if actor is not None:
+            if actor.company_id != data.company_id:
+                raise HTTPException(403, "Forbidden")
+            if (
+                actor.actor_type == "employee"
+                and (
+                    not actor.permissions
+                    or actor.permissions.get("refunds") is False
+                )
+            ):
+                raise HTTPException(403, "Permission denied")
+
+        original_sale = await self.repo.get_sale_for_update(
+            data.company_id,
+            data.original_sale_id,
+        )
+        if original_sale is None:
+            raise HTTPException(404, "Original sale not found")
+
+        sale_items = {
+            item.id: item
+            for item in await self.repo.get_sale_items(
+                data.original_sale_id
+            )
+        }
+        if not sale_items:
+            raise HTTPException(400, "Original sale has no items")
+        if original_sale.original_sale_id is not None or original_sale.status not in {"completed", "partially_refunded"}:
+            raise HTTPException(400, "Only completed original sales can be refunded")
+        if not data.reason.strip():
+            raise HTTPException(400, "Refund reason is required")
+        if data.refund_method and data.refund_method != original_sale.payment_method and (actor is None or actor.role not in {"owner", "manager", "administrator"}):
+            raise HTTPException(403, "Only a manager may change the refund method")
+
+        branch = await self.repo.resolve_branch(
+            data.company_id,
+            data.branch_id or original_sale.branch_id,
+        )
+        refund_id = uuid.uuid4()
+        receipt_number = (
+            f"RFD-{datetime.now(timezone.utc):%Y%m%d}-"
+            f"{str(refund_id)[:8].upper()}"
+        )
+        money_quantum = Decimal("0.01")
+        refund_sale_items = []
+        products = []
+        balances = []
+        inventory_movements = []
+        total = Decimal("0.00")
+
+        seen = set()
+        for refund_item in data.items:
+            if refund_item.sale_item_id in seen:
+                raise HTTPException(400, "Each sale item may appear only once")
+            seen.add(refund_item.sale_item_id)
+            original_item = sale_items.get(refund_item.sale_item_id)
+            if original_item is None:
+                raise HTTPException(400, "Refund item not found in original sale")
+            previous_refunds = await self.repo.list_refund_items_for_original_item(
+                refund_item.sale_item_id
+            )
+            already_refunded = sum(
+                (Decimal(item.quantity or 0) for item in previous_refunds),
+                Decimal("0"),
+            )
+            remaining = Decimal(original_item.quantity or 0) - already_refunded
+            if refund_item.quantity > remaining:
+                raise HTTPException(400, "Refund quantity exceeds remaining quantity")
+
+            product = await self.repo.get_product(
+                data.company_id,
+                original_item.product_id,
+            )
+            balance = await self.repo.get_balance(
+                data.company_id,
+                branch,
+                product,
+            )
+            before_qty = Decimal(balance.quantity or 0)
+            after_qty = before_qty + refund_item.quantity
+            balance.quantity = after_qty
+            await self.repo.sync_product_total(product)
+
+            ratio = refund_item.quantity / Decimal(original_item.quantity or 1)
+            line_total = (Decimal(original_item.line_total or 0) * ratio).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            line_cost = (
+                Decimal(original_item.unit_cost or 0)
+                * refund_item.quantity
+            ).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            total += line_total
+            products.append(product)
+            balances.append(balance)
+            refund_sale_items.append(
+                SaleItem(
+                    sale_id=refund_id,
+                    product_id=original_item.product_id,
+                    original_sale_item_id=original_item.id,
+                    product_name=original_item.product_name,
+                    quantity=refund_item.quantity,
+                    selling_unit=original_item.selling_unit,
+                    unit_price=original_item.unit_price,
+                    line_total=-line_total,
+                    unit_cost=original_item.unit_cost,
+                    line_cost=-line_cost,
+                )
+            )
+            inventory_movements.append(
+                InventoryMovement(
+                    company_id=data.company_id,
+                    shop_id=branch.shop_id,
+                    branch_id=branch.id,
+                    product_id=product.id,
+                    product_name=product.name,
+                    movement_type="refund",
+                    quantity=refund_item.quantity,
+                    before_qty=before_qty,
+                    after_qty=after_qty,
+                    unit_cost=Decimal(product.cost_price or 0),
+                    reference=receipt_number,
+                    reason=data.reason.strip(),
+                    notes=f"Inventory restored by refund {receipt_number}",
+                )
+            )
+
+        refund_sale = Sale(
+            id=refund_id,
+            company_id=data.company_id,
+            original_sale_id=original_sale.id,
+            shop_id=original_sale.shop_id,
+            branch_id=branch.id,
+            device_id=data.device_id or original_sale.device_id,
+            employee_id=data.employee_id or original_sale.employee_id,
+            cashier_name=original_sale.cashier_name,
+            shop_name_snapshot=original_sale.shop_name_snapshot,
+            shop_address_snapshot=original_sale.shop_address_snapshot,
+            branch_name_snapshot=original_sale.branch_name_snapshot,
+            pos_name_snapshot=original_sale.pos_name_snapshot,
+            pos_number_snapshot=original_sale.pos_number_snapshot,
+            receipt_footer_snapshot=original_sale.receipt_footer_snapshot,
+            receipt_number=receipt_number,
+            subtotal_amount=-total,
+            tax_name=original_sale.tax_name,
+            tax_rate=original_sale.tax_rate,
+            tax_amount=-(Decimal(original_sale.tax_amount or 0) * (total / Decimal(original_sale.subtotal_amount or 1))).quantize(money_quantum, rounding=ROUND_HALF_UP),
+            tax_inclusive=original_sale.tax_inclusive,
+            total_amount=-(total + (Decimal(original_sale.tax_amount or 0) * (total / Decimal(original_sale.subtotal_amount or 1))).quantize(money_quantum, rounding=ROUND_HALF_UP)),
+            amount_received=Decimal("0.00"),
+            change_due=Decimal("0.00"),
+            payment_method=data.refund_method or original_sale.payment_method,
+            status="refunded",
+            refund_reason=data.reason.strip(),
+            refund_method=data.refund_method or original_sale.payment_method,
+            created_at=datetime.now(timezone.utc),
+        )
+        requested = {i.sale_item_id: i.quantity for i in data.items}
+        original_sale.status = "refunded" if all(
+            requested.get(item.id, Decimal("0")) + sum((Decimal(x.quantity or 0) for x in await self.repo.list_refund_items_for_original_item(item.id)), Decimal("0")) >= Decimal(item.quantity or 0)
+            for item in sale_items.values()
+        ) else "partially_refunded"
+        self.repo.db.add(AuditEvent(company_id=data.company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=data.device_id or original_sale.device_id, action="refund", reason=data.reason.strip(), details={"original_sale_id": str(original_sale.id), "refund_sale_id": str(refund_id)}))
+        return await self.repo.save_sale(
+            refund_sale,
+            refund_sale_items,
+            products,
+            balances,
+            inventory_movements,
+        )
+
     async def list_sales(
         self,
         company_id,
@@ -322,3 +642,45 @@ class SalesService:
             company_id,
             limit,
         )
+
+    async def get_sale_receipt(
+        self,
+        company_id,
+        sale_id,
+        *,
+        actor: AuthActor | None,
+    ):
+        if actor is not None:
+            if actor.company_id != company_id:
+                raise HTTPException(403, "Forbidden")
+
+            if (
+                actor.actor_type == "employee"
+                and (
+                    not actor.permissions
+                    or actor.permissions.get("sales") is False
+                )
+            ):
+                raise HTTPException(403, "Permission denied")
+
+        sale_with_items = await self.repo.get_sale_receipt(
+            company_id,
+            sale_id,
+        )
+
+        if sale_with_items is None:
+            raise HTTPException(404, "Sale not found")
+
+        sale, items = sale_with_items
+
+        sale.reprint_count = int(sale.reprint_count or 0) + 1
+        sale.last_reprinted_at = datetime.now(timezone.utc)
+        if hasattr(self.repo.db, "add"):
+            self.repo.db.add(AuditEvent(company_id=company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=getattr(actor.employee, "device_id", None) if actor and actor.actor_type == "employee" else None, action="receipt_reprint", details={"sale_id": str(sale_id), "reprint_count": sale.reprint_count}))
+            if hasattr(self.repo.db, "commit"):
+                await self.repo.db.commit()
+
+        return {
+            **sale.__dict__,
+            "items": items,
+        }

@@ -6,8 +6,8 @@ type PermissionKey =
   | "sales"
   | "discounts"
   | "refunds"
-  | "inventory"
-  | "products"
+  | "manage_inventory"
+  | "manage_products"
   | "reports"
   | "employees"
   | "settings";
@@ -38,8 +38,8 @@ const permissionLabels: Record<PermissionKey, string> = {
   sales: "Make sales",
   discounts: "Apply discounts",
   refunds: "Process refunds",
-  inventory: "Manage inventory",
-  products: "Manage products",
+  manage_inventory: "Manage inventory",
+  manage_products: "Manage products",
   reports: "View reports",
   employees: "Manage employees",
   settings: "Change settings",
@@ -53,8 +53,8 @@ const rolePermissions: Record<
     sales: true,
     discounts: false,
     refunds: false,
-    inventory: false,
-    products: false,
+    manage_inventory: false,
+    manage_products: false,
     reports: false,
     employees: false,
     settings: false,
@@ -63,8 +63,8 @@ const rolePermissions: Record<
     sales: true,
     discounts: true,
     refunds: true,
-    inventory: true,
-    products: true,
+    manage_inventory: true,
+    manage_products: true,
     reports: true,
     employees: true,
     settings: false,
@@ -73,8 +73,8 @@ const rolePermissions: Record<
     sales: true,
     discounts: true,
     refunds: true,
-    inventory: true,
-    products: true,
+    manage_inventory: true,
+    manage_products: true,
     reports: true,
     employees: true,
     settings: true,

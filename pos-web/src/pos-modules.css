@@ -142,6 +142,179 @@
   text-align: center;
 }
 
+.pos-module-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 14px 16px;
+}
+
+.pos-module-form-grid label,
+.pos-module-branch-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pos-module-form-grid input,
+.pos-module-form-grid select,
+.pos-module-form-grid textarea,
+.pos-module-branch-picker select {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+}
+
+.pos-module-form-grid textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.pos-module-form-grid label small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pos-module-form-grid .full {
+  grid-column: 1 / -1;
+}
+
+.pos-module-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pos-module-form-actions button,
+.pos-inline-button {
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 750;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.pos-module-form-actions button.secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.pos-inline-button.secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.pos-module-management-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.pos-settings-menu {
+  display: grid;
+  gap: 12px;
+}
+
+.pos-settings-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid #dce3ed;
+  border-radius: 14px;
+  background: #f8fafc;
+  color: #0f172a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pos-settings-menu-item strong,
+.pos-settings-menu-item span {
+  display: block;
+}
+
+.pos-settings-menu-item span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.pos-settings-page-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.pos-settings-page-header h2 {
+  margin: 0;
+}
+
+.pos-printer-form-grid {
+  grid-template-columns: repeat(2, minmax(200px, 1fr));
+}
+
+.pos-printer-helper {
+  padding: 12px 14px;
+  border: 1px solid #dce3ed;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pos-printer-actions-inline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pos-printer-actions-inline button {
+  min-height: 42px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.pos-printer-actions-inline button.secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.pos-module-subcard {
+  padding: 18px;
+  border: 1px solid #e5eaf1;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.pos-module-subcard h3 {
+  margin: 0 0 8px;
+  color: #0f172a;
+}
+
+.pos-module-subcard p {
+  margin: 0 0 14px;
+}
+
 .pos-status {
   display: inline-flex;
   padding: 6px 9px;
@@ -258,8 +431,17 @@
   }
 
   .pos-report-grid,
-  .pos-settings-grid {
+  .pos-settings-grid,
+  .pos-module-management-grid,
+  .pos-module-form-grid,
+  .pos-printer-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pos-settings-menu-item,
+  .pos-settings-page-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .pos-settings-list div {

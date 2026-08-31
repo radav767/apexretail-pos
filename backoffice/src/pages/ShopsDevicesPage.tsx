@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+
 import { api } from "../api/client";
 import "./shops-devices.css";
 
@@ -9,10 +10,27 @@ type Device = {
   branch_id: string | null;
   shop_name: string | null;
   branch_name: string | null;
+  shop_address_line_1?: string | null;
+  shop_address_line_2?: string | null;
+  shop_city?: string | null;
+  shop_state_province?: string | null;
+  shop_country?: string | null;
+  shop_phone?: string | null;
+  shop_tax_vat_number?: string | null;
   name: string;
+  friendly_name: string | null;
+  pos_number: number | null;
   device_key: string;
   platform: string | null;
   app_version: string | null;
+  last_seen_at: string | null;
+  last_seen_platform: string | null;
+  last_seen_app_version: string | null;
+  status: string;
+  claimed_at: string | null;
+  deactivated_at: string | null;
+  deactivation_reason: string | null;
+  removed_at: string | null;
   active: boolean;
 };
 
@@ -23,20 +41,114 @@ type Branch = {
   name: string;
 };
 
+type DeviceFormState = Record<
+  string,
+  {
+    friendly_name: string;
+    pos_number: string;
+    branch_id: string;
+    deactivation_reason: string;
+  }
+>;
+
+type ActivationResult = {
+  device: Device;
+  activation_code: string;
+  activation_code_expires_at: string;
+};
+
+function requestErrorMessage(error: any, fallback: string) {
+  return (
+    error?.response?.data?.detail ||
+    error?.message ||
+    fallback
+  );
+}
+
+function timeAgo(value: string | null) {
+  if (!value) {
+    return "Never";
+  }
+
+  const diffMs = Date.now() - new Date(value).getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (diffMinutes < 1) {
+    return "Just now";
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  return `${Math.floor(diffHours / 24)}d ago`;
+}
+
+function computeDisplayStatus(device: Device) {
+  if (device.status === "removed" || device.removed_at) {
+    return {
+      label: "Removed",
+      className: "device-removed",
+    };
+  }
+
+  if (
+    device.status === "deactivated" ||
+    device.deactivated_at ||
+    !device.active
+  ) {
+    return {
+      label: "Deactivated",
+      className: "device-inactive",
+    };
+  }
+
+  if (!device.last_seen_at) {
+    return {
+      label: "Active",
+      className: "device-active",
+    };
+  }
+
+  const ageMs =
+    Date.now() - new Date(device.last_seen_at).getTime();
+  if (ageMs > 5 * 60 * 1000) {
+    return {
+      label: "Offline",
+      className: "device-offline",
+    };
+  }
+
+  return {
+    label: "Active",
+    className: "device-active",
+  };
+}
+
 export default function ShopsDevicesPage({
   companyId,
+  embedded = false,
 }: {
   companyId: string;
+  embedded?: boolean;
 }) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [assignments, setAssignments] =
-    useState<Record<string, string>>({});
-
-  const [loadingDeviceId, setLoadingDeviceId] =
-    useState("");
+  const [forms, setForms] = useState<DeviceFormState>({});
   const [loading, setLoading] = useState(false);
+  const [busyDeviceId, setBusyDeviceId] = useState("");
+  const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [activationResult, setActivationResult] =
+    useState<ActivationResult | null>(null);
+  const [createForm, setCreateForm] = useState({
+    friendly_name: "",
+    pos_number: "",
+    branch_id: "",
+  });
 
   const shops = useMemo(() => {
     const map = new Map<
@@ -50,153 +162,442 @@ export default function ShopsDevicesPage({
 
     branches.forEach((branch) => {
       const existing = map.get(branch.shop_id);
-
       if (existing) {
         existing.branches.push(branch);
-      } else {
-        map.set(branch.shop_id, {
-          id: branch.shop_id,
-          name: branch.shop_name,
-          branches: [branch],
-        });
+        return;
       }
+
+      map.set(branch.shop_id, {
+        id: branch.shop_id,
+        name: branch.shop_name,
+        branches: [branch],
+      });
     });
 
     return Array.from(map.values());
   }, [branches]);
 
   async function loadData() {
-    if (!companyId) return;
+    if (!companyId) {
+      return;
+    }
 
     try {
       setLoading(true);
-      setMessage("");
+      setError("");
 
       const [deviceResponse, branchResponse] =
         await Promise.all([
-          api.get(`/devices/${companyId}`),
-          api.get(`/inventory/branches/${companyId}`),
+          api.get<Device[]>(`/devices/${companyId}`),
+          api.get<Branch[]>(
+            `/inventory/branches/${companyId}`,
+          ),
         ]);
 
-      const loadedDevices: Device[] = deviceResponse.data;
-      const loadedBranches: Branch[] = branchResponse.data;
+      const loadedDevices = deviceResponse.data;
+      const loadedBranches = branchResponse.data;
 
       setDevices(loadedDevices);
       setBranches(loadedBranches);
+      setForms(
+        Object.fromEntries(
+          loadedDevices.map((device) => [
+            device.id,
+            {
+              friendly_name:
+                device.friendly_name ||
+                device.name ||
+                "",
+              pos_number:
+                device.pos_number != null
+                  ? String(device.pos_number)
+                  : "",
+              branch_id: device.branch_id || "",
+              deactivation_reason:
+                device.deactivation_reason || "",
+            },
+          ]),
+        ),
+      );
 
-      const selected: Record<string, string> = {};
-
-      loadedDevices.forEach((device) => {
-        selected[device.id] =
-          device.branch_id ||
-          loadedBranches[0]?.id ||
-          "";
-      });
-
-      setAssignments(selected);
-    } catch (error: any) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Failed to load shops and devices",
+      if (!createForm.branch_id && loadedBranches[0]?.id) {
+        setCreateForm((current) => ({
+          ...current,
+          branch_id: loadedBranches[0].id,
+        }));
+      }
+    } catch (requestError: any) {
+      setError(
+        requestErrorMessage(
+          requestError,
+          "Failed to load devices",
+        ),
       );
     } finally {
       setLoading(false);
     }
   }
 
-  async function saveAssignment(device: Device) {
-    const selectedBranchId = assignments[device.id];
+  useEffect(() => {
+    void loadData();
+  }, [companyId]);
 
+  function updateForm(
+    deviceId: string,
+    field: keyof DeviceFormState[string],
+    value: string,
+  ) {
+    setForms((current) => ({
+      ...current,
+      [deviceId]: {
+        ...current[deviceId],
+        [field]: value,
+      },
+    }));
+  }
+
+  async function saveDevice(device: Device) {
+    const form = forms[device.id];
     const branch = branches.find(
-      (item) => item.id === selectedBranchId,
+      (item) => item.id === form.branch_id,
     );
 
     if (!branch) {
-      setMessage("Select a valid branch");
+      setError("Select a branch.");
       return;
     }
 
     try {
-      setLoadingDeviceId(device.id);
+      setBusyDeviceId(device.id);
+      setError("");
       setMessage("");
 
       await api.patch(
-        `/devices/${companyId}/${device.id}/assignment`,
+        `/devices/${companyId}/${device.id}`,
         {
+          friendly_name: form.friendly_name.trim(),
+          pos_number:
+            form.pos_number.trim() === ""
+              ? null
+              : Number(form.pos_number),
           shop_id: branch.shop_id,
           branch_id: branch.id,
         },
       );
 
-      setMessage(
-        `${device.name} assigned to ${branch.name}`,
-      );
-
+      setMessage("POS details saved.");
       await loadData();
-    } catch (error: any) {
-      setMessage(
-        error.response?.data?.detail ||
-          "Failed to update device assignment",
+    } catch (requestError: any) {
+      setError(
+        requestErrorMessage(
+          requestError,
+          "Failed to save POS details",
+        ),
       );
     } finally {
-      setLoadingDeviceId("");
+      setBusyDeviceId("");
+    }
+  }
+
+  async function updateStatus(
+    device: Device,
+    status: "active" | "deactivated" | "removed",
+  ) {
+    const form = forms[device.id];
+    try {
+      setBusyDeviceId(device.id);
+      setError("");
+      setMessage("");
+
+      await api.patch(
+        `/devices/${companyId}/${device.id}`,
+        {
+          status,
+          deactivation_reason:
+            status === "deactivated"
+              ? form.deactivation_reason.trim() || null
+              : null,
+        },
+      );
+
+      setMessage(
+        status === "active"
+          ? "POS access restored."
+          : status === "deactivated"
+            ? "POS deactivated."
+            : "POS access removed.",
+      );
+      await loadData();
+    } catch (requestError: any) {
+      setError(
+        requestErrorMessage(
+          requestError,
+          "Failed to update POS access",
+        ),
+      );
+    } finally {
+      setBusyDeviceId("");
+    }
+  }
+
+  async function requestActivationCode(
+    payload: {
+      device_id?: string;
+      friendly_name: string;
+      pos_number: string;
+      branch_id: string;
+    },
+  ) {
+    const branch = branches.find(
+      (item) => item.id === payload.branch_id,
+    );
+
+    if (!branch) {
+      setError("Select a branch.");
+      return;
+    }
+
+    try {
+      if (payload.device_id) {
+        setBusyDeviceId(payload.device_id);
+      } else {
+        setCreating(true);
+      }
+      setError("");
+      setMessage("");
+      setActivationResult(null);
+
+      const response = await api.post<ActivationResult>(
+        "/devices/activate/request",
+        {
+          company_id: companyId,
+          device_id: payload.device_id,
+          friendly_name: payload.friendly_name.trim(),
+          pos_number:
+            payload.pos_number.trim() === ""
+              ? null
+              : Number(payload.pos_number),
+          shop_id: branch.shop_id,
+          branch_id: branch.id,
+        },
+      );
+
+      setActivationResult(response.data);
+      setMessage(
+        payload.device_id
+          ? "Activation code regenerated."
+          : "POS created. Share the code now because it will not be shown again.",
+      );
+      setCreateForm((current) => ({
+        ...current,
+        friendly_name: payload.device_id
+          ? current.friendly_name
+          : "",
+        pos_number: payload.device_id
+          ? current.pos_number
+          : "",
+      }));
+      await loadData();
+    } catch (requestError: any) {
+      setError(
+        requestErrorMessage(
+          requestError,
+          "Failed to generate activation code",
+        ),
+      );
+    } finally {
+      setBusyDeviceId("");
+      setCreating(false);
     }
   }
 
   function shortenDeviceKey(value: string) {
-    if (value.length <= 20) return value;
-
+    if (value.startsWith("pending-")) {
+      return "Pending claim";
+    }
+    if (value.length <= 20) {
+      return value;
+    }
     return `${value.slice(0, 10)}…${value.slice(-8)}`;
   }
 
-  useEffect(() => {
-    void loadData();
-  }, [companyId]);
-
   return (
-    <div className="shops-devices-page">
+    <div
+      className={`shops-devices-page${embedded ? " embedded" : ""}`}
+    >
       <section className="shops-devices-summary">
         <article>
-          <span>Shops</span>
-          <strong>{shops.length}</strong>
-          <small>Active business locations</small>
-        </article>
-
-        <article>
-          <span>Branches</span>
-          <strong>{branches.length}</strong>
-          <small>Inventory locations</small>
-        </article>
-
-        <article>
-          <span>Devices</span>
+          <span>POS Records</span>
           <strong>{devices.length}</strong>
-          <small>Registered POS installations</small>
+          <small>Provisioned device access records</small>
         </article>
 
         <article>
-          <span>Active Devices</span>
+          <span>Live</span>
           <strong>
-            {devices.filter((device) => device.active).length}
+            {
+              devices.filter(
+                (device) =>
+                  computeDisplayStatus(device).label ===
+                  "Active",
+              ).length
+            }
           </strong>
-          <small>Ready for sales</small>
+          <small>Seen within the recent heartbeat window</small>
         </article>
+
+        <article>
+          <span>Offline</span>
+          <strong>
+            {
+              devices.filter(
+                (device) =>
+                  computeDisplayStatus(device).label ===
+                  "Offline",
+              ).length
+            }
+          </strong>
+          <small>Assigned but not recently seen</small>
+        </article>
+
+        <article>
+          <span>Disabled</span>
+          <strong>
+            {
+              devices.filter((device) =>
+                ["Deactivated", "Removed"].includes(
+                  computeDisplayStatus(device).label,
+                ),
+              ).length
+            }
+          </strong>
+          <small>Cannot create new device activity</small>
+        </article>
+      </section>
+
+      {activationResult ? (
+        <section className="shops-devices-panel activation-code-panel">
+          <div>
+            <h3>Activation code</h3>
+            <p>
+              {activationResult.device.friendly_name ||
+                activationResult.device.name}
+              {" · "}
+              expires{" "}
+              {new Date(
+                activationResult.activation_code_expires_at,
+              ).toLocaleString()}
+            </p>
+          </div>
+
+          <div className="activation-code-value">
+            {activationResult.activation_code}
+          </div>
+        </section>
+      ) : null}
+
+      {error ? (
+        <p className="shops-devices-message error">{error}</p>
+      ) : null}
+      {message ? (
+        <p className="shops-devices-message success">
+          {message}
+        </p>
+      ) : null}
+
+      <section className="shops-devices-panel">
+        <div className="shops-devices-header">
+          <div>
+            <h2>Add POS</h2>
+            <p>
+              Create a POS record, assign the branch and
+              generate a one-time activation code.
+            </p>
+          </div>
+        </div>
+
+        <div className="device-editor-grid">
+          <label>
+            Friendly name
+            <input
+              value={createForm.friendly_name}
+              onChange={(event) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  friendly_name: event.target.value,
+                }))
+              }
+              placeholder="Front counter"
+            />
+          </label>
+
+          <label>
+            POS number
+            <input
+              value={createForm.pos_number}
+              onChange={(event) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  pos_number: event.target.value,
+                }))
+              }
+              inputMode="numeric"
+              placeholder="1"
+            />
+          </label>
+
+          <label className="device-editor-wide">
+            Branch assignment
+            <select
+              value={createForm.branch_id}
+              onChange={(event) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  branch_id: event.target.value,
+                }))
+              }
+            >
+              <option value="">Select branch</option>
+              {shops.map((shop) => (
+                <optgroup key={shop.id} label={shop.name}>
+                  {shop.branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="device-actions-row">
+          <button
+            className="device-primary-action"
+            disabled={creating}
+            onClick={() =>
+              void requestActivationCode(createForm)
+            }
+            type="button"
+          >
+            {creating ? "Creating..." : "Create POS"}
+          </button>
+        </div>
       </section>
 
       <section className="shops-devices-panel">
         <div className="shops-devices-header">
           <div>
-            <h2>Registered POS Devices</h2>
+            <h2>Devices / POS</h2>
             <p>
-              Assign each POS installation to the branch whose
-              stock it should use.
+              Rename, reassign, regenerate codes, deactivate,
+              reactivate or remove access.
             </p>
           </div>
 
           <button
+            onClick={() => void loadData()}
             type="button"
-            onClick={loadData}
-            disabled={loading}
           >
             {loading ? "Loading..." : "Refresh"}
           </button>
@@ -204,161 +605,257 @@ export default function ShopsDevicesPage({
 
         {!devices.length ? (
           <div className="shops-devices-empty">
-            No POS devices have registered yet. Open and log in
-            to the POS to register a device.
+            No POS records exist yet.
           </div>
         ) : (
-          <div className="shops-devices-table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>Device</th>
-                  <th>Platform</th>
-                  <th>Device Key</th>
-                  <th>Current Location</th>
-                  <th>Assign Branch</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
+          <div className="device-card-list">
+            {devices.map((device) => {
+              const form = forms[device.id];
+              const branch = branches.find(
+                (item) => item.id === form?.branch_id,
+              );
+              const displayStatus =
+                computeDisplayStatus(device);
 
-              <tbody>
-                {devices.map((device) => (
-                  <tr key={device.id}>
-                    <td>
-                      <strong>{device.name}</strong>
-                      <small>
-                        Version {device.app_version || "—"}
-                      </small>
-                    </td>
-
-                    <td>
-                      {(device.platform || "Unknown")
-                        .toUpperCase()}
-                    </td>
-
-                    <td>
-                      <code title={device.device_key}>
-                        {shortenDeviceKey(device.device_key)}
-                      </code>
-                    </td>
-
-                    <td>
-                      <strong>
-                        {device.branch_name || "Unassigned"}
-                      </strong>
-                      <small>
+              return (
+                <article
+                  className="device-card"
+                  key={device.id}
+                >
+                  <div className="device-card-top">
+                    <div>
+                      <h3>
+                        {device.friendly_name ||
+                          device.name}
+                      </h3>
+                      <p>
                         {device.shop_name || "No shop"}
-                      </small>
-                    </td>
+                        {" · "}
+                        {device.branch_name || "No branch"}
+                      </p>
+                    </div>
 
-                    <td>
-                      <select
-                        value={assignments[device.id] || ""}
+                    <span
+                      className={displayStatus.className}
+                    >
+                      {displayStatus.label}
+                    </span>
+                  </div>
+
+                  <div className="device-meta-grid">
+                    <div>
+                      <span>POS number</span>
+                      <strong>
+                        {device.pos_number ?? "Not set"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Last seen</span>
+                      <strong>
+                        {timeAgo(device.last_seen_at)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Platform</span>
+                      <strong>
+                        {device.last_seen_platform ||
+                          device.platform ||
+                          "Unknown"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>App version</span>
+                      <strong>
+                        {device.last_seen_app_version ||
+                          device.app_version ||
+                          "Unknown"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="device-key-line">
+                    <span>Device key</span>
+                    <code title={device.device_key}>
+                      {shortenDeviceKey(device.device_key)}
+                    </code>
+                  </div>
+
+                  <div className="device-editor-grid">
+                    <label>
+                      Friendly name
+                      <input
+                        value={form?.friendly_name || ""}
                         onChange={(event) =>
-                          setAssignments((current) => ({
-                            ...current,
-                            [device.id]: event.target.value,
-                          }))
+                          updateForm(
+                            device.id,
+                            "friendly_name",
+                            event.target.value,
+                          )
+                        }
+                      />
+                    </label>
+
+                    <label>
+                      POS number
+                      <input
+                        value={form?.pos_number || ""}
+                        onChange={(event) =>
+                          updateForm(
+                            device.id,
+                            "pos_number",
+                            event.target.value,
+                          )
+                        }
+                        inputMode="numeric"
+                      />
+                    </label>
+
+                    <label className="device-editor-wide">
+                      Branch
+                      <select
+                        value={form?.branch_id || ""}
+                        onChange={(event) =>
+                          updateForm(
+                            device.id,
+                            "branch_id",
+                            event.target.value,
+                          )
                         }
                       >
                         <option value="">
                           Select branch
                         </option>
-
                         {shops.map((shop) => (
                           <optgroup
                             key={shop.id}
                             label={shop.name}
                           >
-                            {shop.branches.map((branch) => (
+                            {shop.branches.map((item) => (
                               <option
-                                key={branch.id}
-                                value={branch.id}
+                                key={item.id}
+                                value={item.id}
                               >
-                                {branch.name}
+                                {item.name}
                               </option>
                             ))}
                           </optgroup>
                         ))}
                       </select>
-                    </td>
+                    </label>
 
-                    <td>
-                      <span
-                        className={
-                          device.active
-                            ? "device-active"
-                            : "device-inactive"
+                    <label className="device-editor-wide">
+                      Deactivation reason
+                      <input
+                        value={
+                          form?.deactivation_reason || ""
                         }
-                      >
-                        {device.active
-                          ? "Active"
-                          : "Inactive"}
+                        onChange={(event) =>
+                          updateForm(
+                            device.id,
+                            "deactivation_reason",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="Optional reason shown in the audit trail"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="device-card-footer">
+                    <div className="device-location-copy">
+                      <span>
+                        Assigned to{" "}
+                        {branch?.name ||
+                          device.branch_name ||
+                          "No branch"}
                       </span>
-                    </td>
+                      <small>
+                        {device.last_seen_at
+                          ? new Date(
+                              device.last_seen_at,
+                            ).toLocaleString()
+                          : "No heartbeat received yet"}
+                      </small>
+                    </div>
 
-                    <td>
+                    <div className="device-actions-row">
                       <button
+                        className="device-primary-action"
+                        disabled={busyDeviceId === device.id}
+                        onClick={() => void saveDevice(device)}
                         type="button"
-                        className="device-save-button"
-                        onClick={() =>
-                          saveAssignment(device)
-                        }
-                        disabled={
-                          loadingDeviceId === device.id ||
-                          !assignments[device.id]
-                        }
                       >
-                        {loadingDeviceId === device.id
+                        {busyDeviceId === device.id
                           ? "Saving..."
                           : "Save"}
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      <button
+                        disabled={busyDeviceId === device.id}
+                        onClick={() =>
+                          void requestActivationCode({
+                            device_id: device.id,
+                            friendly_name:
+                              form?.friendly_name ||
+                              device.friendly_name ||
+                              device.name,
+                            pos_number:
+                              form?.pos_number || "",
+                            branch_id:
+                              form?.branch_id ||
+                              device.branch_id ||
+                              "",
+                          })
+                        }
+                        type="button"
+                      >
+                        Regenerate code
+                      </button>
+                      {displayStatus.label === "Deactivated" ||
+                      displayStatus.label === "Removed" ? (
+                        <button
+                          onClick={() =>
+                            void updateStatus(
+                              device,
+                              "active",
+                            )
+                          }
+                          type="button"
+                        >
+                          Reactivate
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() =>
+                            void updateStatus(
+                              device,
+                              "deactivated",
+                            )
+                          }
+                          type="button"
+                        >
+                          Archive terminal
+                        </button>
+                      )}
+                      <button
+                        className="device-danger-action"
+                        onClick={() =>
+                          void updateStatus(
+                            device,
+                            "removed",
+                          )
+                        }
+                        type="button"
+                      >
+                        Remove access
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
-
-      <section className="shops-list-panel">
-        <div className="shops-devices-header">
-          <div>
-            <h2>Shops and Branches</h2>
-            <p>
-              Inventory locations currently available to POS
-              devices.
-            </p>
-          </div>
-        </div>
-
-        <div className="shop-location-grid">
-          {shops.map((shop) => (
-            <article key={shop.id}>
-              <h3>{shop.name}</h3>
-
-              {shop.branches.map((branch) => (
-                <div key={branch.id}>
-                  <span>{branch.name}</span>
-                  <small>
-                    {
-                      devices.filter(
-                        (device) =>
-                          device.branch_id === branch.id,
-                      ).length
-                    }{" "}
-                    device(s)
-                  </small>
-                </div>
-              ))}
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <p className="shops-devices-message">{message}</p>
     </div>
   );
 }

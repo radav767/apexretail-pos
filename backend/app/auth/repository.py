@@ -14,6 +14,12 @@ class AuthRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_device_by_key(self, device_key: str):
+        result = await self.db.execute(
+            select(Device).where(Device.device_key == device_key)
+        )
+        return result.scalar_one_or_none()
+
     async def create_registration_bundle(self, company, shop, branch, user, employee, device):
         self.db.add(company)
         await self.db.flush()

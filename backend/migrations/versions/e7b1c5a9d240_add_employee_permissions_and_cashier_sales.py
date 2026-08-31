@@ -4,7 +4,7 @@ Revision ID: e7b1c5a9d240
 Revises: d42f8a9c1b70
 """
 
-from alembic import op
+from alembic import op, context
 import bcrypt
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
@@ -93,14 +93,14 @@ def upgrade():
 
     bind = op.get_bind()
 
-    employees = bind.execute(
+    employees = [] if context.is_offline_mode() else bind.execute(
         sa.text(
             """
             SELECT id, pin
             FROM employees
             """
         )
-    ).mappings().all()
+    ).mappings().all() if not context.is_offline_mode() else []
 
     for employee in employees:
         existing_pin = employee["pin"] or ""

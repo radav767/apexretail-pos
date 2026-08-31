@@ -1,4 +1,12 @@
+from dataclasses import dataclass
+from functools import lru_cache
+from os import environ
+
+from pydantic import ValidationError
 from pydantic_settings import BaseSettings
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
 
 class Settings(BaseSettings):
     app_name: str = "ApexRetail POS"
@@ -7,9 +15,131 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 1440
+    subscription_offline_grace_hours: int = 72
+    subscription_provider_name: str | None = None
+    subscription_provider_checkout_base_url: str | None = None
+    subscription_provider_webhook_secret: str | None = None
+    subscription_webhook_signature_header: str = "x-apex-signature"
+    paynow_integration_id: str | None = None
+    paynow_integration_key: str | None = None
+    paynow_return_url: str | None = None
+    paynow_result_url: str | None = None
+    entitlement_signing_algorithm: str = "RS256"
+    entitlement_private_key: str | None = None
+    entitlement_public_key: str | None = None
 
     class Config:
         env_file = ".env"
 
-def get_settings():
+
+@dataclass(frozen=True)
+class DatabaseURLs:
+    raw: str
+    async_url: str
+    alembic_url: str
+    database_name: str | None
+
+    @property
+    def redacted_async_url(self) -> str:
+        return _redact_database_url(self.async_url)
+
+    @property
+    def redacted_alembic_url(self) -> str:
+        return _redact_database_url(self.alembic_url)
+
+
+def _redact_database_url(database_url: str) -> str:
+    return make_url(database_url).render_as_string(hide_password=True)
+
+
+def _normalize_async_driver(drivername: str) -> str:
+    if drivername in {"postgresql+asyncpg", "postgres+asyncpg"}:
+        return drivername
+    if drivername in {
+        "postgresql",
+        "postgres",
+        "postgresql+psycopg2",
+        "postgres+psycopg2",
+    }:
+        return "postgresql+asyncpg"
+    raise RuntimeError(
+        "DATABASE_URL must use a supported PostgreSQL dialect. "
+        f"Received driver '{drivername}'."
+    )
+
+
+def _normalize_alembic_driver(drivername: str) -> str:
+    if drivername in {
+        "postgresql",
+        "postgres",
+        "postgresql+psycopg2",
+        "postgres+psycopg2",
+    }:
+        return "postgresql+psycopg2"
+    if drivername in {"postgresql+asyncpg", "postgres+asyncpg"}:
+        return "postgresql+psycopg2"
+    raise RuntimeError(
+        "DATABASE_URL must use a supported PostgreSQL dialect. "
+        f"Received driver '{drivername}'."
+    )
+
+
+def _load_raw_database_url(
+    *,
+    explicit_url: str | None = None,
+    env: dict[str, str] | None = None,
+) -> str:
+    if explicit_url:
+        return explicit_url
+
+    if env is not None:
+        return env.get("DATABASE_URL", "")
+
+    env_database_url = environ.get("DATABASE_URL")
+    if env_database_url:
+        return env_database_url
+
+    try:
+        return Settings().database_url
+    except ValidationError as exc:
+        raise RuntimeError(
+            "DATABASE_URL is required. Set it explicitly or provide it in backend/.env."
+        ) from exc
+
+
+def resolve_database_urls(
+    *,
+    explicit_url: str | None = None,
+    env: dict[str, str] | None = None,
+) -> DatabaseURLs:
+    raw_url = _load_raw_database_url(explicit_url=explicit_url, env=env).strip()
+    if not raw_url:
+        raise RuntimeError(
+            "DATABASE_URL is empty. Set it explicitly or provide it in backend/.env."
+        )
+
+    try:
+        parsed = make_url(raw_url)
+    except ArgumentError as exc:
+        raise RuntimeError(
+            f"Malformed DATABASE_URL: {raw_url!r}. Expected a valid SQLAlchemy URL."
+        ) from exc
+
+    async_url = parsed.set(
+        drivername=_normalize_async_driver(parsed.drivername)
+    ).render_as_string(hide_password=False)
+    alembic_url = parsed.set(
+        drivername=_normalize_alembic_driver(parsed.drivername)
+    ).render_as_string(hide_password=False)
+
+    return DatabaseURLs(
+        raw=raw_url,
+        async_url=async_url,
+        alembic_url=alembic_url,
+        database_name=parsed.database,
+    )
+
+
+@lru_cache
+def get_settings() -> Settings:
     return Settings()

@@ -1,0 +1,375 @@
+import type {
+  PrinterConfig,
+  ReceiptLineItem,
+  ReceiptSnapshot,
+} from "./types";
+
+function money(value: string | number | undefined) {
+  return Number(value || 0).toFixed(2);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    };
+
+    return entities[character];
+  });
+}
+
+function alignLine(left: string, right: string, width: number) {
+  const normalizedLeft = left.trimEnd();
+  const normalizedRight = right.trimStart();
+  const available = Math.max(1, width - normalizedRight.length);
+
+  if (normalizedLeft.length >= available) {
+    return `${normalizedLeft.slice(0, available)}${normalizedRight}`;
+  }
+
+  return `${normalizedLeft}${" ".repeat(available - normalizedLeft.length)}${normalizedRight}`;
+}
+
+function buildItemLines(item: ReceiptLineItem, width: number) {
+  const total = money(item.line_total);
+  const quantity = Number(item.quantity || 0)
+    .toFixed(3)
+    .replace(/\.?0+$/, "");
+  const unitSuffix = item.selling_unit
+    ? ` ${item.selling_unit}`
+    : "";
+  const priceSuffix = item.selling_unit
+    ? `/${item.selling_unit}`
+    : "";
+  const qtyAndPrice = `${quantity}${unitSuffix} x ${money(item.unit_price)}${priceSuffix}`;
+
+  return [
+    item.name.slice(0, width),
+    alignLine(qtyAndPrice, total, width),
+  ];
+}
+
+function buildEscPosLines(snapshot: ReceiptSnapshot, config: PrinterConfig) {
+  const width = config.paperWidth === "58mm" ? 32 : 48;
+  const createdAt = new Date(snapshot.created_at).toLocaleString();
+  const lines: string[] = [];
+  const addressLines = [
+    snapshot.shop_address?.address_line_1,
+    snapshot.shop_address?.address_line_2,
+    [
+      snapshot.shop_address?.city,
+      snapshot.shop_address?.state_province,
+    ]
+      .filter(Boolean)
+      .join(", "),
+    snapshot.shop_address?.country,
+    snapshot.shop_address?.phone
+      ? `Phone: ${snapshot.shop_address.phone}`
+      : null,
+  ].filter(Boolean) as string[];
+
+  lines.push(snapshot.business_name || "ApexRetail POS");
+
+  if (snapshot.shop_name) {
+    lines.push(`Shop: ${snapshot.shop_name}`);
+  }
+
+  for (const line of addressLines) {
+    lines.push(line);
+  }
+
+  if (snapshot.branch_name) {
+    lines.push(`Branch: ${snapshot.branch_name}`);
+  }
+
+  if (snapshot.pos_name || snapshot.pos_number) {
+    lines.push(
+      `POS: ${[snapshot.pos_number, snapshot.pos_name]
+        .filter(Boolean)
+        .join(" ")}`,
+    );
+  }
+
+  if (snapshot.receipt_header) {
+    lines.push(snapshot.receipt_header);
+  }
+
+  lines.push(`Receipt: ${snapshot.receipt_number}`);
+  lines.push(`Date: ${createdAt}`);
+  if (snapshot.is_duplicate) {
+    lines.push("*** DUPLICATE ***");
+    lines.push(`Original receipt: ${snapshot.original_receipt_number || snapshot.receipt_number}`);
+    lines.push(`Original sale time: ${new Date(snapshot.original_sale_time || snapshot.created_at).toLocaleString()}`);
+    lines.push(`Reprint date/time: ${new Date(snapshot.reprint_at || Date.now()).toLocaleString()}`);
+    lines.push(`Reprint count: ${snapshot.reprint_count || 1}`);
+  }
+
+  if (snapshot.cashier_name) {
+    lines.push(`Cashier: ${snapshot.cashier_name}`);
+  }
+
+  lines.push("-".repeat(width));
+
+  for (const item of snapshot.items) {
+    lines.push(...buildItemLines(item, width));
+  }
+
+  lines.push("-".repeat(width));
+
+  if (snapshot.subtotal_amount) {
+    lines.push(alignLine("Subtotal", money(snapshot.subtotal_amount), width));
+  }
+
+  if (snapshot.discount_amount && Number(snapshot.discount_amount) > 0) {
+    lines.push(alignLine("Discount", money(snapshot.discount_amount), width));
+  }
+
+  if (snapshot.tax_amount && Number(snapshot.tax_amount) > 0) {
+    const taxLabel =
+      snapshot.tax_name?.trim() || "Tax";
+    lines.push(alignLine(taxLabel, money(snapshot.tax_amount), width));
+  }
+
+  lines.push(alignLine("TOTAL", money(snapshot.total_amount), width));
+  lines.push(alignLine("Payment", snapshot.payment_method.toUpperCase(), width));
+  lines.push(alignLine("Paid", money(snapshot.amount_received), width));
+  lines.push(alignLine("Change", money(snapshot.change_due), width));
+
+  if (snapshot.receipt_footer) {
+    lines.push("-".repeat(width));
+    lines.push(snapshot.receipt_footer);
+  }
+
+  return lines;
+}
+
+export function buildEscPosPayload(snapshot: ReceiptSnapshot, config: PrinterConfig) {
+  const encoder = new TextEncoder();
+  const commands: number[] = [
+    0x1b,
+    0x40,
+    0x1b,
+    0x61,
+    0x01,
+  ];
+
+  const lines = buildEscPosLines(snapshot, config);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const centered = index <= 4 || line === (snapshot.receipt_footer || "");
+
+    if (centered) {
+      commands.push(0x1b, 0x61, 0x01);
+    } else {
+      commands.push(0x1b, 0x61, 0x00);
+    }
+
+    commands.push(...encoder.encode(line), 0x0a);
+  }
+
+  commands.push(0x1b, 0x61, 0x00, 0x0a, 0x0a, 0x0a);
+
+  if (config.cutPaper) {
+    commands.push(0x1d, 0x56, 0x42, 0x00);
+  }
+
+  return Uint8Array.from(commands);
+}
+
+export function encodeBase64(bytes: Uint8Array) {
+  let binary = "";
+
+  for (const value of bytes) {
+    binary += String.fromCharCode(value);
+  }
+
+  return btoa(binary);
+}
+
+export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfig) {
+  const paperWidth = config.paperWidth === "58mm" ? 224 : 302;
+  const createdAt = new Date(snapshot.created_at).toLocaleString();
+
+  const itemRows = snapshot.items
+    .map(
+      (item) => `
+        <tr>
+          <td>${escapeHtml(item.name)}</td>
+          <td style="text-align:center">${Number(item.quantity).toFixed(3).replace(/\.?0+$/, "")}${item.selling_unit ? ` ${escapeHtml(item.selling_unit)}` : ""}</td>
+          <td style="text-align:right">${money(item.unit_price)}${item.selling_unit ? `/${escapeHtml(item.selling_unit)}` : ""}</td>
+          <td style="text-align:right">${money(item.line_total)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+
+  const taxRow =
+    snapshot.tax_amount && Number(snapshot.tax_amount) > 0
+      ? `
+        <div class="summary-row">
+          <span>${escapeHtml(snapshot.tax_name?.trim() || "Tax")}</span>
+          <span>${money(snapshot.tax_amount)}</span>
+        </div>
+      `
+      : "";
+
+  const discountRow =
+    snapshot.discount_amount && Number(snapshot.discount_amount) > 0
+      ? `
+        <div class="summary-row">
+          <span>Discount</span>
+          <span>${money(snapshot.discount_amount)}</span>
+        </div>
+      `
+      : "";
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(snapshot.receipt_number)}</title>
+        <style>
+          body {
+            margin: 0;
+            padding: 16px;
+            font-family: "Courier New", monospace;
+            color: #111;
+          }
+          .receipt {
+            width: ${paperWidth}px;
+            margin: 0 auto;
+          }
+          h1, h2, p {
+            margin: 0;
+            text-align: center;
+          }
+          h1 {
+            font-size: 18px;
+            margin-bottom: 4px;
+          }
+          p.meta {
+            margin-top: 3px;
+            font-size: 12px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+            font-size: 12px;
+          }
+          th, td {
+            border-bottom: 1px dashed #999;
+            padding: 6px 0;
+          }
+          .summary {
+            margin-top: 12px;
+            font-size: 13px;
+          }
+          .summary-row,
+          .summary-total {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 4px 0;
+          }
+          .summary-total {
+            font-weight: 700;
+            font-size: 16px;
+          }
+          .footer {
+            margin-top: 16px;
+            text-align: center;
+            font-size: 12px;
+          }
+          @media print {
+            body {
+              padding: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <h1>${escapeHtml(snapshot.business_name || "ApexRetail POS")}</h1>
+          ${snapshot.shop_name ? `<p class="meta">Shop: ${escapeHtml(snapshot.shop_name)}</p>` : ""}
+          ${snapshot.shop_address?.address_line_1 ? `<p class="meta">${escapeHtml(snapshot.shop_address.address_line_1)}</p>` : ""}
+          ${snapshot.shop_address?.address_line_2 ? `<p class="meta">${escapeHtml(snapshot.shop_address.address_line_2)}</p>` : ""}
+          ${
+            snapshot.shop_address?.city ||
+            snapshot.shop_address?.state_province
+              ? `<p class="meta">${escapeHtml(
+                  [snapshot.shop_address?.city, snapshot.shop_address?.state_province]
+                    .filter(Boolean)
+                    .join(", "),
+                )}</p>`
+              : ""
+          }
+          ${snapshot.shop_address?.country ? `<p class="meta">${escapeHtml(snapshot.shop_address.country)}</p>` : ""}
+          ${snapshot.branch_name ? `<p class="meta">Branch: ${escapeHtml(snapshot.branch_name)}</p>` : ""}
+          ${
+            snapshot.pos_name || snapshot.pos_number
+              ? `<p class="meta">POS: ${escapeHtml(
+                  [snapshot.pos_number, snapshot.pos_name]
+                    .filter(Boolean)
+                    .join(" "),
+                )}</p>`
+              : ""
+          }
+          ${snapshot.receipt_header ? `<p class="meta">${escapeHtml(snapshot.receipt_header)}</p>` : ""}
+          <p class="meta">Receipt: ${escapeHtml(snapshot.receipt_number)}</p>
+          <p class="meta">${escapeHtml(createdAt)}</p>
+          ${snapshot.is_duplicate ? `<h2 style="font-size:24px;margin:10px 0">DUPLICATE</h2><p class="meta">Original receipt: ${escapeHtml(snapshot.original_receipt_number || snapshot.receipt_number)}</p><p class="meta">Original sale time: ${escapeHtml(new Date(snapshot.original_sale_time || snapshot.created_at).toLocaleString())}</p><p class="meta">Reprint date/time: ${escapeHtml(new Date(snapshot.reprint_at || Date.now()).toLocaleString())}</p><p class="meta">Reprint count: ${snapshot.reprint_count || 1}</p>` : ""}
+          ${snapshot.cashier_name ? `<p class="meta">Cashier: ${escapeHtml(snapshot.cashier_name)}</p>` : ""}
+          <table>
+            <thead>
+              <tr>
+                <th style="text-align:left">Item</th>
+                <th>Qty</th>
+                <th style="text-align:right">Unit</th>
+                <th style="text-align:right">Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+          <div class="summary">
+            ${
+              snapshot.subtotal_amount
+                ? `
+                  <div class="summary-row">
+                    <span>Subtotal</span>
+                    <span>${money(snapshot.subtotal_amount)}</span>
+                  </div>
+                `
+                : ""
+            }
+            ${discountRow}
+            ${taxRow}
+            <div class="summary-total">
+              <span>Total</span>
+              <span>${money(snapshot.total_amount)}</span>
+            </div>
+            <div class="summary-row">
+              <span>Payment</span>
+              <span>${escapeHtml(snapshot.payment_method.toUpperCase())}</span>
+            </div>
+            <div class="summary-row">
+              <span>Paid</span>
+              <span>${money(snapshot.amount_received)}</span>
+            </div>
+            <div class="summary-row">
+              <span>Change</span>
+              <span>${money(snapshot.change_due)}</span>
+            </div>
+          </div>
+          ${snapshot.receipt_footer ? `<p class="footer">${escapeHtml(snapshot.receipt_footer)}</p>` : ""}
+        </div>
+      </body>
+    </html>
+  `;
+}

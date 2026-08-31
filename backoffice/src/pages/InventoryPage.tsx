@@ -90,6 +90,7 @@ export default function InventoryPage({
   const [grn, setGrn] = useState({
     product_id: "",
     quantity: "",
+    reason: "",
     unit_cost: "",
     reference: "",
     supplier: "",
@@ -188,6 +189,11 @@ export default function InventoryPage({
       return;
     }
 
+    if (!grn.reason.trim()) {
+      setMessage("A receiving reason is required");
+      return;
+    }
+
     try {
       setLoading(true);
       setMessage("");
@@ -197,6 +203,7 @@ export default function InventoryPage({
         branch_id: selectedBranchId || null,
         product_id: grn.product_id,
         quantity: grn.quantity,
+        reason: grn.reason.trim(),
         unit_cost: grn.unit_cost || null,
         reference: grn.reference.trim() || null,
         supplier: grn.supplier.trim() || null,
@@ -206,6 +213,7 @@ export default function InventoryPage({
       setGrn((current) => ({
         ...current,
         quantity: "",
+        reason: "",
         reference: "",
         supplier: "",
         notes: "",
@@ -448,6 +456,20 @@ export default function InventoryPage({
                   setGrn({
                     ...grn,
                     quantity: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            <label>
+              Reason
+              <input
+                value={grn.reason}
+                placeholder="Example: Supplier delivery"
+                onChange={(event) =>
+                  setGrn({
+                    ...grn,
+                    reason: event.target.value,
                   })
                 }
               />

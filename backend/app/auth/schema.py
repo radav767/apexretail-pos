@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class RegisterRequest(BaseModel):
@@ -17,6 +17,35 @@ class RegisterRequest(BaseModel):
     # This connects the device created during registration
     # to the same browser that registered the business.
     device_key: str | None = Field(default=None, max_length=255)
+
+    @field_validator(
+        "owner_name",
+        "business_name",
+        "business_type",
+        "country",
+        "phone",
+        mode="before",
+    )
+    @classmethod
+    def strip_required_strings(cls, value: str):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: str):
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+    @field_validator("device_key", mode="before")
+    @classmethod
+    def normalize_device_key(cls, value: str | None):
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
 
 
 class LoginRequest(BaseModel):

@@ -12,6 +12,9 @@ from app.inventory.schema import (
 from app.models.inventory_movement import InventoryMovement
 
 
+LEGACY_GRN_REASON = "Stock received - legacy client"
+
+
 class InventoryService:
     def __init__(self, repo: InventoryRepository):
         self.repo = repo
@@ -56,6 +59,7 @@ class InventoryService:
             unit_cost=Decimal(product.cost_price or 0),
             reference=self._clean(data.reference),
             supplier=self._clean(data.supplier),
+            reason=self._clean_reason(data.reason),
             notes=self._clean(data.notes),
         )
 
@@ -268,3 +272,11 @@ class InventoryService:
 
         cleaned = value.strip()
         return cleaned or None
+
+    @classmethod
+    def _clean_reason(
+        cls,
+        value: str | None,
+    ) -> str:
+        cleaned = cls._clean(value)
+        return cleaned or LEGACY_GRN_REASON

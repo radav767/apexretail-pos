@@ -3,6 +3,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import (
+    AuthActor,
+    require_billable_body_company,
+    require_body_permission,
+)
 from app.db.session import get_db
 from app.inventory.repository import InventoryRepository
 from app.inventory.schema import (
@@ -69,6 +74,12 @@ async def inventory_history(
 async def receive_stock(
     data: GRNCreate,
     service: InventoryService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_body_permission("manage_inventory")
+    ),
+    _entitlement: None = Depends(
+        require_billable_body_company
+    ),
 ):
     return await service.receive_stock(data)
 
@@ -80,6 +91,12 @@ async def receive_stock(
 async def adjust_stock(
     data: StockAdjustmentCreate,
     service: InventoryService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_body_permission("manage_inventory")
+    ),
+    _entitlement: None = Depends(
+        require_billable_body_company
+    ),
 ):
     return await service.adjust_stock(data)
 
@@ -91,5 +108,11 @@ async def adjust_stock(
 async def stock_take(
     data: StockTakeCreate,
     service: InventoryService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_body_permission("manage_inventory")
+    ),
+    _entitlement: None = Depends(
+        require_billable_body_company
+    ),
 ):
     return await service.stock_take(data)

@@ -1,5 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
-import { api } from "./api/client";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import { api, getApiErrorMessage } from "./api/client";
+import { isDeviceOnline } from "./offline/offlineAuth";
+import type {
+  BluetoothStatus,
+  PrinterConfig,
+  PrinterConnectionType,
+  PrinterDevice,
+} from "./printing/types";
 import "./pos-modules.css";
 
 export type PosModuleName =
@@ -9,6 +17,14 @@ export type PosModuleName =
   | "Inventory"
   | "Reports"
   | "Settings";
+
+type CashierSession = {
+  id: string;
+  name: string;
+  role: string;
+  branch_id: string;
+  permissions?: Record<string, boolean>;
+};
 
 type Sale = {
   id: string;
@@ -20,16 +36,57 @@ type Sale = {
   created_at?: string;
 };
 
+type Category = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
 type Product = {
   id: string;
   name: string;
+  category_id?: string | null;
   sku?: string | null;
   barcode?: string | null;
+  unit?: string;
   selling_price?: string | number;
   cost_price?: string | number;
   stock_qty?: string | number;
   reorder_level?: string | number;
   active?: boolean;
+};
+
+type Branch = {
+  id: string;
+  shop_id: string;
+  shop_name: string;
+  name: string;
+};
+
+type BranchInventoryRow = {
+  branch_id: string;
+  product_id: string;
+  product_name: string;
+  sku?: string | null;
+  unit?: string;
+  quantity: string | number;
+  reorder_level: string | number;
+  cost_price: string | number;
+  stock_value: string | number;
+  low_stock: boolean;
+};
+
+type Movement = {
+  id: string;
+  product_name: string;
+  movement_type: string;
+  quantity: string | number;
+  before_qty: string | number;
+  after_qty: string | number;
+  reason?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  created_at: string;
 };
 
 type DashboardSummary = {
@@ -66,9 +123,105 @@ type Props = {
   activeModule: PosModuleName;
   companyId: string;
   branchId: string;
+  cashier: CashierSession | null;
   currencySymbol: string;
   decimalPlaces: number;
+  printerConfig: PrinterConfig;
+  printerConfigLoaded: boolean;
+  bluetoothStatus: BluetoothStatus;
+  bluetoothPrinters: PrinterDevice[];
+  usbPrinters: PrinterDevice[];
+  isDiscoveringDevices: boolean;
+  isSavingPrinter: boolean;
+  isTestingPrinter: boolean;
+  printerNotice: string;
+  printerDiscoveryError: string;
+  printerSaveError: string;
+  printerTestError: string;
+  bluetoothPermissionDenied: boolean;
+  printerRefreshSignal: number;
+  onSavePrinterConfig: (config: PrinterConfig) => Promise<void>;
+  onRefreshPrinterDevices: (connectionType?: PrinterConnectionType) => Promise<void>;
+  onOpenBluetoothSettings: () => Promise<void>;
+  onOpenAppSettings: () => Promise<void>;
+  onOpenPrintSettings: () => Promise<void>;
+  onTestPrint: (config: PrinterConfig) => Promise<void>;
+  onReprintSale: (saleId: string, receiptNumber?: string) => Promise<void>;
+  onProductsChanged?: () => void;
   onBackToSales: () => void;
+};
+
+type ProductForm = {
+  branch_id: string;
+  create_request_key: string;
+  category_id: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  unit: string;
+  cost_price: string;
+  selling_price: string;
+  stock_qty: string;
+  reorder_level: string;
+};
+
+type InventoryReceiveForm = {
+  product_id: string;
+  quantity: string;
+  reason: string;
+  unit_cost: string;
+  reference: string;
+  supplier: string;
+  notes: string;
+};
+
+type InventoryAdjustmentForm = {
+  product_id: string;
+  adjustment_type: "add" | "remove" | "set";
+  quantity: string;
+  reason: string;
+  reference: string;
+  notes: string;
+};
+
+type SettingsPageKey =
+  | "home"
+  | "printer"
+  | "business"
+  | "tax"
+  | "receipt";
+
+const emptyProductForm: ProductForm = {
+  branch_id: "",
+  create_request_key: "",
+  category_id: "",
+  name: "",
+  sku: "",
+  barcode: "",
+  unit: "each",
+  cost_price: "0.00",
+  selling_price: "0.00",
+  stock_qty: "0",
+  reorder_level: "0",
+};
+
+const emptyReceiveForm: InventoryReceiveForm = {
+  product_id: "",
+  quantity: "",
+  reason: "",
+  unit_cost: "",
+  reference: "",
+  supplier: "",
+  notes: "",
+};
+
+const emptyAdjustmentForm: InventoryAdjustmentForm = {
+  product_id: "",
+  adjustment_type: "add",
+  quantity: "",
+  reason: "",
+  reference: "",
+  notes: "",
 };
 
 function extractRows<T>(value: unknown): T[] {
@@ -106,7 +259,6 @@ function harareDateValue(date: Date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-
 function localDateValue(date: Date = new Date()) {
   const timezoneOffset = date.getTimezoneOffset() * 60_000;
 
@@ -119,23 +271,275 @@ export default function PosModulePage({
   activeModule,
   companyId,
   branchId,
+  cashier,
   currencySymbol,
   decimalPlaces,
+  printerConfig,
+  printerConfigLoaded,
+  bluetoothPrinters,
+  usbPrinters,
+  isDiscoveringDevices,
+  isSavingPrinter,
+  isTestingPrinter,
+  printerNotice,
+  printerDiscoveryError,
+  printerSaveError,
+  printerTestError,
+  bluetoothPermissionDenied,
+  printerRefreshSignal,
+  onSavePrinterConfig,
+  onRefreshPrinterDevices,
+  onOpenBluetoothSettings,
+  onOpenAppSettings,
+  onOpenPrintSettings,
+  onTestPrint,
+  onReprintSale,
+  onProductsChanged,
   onBackToSales,
 }: Props) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [branchInventory, setBranchInventory] = useState<
+    BranchInventoryRow[]
+  >([]);
+  const [movements, setMovements] = useState<Movement[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [salesDate, setSalesDate] = useState(() => harareDateValue());
+  const [selectedBranchId, setSelectedBranchId] = useState(branchId);
+  const [editingProductId, setEditingProductId] = useState("");
+  const [productForm, setProductForm] =
+    useState<ProductForm>(emptyProductForm);
+  const [receiveForm, setReceiveForm] =
+    useState<InventoryReceiveForm>(emptyReceiveForm);
+  const [adjustmentForm, setAdjustmentForm] =
+    useState<InventoryAdjustmentForm>(emptyAdjustmentForm);
+  const [printerDraft, setPrinterDraft] =
+    useState<PrinterConfig>(printerConfig);
+  const [printerSaveStatus, setPrinterSaveStatus] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [printerSaveMessage, setPrinterSaveMessage] = useState("");
+  const [activeSettingsPage, setActiveSettingsPage] =
+    useState<SettingsPageKey>("home");
+  const [printerSettingsAction, setPrinterSettingsAction] = useState<
+    "" | "bluetooth" | "app" | "print"
+  >("");
+  const [printerSettingsError, setPrinterSettingsError] = useState("");
+  const hasHydratedPrinterDraftRef = useRef(false);
 
-  const [salesDate, setSalesDate] = useState(
-    () => harareDateValue(),
-  );
+  const canManageProducts =
+    cashier?.role === "owner" ||
+    Boolean(cashier?.permissions?.manage_products);
+  const canManageInventory =
+    cashier?.role === "owner" ||
+    Boolean(cashier?.permissions?.manage_inventory);
+  const canManageSettings =
+    cashier?.role === "owner" ||
+    Boolean(cashier?.permissions?.settings);
+
   function money(value: string | number | undefined) {
     return `${currencySymbol}${Number(value || 0).toFixed(decimalPlaces)}`;
   }
+
+  const inventoryProducts = useMemo(() => {
+    return [...branchInventory].sort(
+      (first, second) =>
+        Number(first.quantity || 0) -
+        Number(second.quantity || 0),
+    );
+  }, [branchInventory]);
+
+  const selectedBranchName =
+    branches.find((branch) => branch.id === selectedBranchId)?.name ||
+    "Assigned branch";
+
+  const bluetoothNameCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const device of bluetoothPrinters) {
+      const key = device.name.trim().toLowerCase();
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+
+    return counts;
+  }, [bluetoothPrinters]);
+
+  function bluetoothDeviceLabel(device: PrinterDevice) {
+    const key = device.name.trim().toLowerCase();
+    const duplicateCount = bluetoothNameCounts.get(key) || 0;
+
+    if (duplicateCount > 1 && device.name.trim()) {
+      return device.name.trim();
+    }
+
+    return device.name.trim() || "Bluetooth printer";
+  }
+
+  function selectPrinterDevice(device: PrinterDevice) {
+    console.info("[printer] dropdown change", {
+      connectionType: device.transport || printerDraft.connectionType,
+      selectedPrinterId: device.id,
+      selectedPrinterName: device.name,
+    });
+    setPrinterDraft((current) => ({
+      ...current,
+      selectedPrinterId: device.id,
+      selectedPrinterName: device.name,
+    }));
+  }
+
+  function systemPrinterFallbackDraft() {
+    setPrinterDraft((current) => ({
+      ...current,
+      connectionType: "system",
+      selectedPrinterId: "",
+      selectedPrinterName: "",
+    }));
+  }
+
+  useEffect(() => {
+    setSelectedBranchId(branchId);
+  }, [branchId]);
+
+  useEffect(() => {
+    if (!printerConfigLoaded || hasHydratedPrinterDraftRef.current) {
+      return;
+    }
+
+    setPrinterDraft(printerConfig);
+    setPrinterSaveStatus("idle");
+    setPrinterSaveMessage("");
+    hasHydratedPrinterDraftRef.current = true;
+  }, [printerConfig, printerConfigLoaded]);
+
+  useEffect(() => {
+    if (activeModule !== "Settings") {
+      setActiveSettingsPage("home");
+      return;
+    }
+
+
+    if (activeSettingsPage !== "printer") {
+      return;
+    }
+
+    void onRefreshPrinterDevices(
+      printerDraft.connectionType === "system"
+        ? undefined
+        : printerDraft.connectionType,
+    ).catch((printerError) => {
+      setError(
+        getApiErrorMessage(
+          printerError,
+          "Failed to load printer devices.",
+        ),
+      );
+    });
+  }, [
+    activeModule,
+    activeSettingsPage,
+    printerDraft.connectionType,
+    printerRefreshSignal,
+    onRefreshPrinterDevices,
+  ]);
+
+  async function handleSavePrinter() {
+    console.info("[printer] save click", {
+      connectionType: printerDraft.connectionType,
+      selectedPrinterId: printerDraft.selectedPrinterId,
+    });
+    setPrinterSaveStatus("saving");
+    setPrinterSaveMessage("Saving...");
+    setPrinterSettingsError("");
+
+    try {
+      await onSavePrinterConfig(printerDraft);
+      setPrinterSaveStatus("saved");
+      setPrinterSaveMessage("Printer saved");
+    } catch (printerError) {
+      console.error("[printer] save printer", printerError);
+      setPrinterSaveStatus("error");
+      setPrinterSaveMessage("Save failed");
+    }
+  }
+
+  const bluetoothOptions = useMemo(() => {
+    const options = [...bluetoothPrinters];
+
+    if (
+      printerDraft.connectionType === "bluetooth" &&
+      printerDraft.selectedPrinterId &&
+      !options.some((device) => device.id === printerDraft.selectedPrinterId)
+    ) {
+      options.unshift({
+        id: printerDraft.selectedPrinterId,
+        name:
+          printerDraft.selectedPrinterName ||
+          "Saved Bluetooth printer",
+        supported: true,
+      });
+    }
+
+    return options;
+  }, [
+    bluetoothPrinters,
+    printerDraft.connectionType,
+    printerDraft.selectedPrinterId,
+    printerDraft.selectedPrinterName,
+  ]);
+
+  const usbOptions = useMemo(() => {
+    const options = [...usbPrinters];
+
+    if (
+      printerDraft.connectionType === "usb" &&
+      printerDraft.selectedPrinterId &&
+      !options.some((device) => device.id === printerDraft.selectedPrinterId)
+    ) {
+      options.unshift({
+        id: printerDraft.selectedPrinterId,
+        name: printerDraft.selectedPrinterName || "Saved USB printer",
+        supported: true,
+      });
+    }
+
+    return options;
+  }, [
+    printerDraft.connectionType,
+    printerDraft.selectedPrinterId,
+    printerDraft.selectedPrinterName,
+    usbPrinters,
+  ]);
+
+  const selectedUsbPrinter = useMemo(
+    () =>
+      usbPrinters.find(
+        (device) => device.id === printerDraft.selectedPrinterId,
+      ) || null,
+    [printerDraft.selectedPrinterId, usbPrinters],
+  );
+
+  const requiresPrinterSelection =
+    printerDraft.enabled &&
+    printerDraft.connectionType !== "system";
+  const hasValidPrinterSelection =
+    printerDraft.connectionType === "system" ||
+    Boolean(printerDraft.selectedPrinterId);
+  const canSavePrinter =
+    canManageSettings &&
+    !isSavingPrinter &&
+    (!requiresPrinterSelection || hasValidPrinterSelection);
+  const canTestPrint =
+    !isTestingPrinter &&
+    printerDraft.enabled &&
+    (!requiresPrinterSelection || hasValidPrinterSelection);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +551,7 @@ export default function PosModulePage({
 
       setLoading(true);
       setError("");
+      setNotice("");
 
       try {
         if (activeModule === "Sales Management") {
@@ -163,11 +568,73 @@ export default function PosModulePage({
           }
         }
 
-        if (activeModule === "Products" || activeModule === "Inventory") {
-          const response = await api.get(`/products/${companyId}`);
+        if (
+          activeModule === "Products" ||
+          activeModule === "Inventory"
+        ) {
+          const [
+            productsResponse,
+            categoriesResponse,
+            branchesResponse,
+          ] = await Promise.all([
+            api.get(`/products/${companyId}`),
+            api.get(`/products/categories/${companyId}`),
+            api.get(`/inventory/branches/${companyId}`),
+          ]);
+
+          const loadedProducts =
+            extractRows<Product>(productsResponse.data);
+          const loadedCategories =
+            extractRows<Category>(categoriesResponse.data);
+          const loadedBranches =
+            extractRows<Branch>(branchesResponse.data);
+          const nextBranchId =
+            selectedBranchId ||
+            loadedBranches[0]?.id ||
+            "";
+
+          const [balancesResponse, historyResponse] = await Promise.all([
+            api.get(`/inventory/branch-overview/${companyId}`, {
+              params: {
+                branch_id: nextBranchId || undefined,
+              },
+            }),
+            api.get(`/inventory/history/${companyId}`, {
+              params: { limit: 50 },
+            }),
+          ]);
 
           if (!cancelled) {
-            setProducts(extractRows<Product>(response.data));
+            setProducts(loadedProducts);
+            setCategories(loadedCategories);
+            setBranches(loadedBranches);
+            setSelectedBranchId(nextBranchId);
+            setBranchInventory(
+              extractRows<BranchInventoryRow>(
+                balancesResponse.data,
+              ),
+            );
+            setMovements(extractRows<Movement>(historyResponse.data));
+            setProductForm((current) => ({
+              ...current,
+              branch_id:
+                current.branch_id ||
+                nextBranchId,
+            }));
+            setReceiveForm((current) => ({
+              ...current,
+              product_id:
+                current.product_id ||
+                loadedProducts[0]?.id ||
+                "",
+            }));
+            setAdjustmentForm((current) => ({
+              ...current,
+              product_id:
+                current.product_id ||
+                loadedProducts[0]?.id ||
+                "",
+            }));
           }
         }
 
@@ -188,11 +655,13 @@ export default function PosModulePage({
             setSettings(response.data as BusinessSettings);
           }
         }
-      } catch (requestError: any) {
+      } catch (requestError: unknown) {
         if (!cancelled) {
           setError(
-            requestError?.response?.data?.detail ||
+            getApiErrorMessage(
+              requestError,
               `Failed to load ${activeModule}`,
+            ),
           );
         }
       } finally {
@@ -207,17 +676,298 @@ export default function PosModulePage({
     return () => {
       cancelled = true;
     };
-  }, [activeModule, companyId, branchId, salesDate]);
+  }, [
+    activeModule,
+    branchId,
+    companyId,
+    salesDate,
+    selectedBranchId,
+  ]);
 
-  const inventoryProducts = useMemo(() => {
-    return [...products].sort(
-      (first, second) =>
-        Number(first.stock_qty || 0) - Number(second.stock_qty || 0),
+  useEffect(() => {
+    if (!editingProductId) {
+      return;
+    }
+
+    const product = products.find(
+      (item) => item.id === editingProductId,
     );
-  }, [products]);
+
+    if (!product) {
+      return;
+    }
+
+    setProductForm((current) => ({
+      ...current,
+      branch_id:
+        current.branch_id ||
+        selectedBranchId,
+      category_id: product.category_id || "",
+      name: product.name,
+      sku: product.sku || "",
+      barcode: product.barcode || "",
+      unit: product.unit || "each",
+      cost_price: String(product.cost_price || "0"),
+      selling_price: String(product.selling_price || "0"),
+      stock_qty: String(product.stock_qty || "0"),
+      reorder_level: String(product.reorder_level || "0"),
+    }));
+  }, [
+    editingProductId,
+    products,
+    selectedBranchId,
+  ]);
 
   if (activeModule === "Sales") {
     return null;
+  }
+
+  async function ensureOnline() {
+    const online = await isDeviceOnline();
+
+    if (!online) {
+      setError(
+        "Internet required to manage products or inventory.",
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  async function refreshProductAndInventoryData() {
+    const [productsResponse, balancesResponse, historyResponse] =
+      await Promise.all([
+        api.get(`/products/${companyId}`),
+        api.get(`/inventory/branch-overview/${companyId}`, {
+          params: {
+            branch_id: selectedBranchId || undefined,
+          },
+        }),
+        api.get(`/inventory/history/${companyId}`, {
+          params: { limit: 50 },
+        }),
+      ]);
+
+    setProducts(extractRows<Product>(productsResponse.data));
+    setBranchInventory(
+      extractRows<BranchInventoryRow>(balancesResponse.data),
+    );
+    setMovements(extractRows<Movement>(historyResponse.data));
+    onProductsChanged?.();
+  }
+
+  function resetProductForm() {
+    setEditingProductId("");
+    setProductForm({
+      ...emptyProductForm,
+      branch_id: selectedBranchId || branches[0]?.id || "",
+    });
+  }
+
+  async function saveProduct() {
+    if (!(await ensureOnline())) {
+      return;
+    }
+
+    if (!canManageProducts) {
+      setError("You do not have permission to manage products.");
+      return;
+    }
+
+    if (!productForm.name.trim()) {
+      setError("Product name is required.");
+      return;
+    }
+
+    if (!editingProductId && !productForm.branch_id) {
+      setError("Select the branch for opening stock.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      setNotice("");
+
+      const payload = {
+        category_id: productForm.category_id || null,
+        name: productForm.name.trim(),
+        sku: productForm.sku.trim() || null,
+        barcode: productForm.barcode.trim() || null,
+        unit: productForm.unit,
+        cost_price: productForm.cost_price || "0",
+        selling_price: productForm.selling_price || "0",
+        reorder_level: productForm.reorder_level || "0",
+      };
+
+      if (editingProductId) {
+        await api.patch(
+          `/products/${companyId}/${editingProductId}`,
+          payload,
+        );
+        setNotice("Product updated successfully.");
+      } else {
+        const createRequestKey =
+          productForm.create_request_key ||
+          globalThis.crypto?.randomUUID?.() ||
+          `product-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2)}`;
+
+        if (
+          createRequestKey !==
+          productForm.create_request_key
+        ) {
+          setProductForm((current) => ({
+            ...current,
+            create_request_key: createRequestKey,
+          }));
+        }
+
+        await api.post("/products", {
+          company_id: companyId,
+          branch_id: productForm.branch_id,
+          create_request_key: createRequestKey,
+          ...payload,
+          stock_qty: productForm.stock_qty || "0",
+        });
+        setNotice("Product created successfully.");
+      }
+
+      resetProductForm();
+      await refreshProductAndInventoryData();
+    } catch (requestError: unknown) {
+      setError(
+        getApiErrorMessage(
+          requestError,
+          "Failed to save product.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveReceivedStock() {
+    if (!(await ensureOnline())) {
+      return;
+    }
+
+    if (!canManageInventory) {
+      setError("You do not have permission to manage inventory.");
+      return;
+    }
+
+    if (!receiveForm.product_id) {
+      setError("Select a product.");
+      return;
+    }
+
+    if (
+      !receiveForm.reason.trim() ||
+      Number(receiveForm.quantity) <= 0
+    ) {
+      setError(
+        "Quantity and reason are required for stock receiving.",
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      setNotice("");
+
+      await api.post("/inventory/grn", {
+        company_id: companyId,
+        branch_id: selectedBranchId || null,
+        product_id: receiveForm.product_id,
+        quantity: receiveForm.quantity,
+        reason: receiveForm.reason.trim(),
+        unit_cost: receiveForm.unit_cost || null,
+        reference: receiveForm.reference.trim() || null,
+        supplier: receiveForm.supplier.trim() || null,
+        notes: receiveForm.notes.trim() || null,
+      });
+
+      setReceiveForm((current) => ({
+        ...emptyReceiveForm,
+        product_id: current.product_id,
+      }));
+      setNotice("Stock received successfully.");
+      await refreshProductAndInventoryData();
+    } catch (requestError: unknown) {
+      setError(
+        getApiErrorMessage(
+          requestError,
+          "Failed to receive stock.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveAdjustment() {
+    if (!(await ensureOnline())) {
+      return;
+    }
+
+    if (!canManageInventory) {
+      setError("You do not have permission to manage inventory.");
+      return;
+    }
+
+    if (!adjustmentForm.product_id) {
+      setError("Select a product.");
+      return;
+    }
+
+    if (
+      !adjustmentForm.reason.trim() ||
+      Number(adjustmentForm.quantity) < 0 ||
+      (adjustmentForm.adjustment_type !== "set" &&
+        Number(adjustmentForm.quantity) <= 0)
+    ) {
+      setError(
+        "Adjustment quantity and reason are required.",
+      );
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      setNotice("");
+
+      await api.post("/inventory/adjustments", {
+        company_id: companyId,
+        branch_id: selectedBranchId || null,
+        product_id: adjustmentForm.product_id,
+        adjustment_type: adjustmentForm.adjustment_type,
+        quantity: adjustmentForm.quantity,
+        reason: adjustmentForm.reason.trim(),
+        reference: adjustmentForm.reference.trim() || null,
+        notes: adjustmentForm.notes.trim() || null,
+      });
+
+      setAdjustmentForm((current) => ({
+        ...emptyAdjustmentForm,
+        product_id: current.product_id,
+      }));
+      setNotice("Inventory adjustment saved.");
+      await refreshProductAndInventoryData();
+    } catch (requestError: unknown) {
+      setError(
+        getApiErrorMessage(
+          requestError,
+          "Failed to adjust stock.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -247,45 +997,43 @@ export default function PosModulePage({
           <div className="pos-module-notice pos-module-error">{error}</div>
         )}
 
-        {!loading && !error && activeModule === "Sales Management" && (
+        {notice && !error && (
+          <div className="pos-module-notice">{notice}</div>
+        )}
+
+        {!loading && activeModule === "Sales Management" && (
           <div className="pos-module-card">
             <div className="pos-module-card-heading">
               <div>
                 <h2>Sales History</h2>
+                <div className="pos-module-date-filter">
+                  <label htmlFor="sales-history-date">
+                    Transaction date
+                  </label>
 
-              <div className="pos-module-date-filter">
-                <label htmlFor="sales-history-date">
-                  Transaction date
-                </label>
+                  <div className="pos-module-date-actions">
+                    <input
+                      id="sales-history-date"
+                      type="date"
+                      value={salesDate}
+                      max={localDateValue()}
+                      onChange={(event) =>
+                        setSalesDate(event.target.value)
+                      }
+                    />
 
-                <div className="pos-module-date-actions">
-                  <input
-                    id="sales-history-date"
-                    type="date"
-                    value={salesDate}
-                    max={localDateValue()}
-                    onChange={(event) =>
-                      setSalesDate(event.target.value)
-                    }
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSalesDate(localDateValue())
-                    }
-                  >
-                    Today
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSalesDate(localDateValue())
+                      }
+                    >
+                      Today
+                    </button>
+                  </div>
                 </div>
-              </div>
-
-                
                 <p>{sales.length} transaction records for {salesDate}</p>
               </div>
-
-              
-
             </div>
 
             <div className="pos-module-table-wrap">
@@ -298,6 +1046,7 @@ export default function PosModulePage({
                     <th>Payment</th>
                     <th>Status</th>
                     <th className="number">Total</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -317,12 +1066,33 @@ export default function PosModulePage({
                       <td className="number">
                         {money(sale.total_amount)}
                       </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="pos-inline-button"
+                          onClick={() => {
+                            void onReprintSale(
+                              sale.id,
+                              sale.receipt_number,
+                            ).catch((printerError) => {
+                              setError(
+                                getApiErrorMessage(
+                                  printerError,
+                                  "Reprint failed.",
+                                ),
+                              );
+                            });
+                          }}
+                        >
+                          Reprint
+                        </button>
+                      </td>
                     </tr>
                   ))}
 
                   {!sales.length && (
                     <tr>
-                      <td colSpan={6} className="empty">
+                      <td colSpan={7} className="empty">
                         No sales have been recorded.
                       </td>
                     </tr>
@@ -333,144 +1103,719 @@ export default function PosModulePage({
           </div>
         )}
 
-        {!loading && !error && activeModule === "Products" && (
-          <div className="pos-module-card">
-            <div className="pos-module-card-heading">
-              <div>
-                <h2>Available Products</h2>
-                <p>{products.length} products available on this POS</p>
+        {!loading && activeModule === "Products" && (
+          <>
+            <div className="pos-module-card">
+              <div className="pos-module-card-heading">
+                <div>
+                  <h2>Product Management</h2>
+                  <p>
+                    {canManageProducts
+                      ? "Create or edit products for this branch."
+                      : "You can view products, but product changes require the manage_products permission."}
+                  </p>
+                </div>
               </div>
+
+              {canManageProducts ? (
+                <div className="pos-module-form-grid">
+                  <label>
+                    Opening stock branch
+                    <select
+                      value={productForm.branch_id}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          branch_id: event.target.value,
+                        }))
+                      }
+                      disabled={Boolean(editingProductId)}
+                    >
+                      <option value="">Select branch</option>
+                      {branches.map((branch) => (
+                        <option key={branch.id} value={branch.id}>
+                          {branch.shop_name} — {branch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    Product name
+                    <input
+                      value={productForm.name}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          name: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Category
+                    <select
+                      value={productForm.category_id}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          category_id: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Uncategorized</option>
+                      {categories
+                        .filter((category) => category.active)
+                        .map((category) => (
+                          <option key={category.id} value={category.id}>
+                            {category.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    SKU
+                    <input
+                      value={productForm.sku}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          sku: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Barcode
+                    <input
+                      value={productForm.barcode}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          barcode: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Sold by
+                    <select
+                      value={productForm.unit}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          unit: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="each">Each</option>
+                      <option value="kg">Kilogram</option>
+                      <option value="g">Gram</option>
+                      <option value="litre">Litre</option>
+                      <option value="ml">Millilitre</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Cost price
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={productForm.cost_price}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          cost_price: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <label>
+                    Selling price
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={productForm.selling_price}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          selling_price: event.target.value,
+                        }))
+                      }
+                    />
+                    <small>
+                      {productForm.unit === "kg"
+                        ? "For kg items, this is the price per kilogram."
+                        : "Selling price per unit."}
+                    </small>
+                  </label>
+
+                  <label>
+                    Opening stock
+                    <input
+                      type="number"
+                      min="0"
+                      step={productForm.unit === "each" ? "1" : "0.001"}
+                      value={productForm.stock_qty}
+                      disabled={Boolean(editingProductId)}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          stock_qty: event.target.value,
+                        }))
+                      }
+                    />
+                    {editingProductId && (
+                      <small>
+                        Use inventory management to change stock quantities.
+                      </small>
+                    )}
+                  </label>
+
+                  <label>
+                    Reorder level
+                    <input
+                      type="number"
+                      min="0"
+                      step={productForm.unit === "each" ? "1" : "0.001"}
+                      value={productForm.reorder_level}
+                      onChange={(event) =>
+                        setProductForm((current) => ({
+                          ...current,
+                          reorder_level: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+
+                  <div className="pos-module-form-actions">
+                    <button
+                      type="button"
+                      onClick={() => void saveProduct()}
+                      disabled={saving}
+                    >
+                      {saving
+                        ? "Saving..."
+                        : editingProductId
+                          ? "Update Product"
+                          : "Create Product"}
+                    </button>
+
+                    {editingProductId && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={resetProductForm}
+                        disabled={saving}
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
-            <div className="pos-module-table-wrap">
-              <table className="pos-module-table">
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>SKU</th>
-                    <th>Barcode</th>
-                    <th className="number">Selling Price</th>
-                    <th className="number">Stock</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {products.map((product) => (
-                    <tr key={product.id}>
-                      <td>
-                        <strong>{product.name}</strong>
-                      </td>
-                      <td>{product.sku || "—"}</td>
-                      <td>{product.barcode || "—"}</td>
-                      <td className="number">
-                        {money(product.selling_price)}
-                      </td>
-                      <td className="number">
-                        {Number(product.stock_qty || 0).toFixed(3)}
-                      </td>
-                      <td>
-                        <span
-                          className={
-                            product.active === false
-                              ? "pos-status inactive"
-                              : "pos-status active"
-                          }
-                        >
-                          {product.active === false ? "Inactive" : "Active"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+            <div className="pos-module-card">
+              <div className="pos-module-card-heading">
+                <div>
+                  <h2>Available Products</h2>
+                  <p>{products.length} products available on this POS</p>
+                </div>
+              </div>
 
-                  {!products.length && (
+              <div className="pos-module-table-wrap">
+                <table className="pos-module-table">
+                  <thead>
                     <tr>
-                      <td colSpan={6} className="empty">
-                        No products are available.
-                      </td>
+                      <th>Product</th>
+                      <th>SKU</th>
+                      <th>Barcode</th>
+                      <th className="number">Selling Price</th>
+                      <th className="number">Branch Stock</th>
+                      <th>Status</th>
+                      {canManageProducts && <th>Actions</th>}
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
+                  </thead>
+                  <tbody>
+                    {products.map((product) => {
+                      const balance = branchInventory.find(
+                        (row) => row.product_id === product.id,
+                      );
 
-        {!loading && !error && activeModule === "Inventory" && (
-          <div className="pos-module-card">
-            <div className="pos-module-card-heading">
-              <div>
-                <h2>Inventory Overview</h2>
-                <p>Stock levels and reorder warnings</p>
-              </div>
-            </div>
-
-            <div className="pos-module-table-wrap">
-              <table className="pos-module-table">
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th>SKU</th>
-                    <th className="number">Current Stock</th>
-                    <th className="number">Reorder Level</th>
-                    <th className="number">Cost Value</th>
-                    <th>Stock Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventoryProducts.map((product) => {
-                    const stock = Number(product.stock_qty || 0);
-                    const reorderLevel = Number(product.reorder_level || 0);
-                    const lowStock =
-                      stock <= reorderLevel || stock <= 0;
-
-                    return (
-                      <tr key={product.id}>
-                        <td>
-                          <strong>{product.name}</strong>
-                        </td>
-                        <td>{product.sku || "—"}</td>
-                        <td className="number">{stock.toFixed(3)}</td>
-                        <td className="number">
-                          {reorderLevel.toFixed(3)}
-                        </td>
-                        <td className="number">
-                          {money(
-                            stock * Number(product.cost_price || 0),
+                      return (
+                        <tr key={product.id}>
+                          <td>
+                            <strong>{product.name}</strong>
+                          </td>
+                          <td>{product.sku || "—"}</td>
+                          <td>{product.barcode || "—"}</td>
+                          <td className="number">
+                            {money(product.selling_price)}
+                          </td>
+                          <td className="number">
+                            {Number(
+                              balance?.quantity ?? product.stock_qty ?? 0,
+                            ).toFixed(3)}
+                          </td>
+                          <td>
+                            <span
+                              className={
+                                product.active === false
+                                  ? "pos-status inactive"
+                                  : "pos-status active"
+                              }
+                            >
+                              {product.active === false
+                                ? "Inactive"
+                                : "Active"}
+                            </span>
+                          </td>
+                          {canManageProducts && (
+                            <td>
+                              <button
+                                type="button"
+                                className="pos-inline-button"
+                                onClick={() =>
+                                  setEditingProductId(product.id)
+                                }
+                              >
+                                Edit
+                              </button>
+                            </td>
                           )}
-                        </td>
-                        <td>
-                          <span
-                            className={
-                              lowStock
-                                ? "pos-status low"
-                                : "pos-status active"
-                            }
-                          >
-                            {stock <= 0
-                              ? "Out of stock"
-                              : lowStock
-                                ? "Low stock"
-                                : "Available"}
-                          </span>
+                        </tr>
+                      );
+                    })}
+
+                    {!products.length && (
+                      <tr>
+                        <td
+                          colSpan={canManageProducts ? 7 : 6}
+                          className="empty"
+                        >
+                          No products are available.
                         </td>
                       </tr>
-                    );
-                  })}
-
-                  {!inventoryProducts.length && (
-                    <tr>
-                      <td colSpan={6} className="empty">
-                        No inventory records are available.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          </>
         )}
 
-        {!loading && !error && activeModule === "Reports" && (
+        {!loading && activeModule === "Inventory" && (
+          <>
+            <div className="pos-module-card">
+              <div className="pos-module-card-heading">
+                <div>
+                  <h2>Inventory Management</h2>
+                  <p>
+                    {canManageInventory
+                      ? "Receive stock or adjust branch quantities. Internet is required."
+                      : "You can view branch inventory, but stock changes require the manage_inventory permission."}
+                  </p>
+                </div>
+
+                <label className="pos-module-branch-picker">
+                  Branch
+                  <select
+                    value={selectedBranchId}
+                    onChange={(event) =>
+                      setSelectedBranchId(event.target.value)
+                    }
+                  >
+                    {branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.shop_name} — {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {canManageInventory ? (
+                <div className="pos-module-management-grid">
+                  <section className="pos-module-subcard">
+                    <h3>Receive / Add Stock</h3>
+                    <p>{selectedBranchName}</p>
+
+                    <div className="pos-module-form-grid">
+                      <label>
+                        Product
+                        <select
+                          value={receiveForm.product_id}
+                          onChange={(event) =>
+                            setReceiveForm((current) => ({
+                              ...current,
+                              product_id: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Select product</option>
+                          {products.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        Quantity
+                        <input
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          value={receiveForm.quantity}
+                          onChange={(event) =>
+                            setReceiveForm((current) => ({
+                              ...current,
+                              quantity: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        Reason
+                        <input
+                          value={receiveForm.reason}
+                          placeholder="Example: New supplier delivery"
+                          onChange={(event) =>
+                            setReceiveForm((current) => ({
+                              ...current,
+                              reason: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        Unit cost
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={receiveForm.unit_cost}
+                          onChange={(event) =>
+                            setReceiveForm((current) => ({
+                              ...current,
+                              unit_cost: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        Reference
+                        <input
+                          value={receiveForm.reference}
+                          onChange={(event) =>
+                            setReceiveForm((current) => ({
+                              ...current,
+                              reference: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        Supplier
+                        <input
+                          value={receiveForm.supplier}
+                          onChange={(event) =>
+                            setReceiveForm((current) => ({
+                              ...current,
+                              supplier: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="full">
+                        Notes
+                        <textarea
+                          value={receiveForm.notes}
+                          onChange={(event) =>
+                            setReceiveForm((current) => ({
+                              ...current,
+                              notes: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <div className="pos-module-form-actions">
+                        <button
+                          type="button"
+                          onClick={() => void saveReceivedStock()}
+                          disabled={saving}
+                        >
+                          {saving ? "Saving..." : "Receive Stock"}
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="pos-module-subcard">
+                    <h3>Stock Adjustment</h3>
+                    <p>Use this for removals, corrections, or physical counts.</p>
+
+                    <div className="pos-module-form-grid">
+                      <label>
+                        Product
+                        <select
+                          value={adjustmentForm.product_id}
+                          onChange={(event) =>
+                            setAdjustmentForm((current) => ({
+                              ...current,
+                              product_id: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Select product</option>
+                          {products.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label>
+                        Adjustment type
+                        <select
+                          value={adjustmentForm.adjustment_type}
+                          onChange={(event) =>
+                            setAdjustmentForm((current) => ({
+                              ...current,
+                              adjustment_type: event.target
+                                .value as InventoryAdjustmentForm["adjustment_type"],
+                            }))
+                          }
+                        >
+                          <option value="add">Add stock</option>
+                          <option value="remove">Remove stock</option>
+                          <option value="set">Set physical quantity</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Quantity
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          value={adjustmentForm.quantity}
+                          onChange={(event) =>
+                            setAdjustmentForm((current) => ({
+                              ...current,
+                              quantity: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        Reason
+                        <input
+                          value={adjustmentForm.reason}
+                          placeholder="Example: Damaged stock"
+                          onChange={(event) =>
+                            setAdjustmentForm((current) => ({
+                              ...current,
+                              reason: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        Reference
+                        <input
+                          value={adjustmentForm.reference}
+                          onChange={(event) =>
+                            setAdjustmentForm((current) => ({
+                              ...current,
+                              reference: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label className="full">
+                        Notes
+                        <textarea
+                          value={adjustmentForm.notes}
+                          onChange={(event) =>
+                            setAdjustmentForm((current) => ({
+                              ...current,
+                              notes: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <div className="pos-module-form-actions">
+                        <button
+                          type="button"
+                          onClick={() => void saveAdjustment()}
+                          disabled={saving}
+                        >
+                          {saving ? "Saving..." : "Save Adjustment"}
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="pos-module-card">
+              <div className="pos-module-card-heading">
+                <div>
+                  <h2>Branch Inventory Overview</h2>
+                  <p>{selectedBranchName}</p>
+                </div>
+              </div>
+
+              <div className="pos-module-table-wrap">
+                <table className="pos-module-table">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>SKU</th>
+                      <th className="number">Current Stock</th>
+                      <th className="number">Reorder Level</th>
+                      <th className="number">Cost Value</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventoryProducts.map((product) => {
+                      const stock = Number(product.quantity || 0);
+                      const reorderLevel = Number(
+                        product.reorder_level || 0,
+                      );
+                      const lowStock =
+                        stock <= reorderLevel || stock <= 0;
+
+                      return (
+                        <tr key={product.product_id}>
+                          <td>
+                            <strong>{product.product_name}</strong>
+                          </td>
+                          <td>{product.sku || "—"}</td>
+                          <td className="number">{stock.toFixed(3)}</td>
+                          <td className="number">
+                            {reorderLevel.toFixed(3)}
+                          </td>
+                          <td className="number">
+                            {money(
+                              stock * Number(product.cost_price || 0),
+                            )}
+                          </td>
+                          <td>
+                            <span
+                              className={
+                                lowStock
+                                  ? "pos-status low"
+                                  : "pos-status active"
+                              }
+                            >
+                              {stock <= 0
+                                ? "Out of stock"
+                                : lowStock
+                                  ? "Low stock"
+                                  : "Available"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {!inventoryProducts.length && (
+                      <tr>
+                        <td colSpan={6} className="empty">
+                          No inventory records are available.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="pos-module-card">
+              <div className="pos-module-card-heading">
+                <div>
+                  <h2>Recent Inventory Activity</h2>
+                  <p>Auditable branch stock movements.</p>
+                </div>
+              </div>
+
+              <div className="pos-module-table-wrap">
+                <table className="pos-module-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Movement</th>
+                      <th>Product</th>
+                      <th className="number">Quantity</th>
+                      <th className="number">Before</th>
+                      <th className="number">After</th>
+                      <th>Reason / Reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movements.map((movement) => (
+                      <tr key={movement.id}>
+                        <td>
+                          {new Date(
+                            movement.created_at,
+                          ).toLocaleString()}
+                        </td>
+                        <td>{movement.movement_type}</td>
+                        <td>{movement.product_name}</td>
+                        <td className="number">
+                          {Number(movement.quantity || 0).toFixed(3)}
+                        </td>
+                        <td className="number">
+                          {Number(movement.before_qty || 0).toFixed(3)}
+                        </td>
+                        <td className="number">
+                          {Number(movement.after_qty || 0).toFixed(3)}
+                        </td>
+                        <td>
+                          {movement.reason || movement.reference || "—"}
+                        </td>
+                      </tr>
+                    ))}
+
+                    {!movements.length && (
+                      <tr>
+                        <td colSpan={7} className="empty">
+                          No inventory movements have been recorded yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {!loading && activeModule === "Reports" && (
           <>
             <div className="pos-report-grid">
               <ReportCard
@@ -500,77 +1845,562 @@ export default function PosModulePage({
                 detail="Current inventory cost value"
               />
             </div>
-
-            <div className="pos-module-card">
-              <h2>Detailed Reports</h2>
-              <p>
-                Full date filtering, product performance, cashier
-                performance, profit and inventory reports are available in
-                Backoffice.
-              </p>
-            </div>
           </>
         )}
 
-        {!loading && !error && activeModule === "Settings" && (
-          <div className="pos-settings-grid">
-            <SettingsCard
-              title="Business"
-              rows={[
-                ["Business name", settings?.name || "—"],
-                ["Owner", settings?.owner_name || "—"],
-                ["Business type", settings?.business_type || "—"],
-                ["Country", settings?.country || "—"],
-                ["Phone", settings?.phone || "—"],
-                ["Email", settings?.contact_email || settings?.owner_email || "—"],
-                ["Address", settings?.address || "—"],
-              ]}
-            />
+        {!loading && activeModule === "Settings" && (
+          <>
+            {activeSettingsPage === "home" ? (
+              <div className="pos-module-card">
+                <div className="pos-module-card-heading">
+                  <div>
+                    <h2>Settings</h2>
+                    <p>
+                      Open one page at a time.
+                    </p>
+                  </div>
+                </div>
 
-            <SettingsCard
-              title="Currency and Tax"
-              rows={[
-                ["Currency", settings?.currency_code || "—"],
-                ["Symbol", settings?.currency_symbol || "—"],
-                [
-                  "Decimal places",
-                  String(settings?.decimal_places ?? 2),
-                ],
-                ["Tax name", settings?.tax_name || "—"],
-                ["Tax rate", `${Number(settings?.tax_rate || 0)}%`],
-                [
-                  "Tax inclusive",
-                  settings?.tax_inclusive ? "Yes" : "No",
-                ],
-              ]}
-            />
+                <div className="pos-settings-menu">
+                  <button
+                    type="button"
+                    className="pos-settings-menu-item"
+                    onClick={() => setActiveSettingsPage("printer")}
+                  >
+                    <strong>Printer</strong>
+                    <span>
+                      {printerConfig.selectedPrinterName ||
+                        "Choose printer connection"}
+                    </span>
+                  </button>
 
-            <SettingsCard
-              title="Receipt and Payments"
-              rows={[
-                ["Paper size", settings?.paper_size || "—"],
-                [
-                  "Auto print",
-                  settings?.auto_print ? "Enabled" : "Disabled",
-                ],
-                [
-                  "Payment methods",
-                  settings?.payment_methods?.join(", ").toUpperCase() ||
-                    "—",
-                ],
-                ["Receipt header", settings?.receipt_header || "—"],
-                ["Receipt footer", settings?.receipt_footer || "—"],
-              ]}
-            />
+                  <button
+                    type="button"
+                    className="pos-settings-menu-item"
+                    onClick={() => setActiveSettingsPage("business")}
+                  >
+                    <strong>Business</strong>
+                    <span>{settings?.name || "Business details"}</span>
+                  </button>
 
-            <div className="pos-module-card">
-              <h2>Manage Settings</h2>
-              <p>
-                Business settings are controlled from Backoffice so that
-                all POS devices use the same configuration.
-              </p>
-            </div>
-          </div>
+                  <button
+                    type="button"
+                    className="pos-settings-menu-item"
+                    onClick={() => setActiveSettingsPage("tax")}
+                  >
+                    <strong>Tax & Currency</strong>
+                    <span>
+                      {settings?.currency_code || "Currency"} ·{" "}
+                      {settings?.tax_name || "Tax"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="pos-settings-menu-item"
+                    onClick={() => setActiveSettingsPage("receipt")}
+                  >
+                    <strong>Receipt & Payments</strong>
+                    <span>
+                      {settings?.payment_methods?.length
+                        ? settings.payment_methods.join(", ").toUpperCase()
+                        : "Receipt setup"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="pos-module-card">
+                <div className="pos-settings-page-header">
+                  <button
+                    type="button"
+                    className="pos-inline-button secondary"
+                    onClick={() => setActiveSettingsPage("home")}
+                  >
+                    Back to Settings
+                  </button>
+                  <div>
+                    <h2>
+                      {activeSettingsPage === "printer"
+                        ? "Printer"
+                        : activeSettingsPage === "business"
+                          ? "Business"
+                          : activeSettingsPage === "tax"
+                            ? "Tax & Currency"
+                            : "Receipt & Payments"}
+                    </h2>
+                  </div>
+                </div>
+
+                {activeSettingsPage === "printer" ? (
+                  <>
+                    {!canManageSettings && (
+                      <div className="pos-module-notice">
+                        Printer changes require settings permission or owner access.
+                      </div>
+                    )}
+
+                    {(printerSaveMessage || printerSaveStatus === "saving") && (
+                      <div className="pos-module-notice">
+                        {printerSaveStatus === "saving"
+                          ? "Saving..."
+                          : printerSaveMessage}
+                      </div>
+                    )}
+
+                    {printerDiscoveryError && (
+                      <div className="pos-module-notice">
+                        {printerDiscoveryError}
+                      </div>
+                    )}
+
+                    {printerSaveError && (
+                      <div className="pos-module-notice">
+                        {printerSaveError}
+                      </div>
+                    )}
+
+                    {printerTestError && (
+                      <div className="pos-module-notice">
+                        {printerTestError}
+                      </div>
+                    )}
+
+                    {printerSettingsError && (
+                      <div className="pos-module-notice">
+                        {printerSettingsError}
+                      </div>
+                    )}
+
+                    {printerNotice && (
+                      <div className="pos-module-notice">{printerNotice}</div>
+                    )}
+
+                    {isDiscoveringDevices && (
+                      <div className="pos-module-notice">
+                        Refreshing available printers...
+                      </div>
+                    )}
+
+                    <div className="pos-module-form-grid pos-printer-form-grid">
+                      <label>
+                        Printing
+                        <select
+                          value={printerDraft.enabled ? "yes" : "no"}
+                          disabled={!canManageSettings || isSavingPrinter}
+                          onChange={(event) =>
+                            setPrinterDraft((current) => ({
+                              ...current,
+                              enabled: event.target.value === "yes",
+                            }))
+                          }
+                        >
+                          <option value="yes">Enabled</option>
+                          <option value="no">Disabled</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Connection type
+                        <select
+                          value={printerDraft.connectionType}
+                          disabled={!canManageSettings || isSavingPrinter}
+                          onChange={(event) => {
+                            const connectionType = event.target
+                              .value as PrinterConnectionType;
+                            console.info("[printer] dropdown change", {
+                              connectionType,
+                              selectedPrinterId: "",
+                            });
+                            setPrinterDraft((current) => ({
+                              ...current,
+                              connectionType,
+                              selectedPrinterId: "",
+                              selectedPrinterName: "",
+                            }));
+                          }}
+                        >
+                          <option value="bluetooth">Bluetooth</option>
+                          <option value="usb">USB</option>
+                          <option value="system">System Printer</option>
+                        </select>
+                      </label>
+
+                      {printerDraft.connectionType === "bluetooth" && (
+                        <label className="full">
+                          Bluetooth printer
+                          <select
+                            value={printerDraft.selectedPrinterId}
+                            disabled={!canManageSettings || isSavingPrinter}
+                            onChange={(event) => {
+                              const device = bluetoothOptions.find(
+                                (item) => item.id === event.target.value,
+                              );
+
+                              if (!device) {
+                                console.info("[printer] dropdown change", {
+                                  connectionType: "bluetooth",
+                                  selectedPrinterId: "",
+                                });
+                                setPrinterDraft((current) => ({
+                                  ...current,
+                                  selectedPrinterId: "",
+                                  selectedPrinterName: "",
+                                }));
+                                return;
+                              }
+
+                              selectPrinterDevice(device);
+                            }}
+                          >
+                            <option value="">Choose a paired printer</option>
+                            {bluetoothOptions.map((device) => (
+                              <option key={device.id} value={device.id}>
+                                {bluetoothDeviceLabel(device)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+
+                      {printerDraft.connectionType === "usb" && (
+                        <label className="full">
+                          USB printer
+                          <select
+                            value={printerDraft.selectedPrinterId}
+                            disabled={!canManageSettings || isSavingPrinter}
+                            onChange={(event) => {
+                              const device = usbOptions.find(
+                                (item) => item.id === event.target.value,
+                              );
+
+                              if (!device) {
+                                console.info("[printer] dropdown change", {
+                                  connectionType: "usb",
+                                  selectedPrinterId: "",
+                                });
+                                setPrinterDraft((current) => ({
+                                  ...current,
+                                  selectedPrinterId: "",
+                                  selectedPrinterName: "",
+                                }));
+                                return;
+                              }
+
+                              selectPrinterDevice(device);
+                            }}
+                          >
+                            <option value="">Choose a connected printer</option>
+                            {usbOptions.map((device) => (
+                              <option key={device.id} value={device.id}>
+                                {device.name.trim() || "USB printer"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+
+                      {printerDraft.connectionType === "system" && (
+                        <div className="full pos-printer-helper">
+                          System Printer opens the Android print dialog.
+                        </div>
+                      )}
+
+                      <label>
+                        Paper width
+                        <select
+                          value={printerDraft.paperWidth}
+                          disabled={!canManageSettings || isSavingPrinter}
+                          onChange={(event) =>
+                            setPrinterDraft((current) => ({
+                              ...current,
+                              paperWidth:
+                                event.target.value === "58mm"
+                                  ? "58mm"
+                                  : "80mm",
+                            }))
+                          }
+                        >
+                          <option value="58mm">58 mm</option>
+                          <option value="80mm">80 mm</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Copies
+                        <input
+                          type="number"
+                          min="1"
+                          max="5"
+                          value={printerDraft.copies}
+                          disabled={!canManageSettings || isSavingPrinter}
+                          onChange={(event) =>
+                            setPrinterDraft((current) => ({
+                              ...current,
+                              copies: Number(event.target.value || 1),
+                            }))
+                          }
+                        />
+                      </label>
+
+                      <label>
+                        Auto-print
+                        <select
+                          value={printerDraft.autoPrint ? "yes" : "no"}
+                          disabled={!canManageSettings || isSavingPrinter}
+                          onChange={(event) =>
+                            setPrinterDraft((current) => ({
+                              ...current,
+                              autoPrint: event.target.value === "yes",
+                            }))
+                          }
+                        >
+                          <option value="yes">On</option>
+                          <option value="no">Off</option>
+                        </select>
+                      </label>
+
+                      <label>
+                        Cut paper
+                        <select
+                          value={printerDraft.cutPaper ? "yes" : "no"}
+                          disabled={
+                            !canManageSettings ||
+                            isSavingPrinter ||
+                            printerDraft.connectionType === "system"
+                          }
+                          onChange={(event) =>
+                            setPrinterDraft((current) => ({
+                              ...current,
+                              cutPaper: event.target.value === "yes",
+                            }))
+                          }
+                        >
+                          <option value="no">Off</option>
+                          <option value="yes">On</option>
+                        </select>
+                      </label>
+
+                      {printerDraft.connectionType === "bluetooth" && (
+                        <div className="full pos-printer-actions-inline">
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={printerSettingsAction === "bluetooth"}
+                            onClick={() => {
+                              setPrinterSettingsAction("bluetooth");
+                              setPrinterSettingsError("");
+                              void onOpenBluetoothSettings().catch(
+                                (printerError) => {
+                                  setPrinterSettingsError(
+                                    getApiErrorMessage(
+                                      printerError,
+                                      "Failed to open Android Bluetooth settings.",
+                                    ),
+                                  );
+                                },
+                              ).finally(() => {
+                                setPrinterSettingsAction("");
+                              });
+                            }}
+                          >
+                            {printerSettingsAction === "bluetooth"
+                              ? "Opening Bluetooth settings..."
+                              : "Add Bluetooth Printer"}
+                          </button>
+
+                          {bluetoothPermissionDenied && (
+                            <button
+                              type="button"
+                              className="secondary"
+                              disabled={printerSettingsAction === "app"}
+                              onClick={() => {
+                                setPrinterSettingsAction("app");
+                                setPrinterSettingsError("");
+                                void onOpenAppSettings().catch(
+                                  (printerError) => {
+                                    setPrinterSettingsError(
+                                      getApiErrorMessage(
+                                        printerError,
+                                        "Failed to open app settings.",
+                                      ),
+                                    );
+                                  },
+                                ).finally(() => {
+                                  setPrinterSettingsAction("");
+                                });
+                              }}
+                            >
+                              {printerSettingsAction === "app"
+                                ? "Opening app settings..."
+                                : "Open App Settings"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {printerDraft.connectionType === "usb" && (
+                        <div className="full pos-printer-actions-inline">
+                          {selectedUsbPrinter &&
+                            !selectedUsbPrinter.supported && (
+                              <button
+                                type="button"
+                                className="secondary"
+                                disabled={!canManageSettings || isSavingPrinter}
+                                onClick={systemPrinterFallbackDraft}
+                              >
+                                Use System Printer
+                              </button>
+                            )}
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={printerSettingsAction === "print"}
+                            onClick={() => {
+                              setPrinterSettingsAction("print");
+                              setPrinterSettingsError("");
+                              void onOpenPrintSettings().catch(
+                                (printerError) => {
+                                  setPrinterSettingsError(
+                                    getApiErrorMessage(
+                                      printerError,
+                                      "Failed to open Android print settings.",
+                                    ),
+                                  );
+                                },
+                              ).finally(() => {
+                                setPrinterSettingsAction("");
+                              });
+                            }}
+                          >
+                            {printerSettingsAction === "print"
+                              ? "Opening print settings..."
+                              : "Open Android Print Settings"}
+                          </button>
+                        </div>
+                      )}
+
+                      {printerDraft.connectionType === "system" && (
+                        <div className="full pos-printer-actions-inline">
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={printerSettingsAction === "print"}
+                            onClick={() => {
+                              setPrinterSettingsAction("print");
+                              setPrinterSettingsError("");
+                              void onOpenPrintSettings().catch(
+                                (printerError) => {
+                                  setPrinterSettingsError(
+                                    getApiErrorMessage(
+                                      printerError,
+                                      "Failed to open Android print settings.",
+                                    ),
+                                  );
+                                },
+                              ).finally(() => {
+                                setPrinterSettingsAction("");
+                              });
+                            }}
+                          >
+                            {printerSettingsAction === "print"
+                              ? "Opening print settings..."
+                              : "Open Android Print Settings"}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="pos-module-form-actions">
+                        <button
+                          type="button"
+                          disabled={!canSavePrinter}
+                          onClick={() => {
+                            void handleSavePrinter();
+                          }}
+                        >
+                          Save printer
+                        </button>
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={!canTestPrint}
+                          onClick={() => {
+                            void onTestPrint(printerDraft).catch(
+                              (printerError) => {
+                                setError(
+                                  getApiErrorMessage(
+                                    printerError,
+                                    "Test print failed.",
+                                  ),
+                                );
+                              },
+                            );
+                          }}
+                        >
+                          {isTestingPrinter ? "Sending..." : "Test Print"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : activeSettingsPage === "business" ? (
+                  <SettingsCard
+                    title="Business"
+                    rows={[
+                      ["Business name", settings?.name || "—"],
+                      ["Owner", settings?.owner_name || "—"],
+                      ["Business type", settings?.business_type || "—"],
+                      ["Country", settings?.country || "—"],
+                      ["Phone", settings?.phone || "—"],
+                      [
+                        "Email",
+                        settings?.contact_email ||
+                          settings?.owner_email ||
+                          "—",
+                      ],
+                      ["Address", settings?.address || "—"],
+                    ]}
+                  />
+                ) : activeSettingsPage === "tax" ? (
+                  <SettingsCard
+                    title="Tax & Currency"
+                    rows={[
+                      ["Currency", settings?.currency_code || "—"],
+                      ["Symbol", settings?.currency_symbol || "—"],
+                      [
+                        "Decimal places",
+                        String(settings?.decimal_places ?? 2),
+                      ],
+                      ["Tax name", settings?.tax_name || "—"],
+                      ["Tax rate", `${Number(settings?.tax_rate || 0)}%`],
+                      [
+                        "Tax inclusive",
+                        settings?.tax_inclusive ? "Yes" : "No",
+                      ],
+                    ]}
+                  />
+                ) : (
+                  <SettingsCard
+                    title="Receipt & Payments"
+                    rows={[
+                      ["Paper size", settings?.paper_size || "—"],
+                      [
+                        "Business auto print",
+                        settings?.auto_print ? "Enabled" : "Disabled",
+                      ],
+                      [
+                        "Payment methods",
+                        settings?.payment_methods
+                          ?.join(", ")
+                          .toUpperCase() || "—",
+                      ],
+                      ["Receipt header", settings?.receipt_header || "—"],
+                      ["Receipt footer", settings?.receipt_footer || "—"],
+                    ]}
+                  />
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </section>
@@ -589,9 +2419,7 @@ function ReportCard({
   warning?: boolean;
 }) {
   return (
-    <article
-      className={`pos-report-card${warning ? " warning" : ""}`}
-    >
+    <article className={`pos-report-card${warning ? " warning" : ""}`}>
       <span>{title}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
@@ -607,7 +2435,7 @@ function SettingsCard({
   rows: Array<[string, string]>;
 }) {
   return (
-    <article className="pos-module-card">
+    <section>
       <h2>{title}</h2>
 
       <dl className="pos-settings-list">
@@ -618,6 +2446,6 @@ function SettingsCard({
           </div>
         ))}
       </dl>
-    </article>
+    </section>
   );
 }

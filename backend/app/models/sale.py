@@ -2,8 +2,8 @@ from sqlalchemy import Boolean
 from sqlalchemy import ForeignKey
 import uuid
 
-from sqlalchemy import Column, String, Numeric, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Numeric, DateTime, Integer, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.db.base import Base
 
@@ -29,6 +29,13 @@ class Sale(Base):
         nullable=True,
     )
 
+    original_sale_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sales.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
 
 
     shop_id = Column(
@@ -45,6 +52,13 @@ class Sale(Base):
         index=True,
     )
 
+    device_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
 
     employee_id = Column(
         UUID(as_uuid=True),
@@ -55,6 +69,31 @@ class Sale(Base):
 
     cashier_name = Column(
         String(160),
+        nullable=True,
+    )
+
+    shop_name_snapshot = Column(
+        String(160),
+        nullable=True,
+    )
+    shop_address_snapshot = Column(
+        JSONB,
+        nullable=True,
+    )
+    branch_name_snapshot = Column(
+        String(160),
+        nullable=True,
+    )
+    pos_name_snapshot = Column(
+        String(160),
+        nullable=True,
+    )
+    pos_number_snapshot = Column(
+        String(40),
+        nullable=True,
+    )
+    receipt_footer_snapshot = Column(
+        String,
         nullable=True,
     )
 
@@ -109,6 +148,10 @@ class Sale(Base):
 
     payment_method = Column(String(40), nullable=False, default="cash")
     status = Column(String(40), nullable=False, default="completed")
+    refund_reason = Column(String(500), nullable=True)
+    refund_method = Column(String(40), nullable=True)
+    reprint_count = Column(Integer, nullable=False, default=0, server_default="0")
+    last_reprinted_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

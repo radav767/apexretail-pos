@@ -3,6 +3,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import (
+    AuthActor,
+    require_billable_body_company,
+    require_body_permission,
+)
 from app.db.session import get_db
 from app.inventory.branch_repository import (
     BranchInventoryRepository,
@@ -38,6 +43,12 @@ def get_service(
 async def create_inventory_branch(
     data: BranchCreate,
     service: BranchInventoryService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_body_permission("manage_inventory")
+    ),
+    _entitlement: None = Depends(
+        require_billable_body_company
+    ),
 ):
     return await service.create_branch(data)
 

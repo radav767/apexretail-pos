@@ -11,3 +11,12 @@ from app.models.sale_item import SaleItem
 from app.models.inventory_movement import InventoryMovement
 from app.models.inventory_balance import InventoryBalance
 from app.models.company_settings import CompanySetting
+from app.models.product_creation_request import ProductCreationRequest
+from app.models.device_activation_attempt import DeviceActivationAttempt
+from app.models.company_subscription import CompanySubscription
+from app.models.company_subscription_history import CompanySubscriptionHistory
+from app.models.subscription_webhook_event import SubscriptionWebhookEvent
+from app.models.subscription_checkout_session import SubscriptionCheckoutSession
+from app.models.audit_event import AuditEvent
+from app.models.pos_session import PosSession
+from app.models.employee_shop_access import EmployeeShopAccess

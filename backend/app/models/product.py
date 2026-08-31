@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, Numeric, Integer, ForeignKey
+from sqlalchemy import Column, String, Boolean, Numeric, Integer, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
@@ -17,5 +17,7 @@ class Product(Base):
     selling_price = Column(Numeric(12, 2), default=0)
     stock_qty = Column(Numeric(12, 3), default=0)
     reorder_level = Column(Numeric(12, 3), default=0)
+    create_request_key = Column(String(120), nullable=True)
     active = Column(Boolean, default=True)
     deleted = Column(Boolean, default=False)
+    archived_at = Column(DateTime(timezone=True), nullable=True)

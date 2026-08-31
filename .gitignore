@@ -1,6 +1,12 @@
 venv/
 __pycache__/
 .env
+.env.*
 *.pyc
 node_modules/
 dist/
+backend/secrets/
+backups/
+*.dump
+*.apk
+*.tar.gz

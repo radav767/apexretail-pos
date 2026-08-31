@@ -60,3 +60,77 @@ class CompanySettingsOut(BaseModel):
     paper_size: str
     auto_print: bool
     payment_methods: list[str]
+
+
+class CompanyProfileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    company_id: UUID
+    name: str
+    owner_name: str | None
+    owner_email: str
+    business_type: str
+    country: str | None
+    phone: str | None
+    contact_email: str | None
+
+
+class CompanyProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    owner_name: str | None = Field(default=None, max_length=160)
+    business_type: str | None = Field(default=None, min_length=1, max_length=120)
+    country: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=80)
+    contact_email: str | None = Field(default=None, max_length=255)
+
+
+class ReceiptSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    company_id: UUID
+    receipt_header: str | None
+    receipt_footer: str | None
+    paper_size: str
+    auto_print: bool
+    tax_name: str
+    tax_rate: Decimal
+    tax_inclusive: bool
+    payment_methods: list[str]
+
+
+class ReceiptSettingsUpdate(BaseModel):
+    receipt_header: str | None = Field(default=None, max_length=2000)
+    receipt_footer: str | None = Field(default=None, max_length=2000)
+    paper_size: Literal["58mm", "80mm"] | None = None
+    auto_print: bool | None = None
+    tax_name: str | None = Field(default=None, min_length=1, max_length=40)
+    tax_rate: Decimal | None = Field(default=None, ge=0, le=100)
+    tax_inclusive: bool | None = None
+    payment_methods: list[str] | None = None
+
+
+class ShopSettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    company_id: UUID
+    name: str
+    address_line_1: str | None
+    address_line_2: str | None
+    city: str | None
+    state_province: str | None
+    country: str | None
+    phone: str | None
+    tax_vat_number: str | None
+    active: bool
+
+
+class ShopSettingsUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    address_line_1: str | None = Field(default=None, max_length=255)
+    address_line_2: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=120)
+    state_province: str | None = Field(default=None, max_length=120)
+    country: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=80)
+    tax_vat_number: str | None = Field(default=None, max_length=120)

@@ -1,9 +1,11 @@
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
 from app.models.category import Category
 from app.models.product import Product
+from app.models.audit_event import AuditEvent
 from app.products.repository import ProductRepository
 from app.products.schema import (
     CategoryCreate,
@@ -86,11 +88,25 @@ class ProductService:
 
     async def create_product(self, data: ProductCreate):
         values = data.model_dump()
+        branch_id = values.pop("branch_id", None)
+        opening_quantity = values.pop("stock_qty")
+        create_request_key = self._clean_optional(
+            values.pop("create_request_key", None)
+        )
 
         values["name"] = values["name"].strip()
         values["unit"] = values["unit"].strip().lower() or "each"
         values["sku"] = self._clean_optional(values.get("sku"))
         values["barcode"] = self._clean_optional(values.get("barcode"))
+
+        if create_request_key:
+            existing = await self.repo.get_by_create_request_key(
+                data.company_id,
+                create_request_key,
+            )
+
+            if existing:
+                return existing
 
         await self._validate_category(
             data.company_id,
@@ -109,13 +125,38 @@ class ProductService:
                 "Another product already uses this SKU or barcode",
             )
 
+        if branch_id is not None or opening_quantity > 0:
+            branch = await self.repo.resolve_branch(
+                data.company_id,
+                branch_id,
+            )
+            branch_id = branch.id
+
         product = Product(
             **values,
+            create_request_key=create_request_key,
+            stock_qty=0,
             active=True,
             deleted=False,
         )
 
-        return await self.repo.create_product(product)
+        try:
+            return await self.repo.create_product(
+                product,
+                opening_quantity=opening_quantity,
+                branch_id=branch_id,
+            )
+        except IntegrityError:
+            if create_request_key:
+                existing = await self.repo.get_by_create_request_key(
+                    data.company_id,
+                    create_request_key,
+                )
+
+                if existing:
+                    return existing
+
+            raise
 
     async def list_products(self, company_id: UUID):
         return await self.repo.list_products(company_id)
@@ -132,6 +173,9 @@ class ProductService:
             raise HTTPException(404, "Product not found")
 
         changes = data.model_dump(exclude_unset=True)
+
+        if "stock_qty" in changes:
+            changes.pop("stock_qty")
 
         if "name" in changes:
             changes["name"] = changes["name"].strip()
@@ -175,18 +219,27 @@ class ProductService:
         self,
         company_id: UUID,
         product_id: UUID,
+        actor=None,
     ):
         product = await self.repo.get_product(company_id, product_id)
 
         if not product:
             raise HTTPException(404, "Product not found")
 
+        before = {"active": bool(product.active), "deleted": bool(product.deleted), "archived_at": str(product.archived_at) if product.archived_at else None}
+        self.repo.db.add(AuditEvent(company_id=company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, action="product_archive", reason="Product archived", details={"record_id": str(product.id), "before": before, "after": {"active": False, "deleted": False}}))
         await self.repo.delete_product(product)
 
         return {
             "ok": True,
             "message": "Product deleted",
         }
+
+    async def archive_product(self, company_id: UUID, product_id: UUID, actor=None):
+        product = await self.repo.get_product(company_id, product_id)
+        if not product:
+            raise HTTPException(404, "Product not found")
+        return await self.delete_product(company_id, product_id, actor=actor)
 
     async def _validate_category(
         self,

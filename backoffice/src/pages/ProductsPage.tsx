@@ -24,7 +24,16 @@ type Product = {
   active: boolean;
 };
 
+type Branch = {
+  id: string;
+  shop_id: string;
+  shop_name: string;
+  name: string;
+};
+
 type ProductForm = {
+  branch_id: string;
+  create_request_key: string;
   name: string;
   category_id: string;
   sku: string;
@@ -37,6 +46,8 @@ type ProductForm = {
 };
 
 const emptyForm: ProductForm = {
+  branch_id: "",
+  create_request_key: "",
   name: "",
   category_id: "",
   sku: "",
@@ -57,6 +68,7 @@ export default function ProductsPage({
 }) {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
 
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [editingProductId, setEditingProductId] = useState<string | null>(
@@ -96,13 +108,26 @@ export default function ProductsPage({
       setLoading(true);
       setMessage("");
 
-      const [productsResponse, categoriesResponse] = await Promise.all([
+      const [
+        productsResponse,
+        categoriesResponse,
+        branchesResponse,
+      ] = await Promise.all([
         api.get(`/products/${companyId}`),
         api.get(`/products/categories/${companyId}`),
+        api.get(`/inventory/branches/${companyId}`),
       ]);
 
       setProducts(productsResponse.data);
       setCategories(categoriesResponse.data);
+      setBranches(branchesResponse.data);
+      setForm((current) => ({
+        ...current,
+        branch_id:
+          current.branch_id ||
+          branchesResponse.data[0]?.id ||
+          "",
+      }));
     } catch (error: any) {
       setMessage(
         error.response?.data?.detail ||
@@ -121,7 +146,10 @@ export default function ProductsPage({
   }
 
   function resetProductForm() {
-    setForm(emptyForm);
+    setForm((current) => ({
+      ...emptyForm,
+      branch_id: current.branch_id || branches[0]?.id || "",
+    }));
     setEditingProductId(null);
   }
 
@@ -130,6 +158,8 @@ export default function ProductsPage({
 
     setForm({
       name: product.name,
+      branch_id: form.branch_id || branches[0]?.id || "",
+      create_request_key: "",
       category_id: product.category_id || "",
       sku: product.sku || "",
       barcode: product.barcode || "",
@@ -152,6 +182,11 @@ export default function ProductsPage({
       return;
     }
 
+    if (!editingProductId && !form.branch_id) {
+      setMessage("Select the branch for opening stock");
+      return;
+    }
+
     try {
       setLoading(true);
       setMessage("");
@@ -164,7 +199,6 @@ export default function ProductsPage({
         unit: form.unit,
         cost_price: form.cost_price || "0",
         selling_price: form.selling_price || "0",
-        stock_qty: form.stock_qty || "0",
         reorder_level: form.reorder_level || "0",
       };
 
@@ -176,9 +210,26 @@ export default function ProductsPage({
 
         setMessage("Product updated successfully");
       } else {
+        const createRequestKey =
+          form.create_request_key ||
+          globalThis.crypto?.randomUUID?.() ||
+          `product-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2)}`;
+
+        if (createRequestKey !== form.create_request_key) {
+          updateForm(
+            "create_request_key",
+            createRequestKey,
+          );
+        }
+
         await api.post("/products", {
           company_id: companyId,
+          branch_id: form.branch_id || null,
+          create_request_key: createRequestKey,
           ...payload,
+          stock_qty: form.stock_qty || "0",
         });
 
         setMessage("Product created successfully");
@@ -350,6 +401,25 @@ export default function ProductsPage({
 
           <div className="product-form">
             <label>
+              Opening stock branch
+              <select
+                value={form.branch_id}
+                onChange={(event) =>
+                  updateForm("branch_id", event.target.value)
+                }
+                disabled={Boolean(editingProductId)}
+              >
+                <option value="">Select branch</option>
+
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.shop_name} — {branch.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
               Product name
               <input
                 value={form.name}
@@ -406,7 +476,7 @@ export default function ProductsPage({
             </label>
 
             <label>
-              Unit
+              Sold by
               <select
                 value={form.unit}
                 onChange={(event) =>
@@ -415,6 +485,8 @@ export default function ProductsPage({
               >
                 <option value="each">Each</option>
                 <option value="kg">Kilogram</option>
+                <option value="litre">Litre</option>
+                <option value="ml">Millilitre</option>
                 <option value="g">Gram</option>
               </select>
             </label>
@@ -443,6 +515,11 @@ export default function ProductsPage({
                   updateForm("selling_price", event.target.value)
                 }
               />
+              <small>
+                {form.unit === "kg"
+                  ? "For kg items, this is the price per kilogram."
+                  : "Selling price per unit."}
+              </small>
             </label>
 
             <label>
@@ -450,12 +527,18 @@ export default function ProductsPage({
               <input
                 type="number"
                 min="0"
-                step="0.001"
+                step={form.unit === "each" ? "1" : "0.001"}
                 value={form.stock_qty}
+                disabled={Boolean(editingProductId)}
                 onChange={(event) =>
                   updateForm("stock_qty", event.target.value)
                 }
               />
+              {editingProductId && (
+                <small>
+                  Use Inventory Management to change stock quantities.
+                </small>
+              )}
             </label>
 
             <label>
@@ -463,7 +546,7 @@ export default function ProductsPage({
               <input
                 type="number"
                 min="0"
-                step="0.001"
+                step={form.unit === "each" ? "1" : "0.001"}
                 value={form.reorder_level}
                 onChange={(event) =>
                   updateForm("reorder_level", event.target.value)
@@ -673,7 +756,7 @@ export default function ProductsPage({
                             void deleteProduct(product)
                           }
                         >
-                          Delete
+                          Archive
                         </button>
                       </div>
                     </td>

@@ -3,6 +3,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import (
+    AuthActor,
+    require_billable_body_company,
+    require_billable_path_company,
+    require_body_permission,
+    require_path_permission,
+)
 from app.db.session import get_db
 from app.products.repository import ProductRepository
 from app.products.schema import (
@@ -27,6 +34,12 @@ def get_service(db: AsyncSession = Depends(get_db)):
 async def create_category(
     data: CategoryCreate,
     service: ProductService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_body_permission("manage_products")
+    ),
+    _entitlement: None = Depends(
+        require_billable_body_company
+    ),
 ):
     return await service.create_category(data)
 
@@ -51,6 +64,12 @@ async def update_category(
     category_id: UUID,
     data: CategoryUpdate,
     service: ProductService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_path_permission("manage_products")
+    ),
+    _entitlement: None = Depends(
+        require_billable_path_company
+    ),
 ):
     return await service.update_category(
         company_id,
@@ -64,6 +83,12 @@ async def delete_category(
     company_id: UUID,
     category_id: UUID,
     service: ProductService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_path_permission("manage_products")
+    ),
+    _entitlement: None = Depends(
+        require_billable_path_company
+    ),
 ):
     return await service.delete_category(company_id, category_id)
 
@@ -72,6 +97,9 @@ async def delete_category(
 async def create_product(
     data: ProductCreate,
     service: ProductService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_body_permission("manage_products")
+    ),
 ):
     return await service.create_product(data)
 
@@ -93,6 +121,9 @@ async def update_product(
     product_id: UUID,
     data: ProductUpdate,
     service: ProductService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_path_permission("manage_products")
+    ),
 ):
     return await service.update_product(
         company_id,
@@ -106,5 +137,12 @@ async def delete_product(
     company_id: UUID,
     product_id: UUID,
     service: ProductService = Depends(get_service),
+    _actor: AuthActor = Depends(
+        require_path_permission("manage_products")
+    ),
 ):
-    return await service.delete_product(company_id, product_id)
+    return await service.delete_product(company_id, product_id, actor=_actor)
+
+@router.post("/{company_id}/{product_id}/archive", response_model=ProductOut)
+async def archive_product(company_id: UUID, product_id: UUID, service: ProductService = Depends(get_service), _actor: AuthActor = Depends(require_path_permission("manage_products"))):
+    return await service.archive_product(company_id, product_id, actor=_actor)

@@ -158,6 +158,21 @@ textarea:focus-visible {
     inset 0 1px rgba(255, 255, 255, 0.28);
 }
 
+.sidebar-header {
+  display: block;
+}
+
+.mobile-menu-toggle {
+  display: none;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.16);
+  color: white;
+  font-weight: 800;
+}
+
 .sidebar nav {
   display: grid !important;
   grid-template-columns: 1fr !important;
@@ -244,6 +259,14 @@ textarea:focus-visible {
 
 .sidebar nav button.active::before {
   color: white;
+}
+
+.logout-nav-button {
+  display: none !important;
+}
+
+.logout-nav-button::before {
+  content: "↩";
 }
 
 .logout-button {
@@ -583,6 +606,13 @@ textarea:focus-visible {
     overflow: visible;
   }
 
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   .sidebar-brand {
     min-height: 50px;
     margin-bottom: 12px;
@@ -594,20 +624,31 @@ textarea:focus-visible {
     border-radius: 12px !important;
   }
 
+  .mobile-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
   .sidebar nav {
-    display: flex !important;
+    display: none !important;
+    grid-template-columns: 1fr !important;
     gap: 8px !important;
-    overflow-x: auto;
-    padding-bottom: 5px;
-    scrollbar-width: thin;
+    width: 100%;
+    padding-top: 4px;
+  }
+
+  .sidebar nav.mobile-open {
+    display: grid !important;
   }
 
   .sidebar nav button {
-    flex: 0 0 auto;
-    width: auto;
+    flex: initial;
+    width: 100%;
     min-height: 42px;
     padding: 9px 13px !important;
-    white-space: nowrap;
+    white-space: normal;
   }
 
   .sidebar nav button::before {
@@ -617,6 +658,10 @@ textarea:focus-visible {
 
   .logout-button {
     display: none;
+  }
+
+  .logout-nav-button {
+    display: flex !important;
   }
 
   .content {
@@ -631,12 +676,20 @@ textarea:focus-visible {
 
 @media (max-width: 640px) {
   .sidebar-brand {
-    margin-bottom: 9px;
+    margin-bottom: 0;
   }
 
   .sidebar-brand p,
   .sidebar-brand span {
     display: none;
+  }
+
+  .sidebar-header {
+    align-items: center;
+  }
+
+  .mobile-menu-toggle {
+    min-width: 84px;
   }
 
   .content {

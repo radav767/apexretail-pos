@@ -11,6 +11,11 @@ class GRNCreate(BaseModel):
     branch_id: UUID | None = None
     product_id: UUID
     quantity: Decimal = Field(gt=0)
+    reason: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=160,
+    )
     unit_cost: Decimal | None = Field(default=None, ge=0)
     reference: str | None = Field(default=None, max_length=80)
     supplier: str | None = Field(default=None, max_length=160)

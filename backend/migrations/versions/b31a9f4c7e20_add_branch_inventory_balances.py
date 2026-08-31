@@ -6,7 +6,7 @@ Revises: 126d0a13fddb
 
 import uuid
 
-from alembic import op
+from alembic import op, context
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
@@ -132,6 +132,12 @@ def upgrade():
     )
 
     connection = op.get_bind()
+
+    # Alembic offline mode has no bind/result set. Schema DDL is emitted
+    # above; the idempotent legacy data backfill is intentionally deferred to
+    # the corrective online migration that follows this revision.
+    if context.is_offline_mode() or connection is None:
+        return
 
     companies = connection.execute(
         sa.text(

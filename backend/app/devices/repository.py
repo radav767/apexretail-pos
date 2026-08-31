@@ -1,10 +1,15 @@
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.branch import Branch
 from app.models.device import Device
+from app.models.device_activation_attempt import (
+    DeviceActivationAttempt,
+)
 from app.models.shop import Shop
 
 
@@ -20,11 +25,30 @@ class DeviceRepository:
                 Device.shop_id,
                 Device.branch_id,
                 Shop.name.label("shop_name"),
+                Shop.address_line_1.label("shop_address_line_1"),
+                Shop.address_line_2.label("shop_address_line_2"),
+                Shop.city.label("shop_city"),
+                Shop.state_province.label("shop_state_province"),
+                Shop.country.label("shop_country"),
+                Shop.phone.label("shop_phone"),
+                Shop.tax_vat_number.label("shop_tax_vat_number"),
                 Branch.name.label("branch_name"),
                 Device.name,
+                Device.friendly_name,
+                Device.pos_number,
                 Device.device_key,
                 Device.platform,
                 Device.app_version,
+                Device.last_seen_at,
+                Device.last_seen_platform,
+                Device.last_seen_app_version,
+                Device.status,
+                Device.claimed_at,
+                Device.deactivated_at,
+                Device.deactivation_reason,
+                Device.removed_at,
+                Device.pending_shop_id,
+                Device.pending_branch_id,
                 Device.active,
             )
             .outerjoin(Shop, Shop.id == Device.shop_id)
@@ -46,6 +70,23 @@ class DeviceRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_by_global_key(
+        self,
+        device_key: str,
+        *,
+        for_update: bool = False,
+    ):
+        statement = select(Device).where(
+            Device.device_key == device_key,
+            Device.deleted == False,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none()
+
     async def get_by_id(
         self,
         company_id: UUID,
@@ -59,6 +100,119 @@ class DeviceRepository:
             )
         )
 
+        return result.scalar_one_or_none()
+
+    async def get_by_fingerprint(
+        self,
+        company_id: UUID,
+        device_fingerprint: str,
+    ):
+        result = await self.db.execute(
+            select(Device).where(
+                Device.company_id == company_id,
+                Device.device_fingerprint == device_fingerprint,
+                Device.deleted == False,
+            )
+        )
+
+        return result.scalar_one_or_none()
+
+    async def get_pending_activation(
+        self,
+        company_id: UUID,
+        activation_code_hash: str,
+        now: datetime,
+        *,
+        for_update: bool = False,
+    ):
+        statement = select(Device).where(
+            Device.company_id == company_id,
+            Device.activation_code_hash == activation_code_hash,
+            Device.activation_code_expires_at.is_not(None),
+            Device.activation_code_expires_at >= now,
+            Device.deleted == False,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+
+        result = await self.db.execute(statement)
+
+        return result.scalar_one_or_none()
+
+    async def get_activation_attempt(
+        self,
+        company_id: UUID,
+        device_fingerprint: str,
+        *,
+        for_update: bool = False,
+    ):
+        statement = select(DeviceActivationAttempt).where(
+            DeviceActivationAttempt.company_id == company_id,
+            DeviceActivationAttempt.device_fingerprint
+            == device_fingerprint,
+            DeviceActivationAttempt.deleted == False,
+        )
+        if for_update:
+            statement = statement.with_for_update()
+
+        result = await self.db.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def ensure_activation_attempt(
+        self,
+        company_id: UUID,
+        device_fingerprint: str,
+    ):
+        await self.db.execute(
+            insert(DeviceActivationAttempt)
+            .values(
+                company_id=company_id,
+                device_fingerprint=device_fingerprint,
+                failed_attempts=0,
+                active=True,
+                deleted=False,
+            )
+            .on_conflict_do_nothing(
+                constraint=(
+                    "uq_device_activation_attempts_company_fingerprint"
+                )
+            )
+        )
+
+    async def delete_activation_attempt(
+        self,
+        company_id: UUID,
+        device_fingerprint: str,
+    ):
+        await self.db.execute(
+            delete(DeviceActivationAttempt).where(
+                DeviceActivationAttempt.company_id == company_id,
+                DeviceActivationAttempt.device_fingerprint
+                == device_fingerprint,
+            )
+        )
+
+    async def find_branch_pos_number_device(
+        self,
+        company_id: UUID,
+        branch_id: UUID,
+        pos_number: int,
+        *,
+        exclude_device_id: UUID | None = None,
+    ):
+        statement = select(Device).where(
+            Device.company_id == company_id,
+            Device.branch_id == branch_id,
+            Device.pos_number == pos_number,
+            Device.removed_at.is_(None),
+            Device.deleted == False,
+        )
+        if exclude_device_id is not None:
+            statement = statement.where(
+                Device.id != exclude_device_id
+            )
+
+        result = await self.db.execute(statement)
         return result.scalar_one_or_none()
 
     async def get_view(
@@ -128,8 +282,19 @@ class DeviceRepository:
         branch_id: UUID,
         device_key: str,
         name: str,
+        friendly_name: str | None,
+        pos_number: int | None,
         platform: str,
         app_version: str,
+        status: str = "active",
+        active: bool = True,
+        claimed_at: datetime | None = None,
+        activation_code_hash: str | None = None,
+        activation_code_expires_at: datetime | None = None,
+        device_fingerprint: str | None = None,
+        pending_shop_id: UUID | None = None,
+        pending_branch_id: UUID | None = None,
+        last_seen_at: datetime | None = None,
     ):
         try:
             device = Device(
@@ -138,9 +303,21 @@ class DeviceRepository:
                 branch_id=branch_id,
                 device_key=device_key,
                 name=name,
+                friendly_name=friendly_name,
+                pos_number=pos_number,
                 platform=platform,
                 app_version=app_version,
-                active=True,
+                last_seen_at=last_seen_at,
+                last_seen_platform=platform if last_seen_at else None,
+                last_seen_app_version=app_version if last_seen_at else None,
+                status=status,
+                claimed_at=claimed_at,
+                activation_code_hash=activation_code_hash,
+                activation_code_expires_at=activation_code_expires_at,
+                device_fingerprint=device_fingerprint,
+                pending_shop_id=pending_shop_id,
+                pending_branch_id=pending_branch_id,
+                active=active,
                 deleted=False,
             )
 
@@ -158,14 +335,22 @@ class DeviceRepository:
         device: Device,
         *,
         name: str,
+        device_fingerprint: str | None,
         platform: str,
         app_version: str,
+        last_seen_at: datetime,
     ):
         try:
             device.name = name
+            device.friendly_name = device.friendly_name or name
             device.platform = platform
             device.app_version = app_version
-            device.active = True
+            device.device_fingerprint = (
+                device_fingerprint or device.device_fingerprint
+            )
+            device.last_seen_at = last_seen_at
+            device.last_seen_platform = platform
+            device.last_seen_app_version = app_version
 
             self.db.add(device)
             await self.db.commit()
@@ -180,10 +365,14 @@ class DeviceRepository:
         self,
         device: Device,
         *,
+        friendly_name: str | None,
+        pos_number: int | None,
         shop_id: UUID,
         branch_id: UUID,
     ):
         try:
+            device.friendly_name = friendly_name
+            device.pos_number = pos_number
             device.shop_id = shop_id
             device.branch_id = branch_id
 
@@ -195,3 +384,18 @@ class DeviceRepository:
         except Exception:
             await self.db.rollback()
             raise
+
+    async def save(self, device: Device):
+        try:
+            self.db.add(device)
+            await self.db.commit()
+            await self.db.refresh(device)
+            return device
+        except Exception:
+            await self.db.rollback()
+            raise
+
+    async def flush(self, device: Device | None = None):
+        if device is not None:
+            self.db.add(device)
+        await self.db.flush()
