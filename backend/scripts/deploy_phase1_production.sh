@@ -2,7 +2,6 @@
 # Guarded Phase 1 production deployment. This script intentionally performs no
 # automatic database restore or Alembic downgrade on failure.
 set -Eeuo pipefail
-umask 077
 
 readonly REPO_DIR="/root/apexretail-pos"
 readonly BACKEND_DIR="${REPO_DIR}/backend"
@@ -33,6 +32,7 @@ evidence_file=""
 pos_asset_backup=""
 backoffice_asset_backup=""
 published_apk=""
+public_check_temp=""
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -57,6 +57,9 @@ recovery_instructions() {
   [[ -n "$published_apk" ]] && echo "Published APK (do not overwrite the prior APK): ${published_apk}" >&2
   if [[ -n "$backup_preflight_file" ]]; then
     rm -f -- "$backup_preflight_file"
+  fi
+  if [[ -n "$public_check_temp" ]]; then
+    rm -f -- "$public_check_temp"
   fi
   if [[ "$service_initially_active" -eq 1 && "$backend_recovery_required" -eq 1 ]]; then
     echo "Recovery: attempting to restart the initially active ${SERVICE_NAME} backend." >&2
@@ -190,6 +193,85 @@ wait_for_backend_health() {
   done
   echo "Health check failed after 60 seconds: ${url}" >&2
   return 1
+}
+
+create_database_dump() {
+  local destination="$1"
+  (
+    umask 077
+    cd /tmp
+    sudo -u postgres pg_dump --format=custom --no-owner "$PRODUCTION_DB" >"$destination"
+  )
+}
+
+publish_web_assets() {
+  # Public permissions are scoped only to the two Nginx document roots. The
+  # downloads exclusion prevents deletion or replacement of retained APKs.
+  rsync --archive --delete --delay-updates --chmod=D755,F644 \
+    "${POS_DIR}/dist/" "${POS_WEB_ROOT}/"
+  rsync --archive --delete --delay-updates --chmod=D755,F644 --exclude='/downloads/***' \
+    "${BACKOFFICE_DIR}/dist/" "${BACKOFFICE_WEB_ROOT}/"
+  chmod 755 "$POS_WEB_ROOT" "$BACKOFFICE_WEB_ROOT" "$DOWNLOADS_DIR"
+  [[ -d "$DOWNLOADS_DIR" ]] || fail "Backoffice downloads directory was not preserved"
+}
+
+verify_public_asset_tree() {
+  local root="$1" label="$2" index_file js_file css_file bad_path
+  index_file="${root}/index.html"
+  js_file="$(find "$root" -path "$DOWNLOADS_DIR" -prune -o -type f -name '*.js' -print -quit)"
+  css_file="$(find "$root" -path "$DOWNLOADS_DIR" -prune -o -type f -name '*.css' -print -quit)"
+  [[ -f "$index_file" && "$(stat -c '%a' "$index_file")" == 644 ]] || fail "${label} index.html is not mode 644"
+  [[ -n "$js_file" && "$(stat -c '%a' "$js_file")" == 644 ]] || fail "${label} generated JavaScript is missing or not mode 644"
+  [[ -n "$css_file" && "$(stat -c '%a' "$css_file")" == 644 ]] || fail "${label} generated CSS is missing or not mode 644"
+  bad_path="$(find "$root" -path "$DOWNLOADS_DIR" -prune -o -type d ! -perm 0755 -print -quit)"
+  [[ -z "$bad_path" ]] || fail "${label} public directory is not mode 755: ${bad_path}"
+  bad_path="$(find "$root" -path "$DOWNLOADS_DIR" -prune -o -type f ! -perm 0644 -print -quit)"
+  [[ -z "$bad_path" ]] || fail "${label} public file is not mode 644: ${bad_path}"
+}
+
+verify_nginx_readable_assets() {
+  verify_public_asset_tree "$POS_WEB_ROOT" "POS"
+  verify_public_asset_tree "$BACKOFFICE_WEB_ROOT" "Backoffice"
+  [[ "$(stat -c '%a' "$DOWNLOADS_DIR")" == 755 ]] || fail "Backoffice downloads directory is not mode 755"
+  [[ -f "$published_apk" && "$(stat -c '%a' "$published_apk")" == 644 ]] || fail "published APK is missing or not mode 644"
+}
+
+wait_for_public_200() {
+  local url="$1" destination="$2" deadline http_code curl_status remaining curl_timeout
+  deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    : >"$destination"
+    remaining=$((deadline - SECONDS))
+    curl_timeout="$remaining"
+    (( curl_timeout > 10 )) && curl_timeout=10
+    if http_code="$(curl --location --silent --show-error --max-time "$curl_timeout" \
+      --output "$destination" --write-out '%{http_code}' "$url" 2>/dev/null)"; then
+      curl_status=0
+    else
+      curl_status=$?
+    fi
+    if [[ "$curl_status" -eq 0 && "$http_code" == 200 && -s "$destination" ]]; then
+      return 0
+    fi
+    if [[ "$http_code" != 200 ]]; then
+      echo "Public check pending: ${url} returned HTTP ${http_code:-000} (curl status ${curl_status})" >&2
+    else
+      echo "Public check pending: ${url} returned HTTP 200 with an empty body" >&2
+    fi
+    (( SECONDS < deadline )) && sleep 1
+  done
+  echo "Public check failed after 60 seconds: ${url}" >&2
+  return 1
+}
+
+verify_public_asset_urls() {
+  public_check_temp="$(mktemp /tmp/apexretail-phase1-public.XXXXXX)"
+  wait_for_public_200 "$PUBLIC_POS_URL" "$public_check_temp" || fail "public POS did not become ready"
+  wait_for_public_200 "$PUBLIC_BACKOFFICE_URL" "$public_check_temp" || fail "public Backoffice did not become ready"
+  wait_for_public_200 "$apk_url" "$public_check_temp" || fail "public APK did not become ready"
+  cmp --silent "$published_apk" "$public_check_temp" || fail "public APK bytes do not match the published file"
+  rm -f -- "$public_check_temp"
+  public_check_temp=""
 }
 
 inventory_state() {
@@ -331,29 +413,21 @@ if [[ "$deployment_mode" == "resume-assets" ]]; then
   rsync --archive --delete --exclude='/downloads/***' "${BACKOFFICE_WEB_ROOT}/" "${backoffice_asset_backup}/"
 
   echo "Publishing resumed POS and Backoffice web assets"
-  rsync --archive --delete --delay-updates "${POS_DIR}/dist/" "${POS_WEB_ROOT}/"
-  rsync --archive --delete --delay-updates --exclude='/downloads/***' \
-    "${BACKOFFICE_DIR}/dist/" "${BACKOFFICE_WEB_ROOT}/"
-  [[ -d "$DOWNLOADS_DIR" ]] || fail "Backoffice downloads directory was not preserved"
+  publish_web_assets
 
   apk_filename="apexretail-pos-phase1-v${android_version_name}-build${android_version_code}-${stamp}.apk"
   published_apk="${DOWNLOADS_DIR}/${apk_filename}"
   [[ ! -e "$published_apk" ]] || fail "versioned APK destination already exists"
   install -m 0644 "$apk_source" "$published_apk"
 
-  curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_POS_URL"
-  curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_BACKOFFICE_URL"
   apk_url="https://backoffice.apexpos.cloud/downloads/${apk_filename}"
-  remote_apk="$(mktemp /tmp/apexretail-phase1-resume-apk.XXXXXX)"
-  curl --fail --silent --show-error --max-time 180 --output "$remote_apk" "$apk_url"
-  cmp --silent "$published_apk" "$remote_apk" || fail "public APK bytes do not match the published file"
-  rm -f -- "$remote_apk"
+  verify_nginx_readable_assets
+  wait_for_backend_health "$LOCAL_HEALTH_URL" || fail "final local backend health failed"
+  wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "final public backend health failed"
+  verify_public_asset_urls
   apk_sha256="$(sha256sum "$published_apk" | awk '{print $1}')"
   echo "APK URL: ${apk_url}"
   echo "APK SHA-256: ${apk_sha256}"
-
-  wait_for_backend_health "$LOCAL_HEALTH_URL" || fail "final local backend health failed"
-  wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "final public backend health failed"
 
   success=1
   trap - ERR EXIT
@@ -413,7 +487,7 @@ backend_recovery_required=1
 systemctl stop "$SERVICE_NAME"
 systemctl is-active --quiet "$SERVICE_NAME" && fail "${SERVICE_NAME} did not stop"
 
-(cd /tmp && sudo -u postgres pg_dump --format=custom --no-owner "$PRODUCTION_DB") >"$backup_file"
+create_database_dump "$backup_file"
 [[ -s "$backup_file" ]] || fail "production backup is empty"
 [[ "$(stat -c '%U:%G' "$backup_file")" == "root:root" ]] || fail "production backup ownership is not root:root"
 [[ "$(stat -c '%a' "$backup_file")" == 600 ]] || fail "production backup permissions are not 600"
@@ -494,11 +568,7 @@ rsync --archive --delete "${POS_WEB_ROOT}/" "${pos_asset_backup}/"
 rsync --archive --delete --exclude='/downloads/***' "${BACKOFFICE_WEB_ROOT}/" "${backoffice_asset_backup}/"
 
 echo "Publishing POS and Backoffice web assets"
-rsync --archive --delete --delay-updates "${POS_DIR}/dist/" "${POS_WEB_ROOT}/"
-# The downloads exclusion is mandatory: --delete must never remove retained APKs.
-rsync --archive --delete --delay-updates --exclude='/downloads/***' \
-  "${BACKOFFICE_DIR}/dist/" "${BACKOFFICE_WEB_ROOT}/"
-[[ -d "$DOWNLOADS_DIR" ]] || fail "Backoffice downloads directory was not preserved"
+publish_web_assets
 
 android_version_name="$(awk -F'"' '/versionName /{print $2; exit}' "${POS_DIR}/android/app/build.gradle")"
 android_version_code="$(awk '/versionCode /{print $2; exit}' "${POS_DIR}/android/app/build.gradle")"
@@ -509,14 +579,11 @@ published_apk="${DOWNLOADS_DIR}/${apk_filename}"
 [[ ! -e "$published_apk" ]] || fail "versioned APK destination already exists"
 install -m 0644 "$apk_source" "$published_apk"
 
-wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "final public backend health failed"
-curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_POS_URL"
-curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_BACKOFFICE_URL"
 apk_url="https://backoffice.apexpos.cloud/downloads/${apk_filename}"
-remote_apk="$(mktemp /tmp/apexretail-phase1-apk.XXXXXX)"
-curl --fail --silent --show-error --max-time 180 --output "$remote_apk" "$apk_url"
-cmp --silent "$published_apk" "$remote_apk" || fail "public APK bytes do not match the published file"
-rm -f -- "$remote_apk"
+verify_nginx_readable_assets
+wait_for_backend_health "$LOCAL_HEALTH_URL" || fail "final local backend health failed"
+wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "final public backend health failed"
+verify_public_asset_urls
 apk_sha256="$(sha256sum "$published_apk" | awk '{print $1}')"
 echo "APK URL: ${apk_url}"
 echo "APK SHA-256: ${apk_sha256}"

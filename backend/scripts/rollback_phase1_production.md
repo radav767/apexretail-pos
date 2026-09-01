@@ -61,6 +61,25 @@ Resume mode requires a clean committed tree, `apexretail_pos` at exactly `c2phas
 
 The resume APK is required to declare `versionCode 2` and `versionName 1.1.0`. After publication, retain its printed public URL and SHA-256 and confirm the final local/public backend health results. If any resume guard fails, stop and investigate; do not switch back to the full deployment mode because the database migration has already succeeded.
 
+### Diagnosed static-file permission failure
+
+The asset-resume run published files with mode `600` because the deployment's database-backup `umask 077` remained active during later builds and `rsync`. Nginx consequently returned `403` for POS and Backoffice static files. The operator recovered only the two public document roots by setting directories to `755` and regular files to `644`; POS, Backoffice, and the APK then returned HTTP 200.
+
+The deployment now scopes `umask 077` to the database-dump subprocess, publishes both web roots with `rsync --chmod=D755,F644`, leaves Backoffice `downloads` excluded from replacement/deletion, and explicitly verifies `index.html`, generated JavaScript/CSS, and the new APK before retrying public checks for up to 60 seconds. Never apply public modes to `/root/apexretail-pos/backups`, `.env` files, keys, or other secrets.
+
+If a future static-permission incident requires approved manual recovery, constrain it to the public roots and preserve downloads:
+
+```bash
+find /var/www/apexretail-pos -type d -exec chmod 755 {} +
+find /var/www/apexretail-pos -type f -exec chmod 644 {} +
+find /var/www/apexpos-backoffice -path /var/www/apexpos-backoffice/downloads -prune -o -type d -exec chmod 755 {} +
+find /var/www/apexpos-backoffice -path /var/www/apexpos-backoffice/downloads -prune -o -type f -exec chmod 644 {} +
+chmod 755 /var/www/apexpos-backoffice/downloads
+find /var/www/apexpos-backoffice/downloads -maxdepth 1 -type f -name '*.apk' -exec chmod 644 {} +
+```
+
+Recheck local file modes and Nginx access before public HTTP checks. These commands are not appropriate for repository files, backups, configuration, or secrets.
+
 ## Choose the recovery path from the failure point
 
 ### Failure before Alembic starts
@@ -99,8 +118,8 @@ Do not downgrade the database merely to address an application error. Re-deploy 
 The deployment output gives timestamped POS and Backoffice asset backup directories. Inspect the exact paths before copying. Restore only after approval:
 
 ```bash
-rsync --archive --delete /root/apexretail-pos/backups/phase1-production/pos-assets-TIMESTAMP/ /var/www/apexretail-pos/
-rsync --archive --delete --exclude='/downloads/***' /root/apexretail-pos/backups/phase1-production/backoffice-assets-TIMESTAMP/ /var/www/apexpos-backoffice/
+rsync --archive --delete --chmod=D755,F644 /root/apexretail-pos/backups/phase1-production/pos-assets-TIMESTAMP/ /var/www/apexretail-pos/
+rsync --archive --delete --chmod=D755,F644 --exclude='/downloads/***' /root/apexretail-pos/backups/phase1-production/backoffice-assets-TIMESTAMP/ /var/www/apexpos-backoffice/
 ```
 
 The Backoffice command must retain `--exclude='/downloads/***'`. Verify that `/var/www/apexpos-backoffice/downloads` and every prior APK still exist before and after the copy.
