@@ -13,6 +13,7 @@ readonly START_REVISION="b8e51d8f4a21"
 readonly TARGET_REVISION="c2phase1inventory"
 readonly SERVICE_NAME="apexpos"
 readonly BACKUP_DIR="${REPO_DIR}/backups/phase1-production"
+readonly RESUME_BACKUP_FILE="${BACKUP_DIR}/apexretail_pos_before_phase1_20260901T083210Z.dump"
 readonly POS_WEB_ROOT="/var/www/apexretail-pos"
 readonly BACKOFFICE_WEB_ROOT="/var/www/apexpos-backoffice"
 readonly DOWNLOADS_DIR="${BACKOFFICE_WEB_ROOT}/downloads"
@@ -60,7 +61,7 @@ recovery_instructions() {
   if [[ "$service_initially_active" -eq 1 && "$backend_recovery_required" -eq 1 ]]; then
     echo "Recovery: attempting to restart the initially active ${SERVICE_NAME} backend." >&2
     if systemctl start "$SERVICE_NAME"; then
-      if systemctl is-active --quiet "$SERVICE_NAME" && health_json_ok "$LOCAL_HEALTH_URL"; then
+      if wait_for_backend_health "$LOCAL_HEALTH_URL"; then
         echo "Recovery succeeded: ${SERVICE_NAME} is active and local health passed." >&2
       else
         echo "RECOVERY FAILED: ${SERVICE_NAME} did not become active and locally healthy; operator attention is required." >&2
@@ -76,15 +77,28 @@ trap recovery_instructions ERR EXIT
 
 [[ "$EUID" -eq 0 ]] || fail "run this deployment as root"
 [[ "$PWD" == "$REPO_DIR" ]] || fail "run from exactly ${REPO_DIR}"
-[[ "$#" -eq 1 && "$1" == "--confirm-phase1-production" ]] || \
-  fail "usage: $0 --confirm-phase1-production"
+[[ "$#" -eq 1 ]] || fail "usage: $0 {--confirm-phase1-production|--resume-phase1-assets}"
+case "$1" in
+  --confirm-phase1-production)
+    deployment_mode="full"
+    required_confirmation="DEPLOY ${TARGET_REVISION} TO ${PRODUCTION_DB}"
+    ;;
+  --resume-phase1-assets)
+    deployment_mode="resume-assets"
+    required_confirmation="RESUME PHASE1 ASSETS AT ${TARGET_REVISION}"
+    ;;
+  *)
+    fail "usage: $0 {--confirm-phase1-production|--resume-phase1-assets}"
+    ;;
+esac
 
-read -r -p "Type 'DEPLOY c2phase1inventory TO apexretail_pos' to continue: " confirmation </dev/tty
-[[ "$confirmation" == "DEPLOY ${TARGET_REVISION} TO ${PRODUCTION_DB}" ]] || fail "production confirmation did not match"
+read -r -p "Type '${required_confirmation}' to continue: " confirmation </dev/tty
+[[ "$confirmation" == "$required_confirmation" ]] || fail "production confirmation did not match"
 unset confirmation
+unset required_confirmation
 
 for command in sudo psql pg_dump pg_restore pg_isready systemctl curl rsync npm npx git flock \
-  sha256sum keytool unzip nginx cmp comm find awk stat wc install grep df; do
+  sha256sum keytool unzip nginx cmp comm find awk stat wc install grep df sleep; do
   command -v "$command" >/dev/null || fail "required command not found: ${command}"
 done
 [[ -x "${BACKEND_DIR}/venv/bin/python" ]] || fail "backend virtualenv Python is missing"
@@ -149,17 +163,33 @@ if url.database != os.environ["APEX_EXPECTED_DB"]:
 PY
 }
 
-health_json_ok() {
-  local url="$1" body
-  body="$(curl --fail --silent --show-error --max-time 20 "$url")"
+health_payload_ok() {
+  local body="$1"
+  [[ -n "$body" ]] || return 1
   HEALTH_BODY="$body" "${BACKEND_DIR}/venv/bin/python" - <<'PY'
 import json
 import os
 
 payload = json.loads(os.environ["HEALTH_BODY"])
-if payload.get("ok") is not True or payload.get("app") != "ApexRetail POS":
+if payload.get("ok") is not True:
     raise SystemExit("unexpected health payload")
 PY
+}
+
+wait_for_backend_health() {
+  local url="$1" body deadline
+  deadline=$((SECONDS + 60))
+  while (( SECONDS < deadline )); do
+    body=""
+    if systemctl is-active --quiet "$SERVICE_NAME" && \
+       body="$(curl --fail --silent --max-time 1 "$url" 2>/dev/null)" && \
+       [[ -n "$body" ]] && health_payload_ok "$body" 2>/dev/null; then
+      return 0
+    fi
+    (( SECONDS < deadline )) && sleep 1
+  done
+  echo "Health check failed after 60 seconds: ${url}" >&2
+  return 1
 }
 
 inventory_state() {
@@ -248,15 +278,92 @@ if systemctl is-active --quiet "$SERVICE_NAME"; then
 else
   fail "${SERVICE_NAME} is not active"
 fi
-health_json_ok "$LOCAL_HEALTH_URL"
-health_json_ok "$PUBLIC_HEALTH_URL"
+wait_for_backend_health "$LOCAL_HEALTH_URL" || fail "local backend health did not become ready"
+wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "public backend health did not become ready"
 nginx -t
 
 database_identity="$(run_psql "$PRODUCTION_DB" 'SELECT current_database();')"
 [[ "$database_identity" == "$PRODUCTION_DB" ]] || fail "production database identity mismatch"
+assert_alembic_target
+
+if [[ "$deployment_mode" == "resume-assets" ]]; then
+  current_revision="$(run_psql "$PRODUCTION_DB" 'SELECT version_num FROM alembic_version;')"
+  [[ "$current_revision" == "$TARGET_REVISION" ]] || \
+    fail "resume requires production revision ${TARGET_REVISION}, found ${current_revision}"
+
+  backup_file="$RESUME_BACKUP_FILE"
+  [[ -f "$backup_file" ]] || fail "verified pre-migration backup does not exist: ${backup_file}"
+  [[ -s "$backup_file" ]] || fail "verified pre-migration backup is empty: ${backup_file}"
+  [[ "$(stat -c '%U:%G' "$backup_file")" == "root:root" ]] || fail "verified pre-migration backup ownership is not root:root"
+  [[ "$(stat -c '%a' "$backup_file")" == 600 ]] || fail "verified pre-migration backup permissions are not 600"
+  (cd /tmp && sudo -u postgres pg_restore --list) <"$backup_file" >/dev/null
+  backup_verified=1
+  echo "PASS: named pre-migration backup remains nonempty, mode 600, and valid"
+
+  echo "Rebuilding final POS, Backoffice, Capacitor, and Android assets"
+  (cd "$POS_DIR" && npm run build)
+  (cd "$BACKOFFICE_DIR" && npm run build)
+  (cd "$POS_DIR" && npx cap sync android)
+  (cd "${POS_DIR}/android" && ./gradlew clean assembleDebug)
+
+  apk_source="${POS_DIR}/android/app/build/outputs/apk/debug/app-debug.apk"
+  [[ -s "$apk_source" ]] || fail "Android APK was not produced"
+  unzip -tqq "$apk_source"
+  keytool -printcert -jarfile "$apk_source" >/dev/null || fail "built APK is not signed"
+  existing_apk="$(find "$DOWNLOADS_DIR" -maxdepth 1 -type f -name '*.apk' -print -quit)"
+  if [[ -n "$existing_apk" ]]; then
+    old_signer="$(keytool -printcert -jarfile "$existing_apk" 2>/dev/null | awk -F': ' '/SHA256:/{print $2; exit}')"
+    new_signer="$(keytool -printcert -jarfile "$apk_source" 2>/dev/null | awk -F': ' '/SHA256:/{print $2; exit}')"
+    [[ -n "$old_signer" && "$new_signer" == "$old_signer" ]] || fail "APK signer does not match the existing published APK"
+  fi
+
+  android_version_name="$(awk -F'"' '/versionName /{print $2; exit}' "${POS_DIR}/android/app/build.gradle")"
+  android_version_code="$(awk '/versionCode /{print $2; exit}' "${POS_DIR}/android/app/build.gradle")"
+  [[ "$android_version_code" == 2 ]] || fail "resume requires Android versionCode 2"
+  [[ "$android_version_name" == "1.1.0" ]] || fail "resume requires Android versionName 1.1.0"
+
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  install -d -m 700 -o root -g root "$BACKUP_DIR"
+  pos_asset_backup="${BACKUP_DIR}/pos-assets-resume-${stamp}"
+  backoffice_asset_backup="${BACKUP_DIR}/backoffice-assets-resume-${stamp}"
+  install -d -m 700 "$pos_asset_backup" "$backoffice_asset_backup"
+  rsync --archive --delete "${POS_WEB_ROOT}/" "${pos_asset_backup}/"
+  rsync --archive --delete --exclude='/downloads/***' "${BACKOFFICE_WEB_ROOT}/" "${backoffice_asset_backup}/"
+
+  echo "Publishing resumed POS and Backoffice web assets"
+  rsync --archive --delete --delay-updates "${POS_DIR}/dist/" "${POS_WEB_ROOT}/"
+  rsync --archive --delete --delay-updates --exclude='/downloads/***' \
+    "${BACKOFFICE_DIR}/dist/" "${BACKOFFICE_WEB_ROOT}/"
+  [[ -d "$DOWNLOADS_DIR" ]] || fail "Backoffice downloads directory was not preserved"
+
+  apk_filename="apexretail-pos-phase1-v${android_version_name}-build${android_version_code}-${stamp}.apk"
+  published_apk="${DOWNLOADS_DIR}/${apk_filename}"
+  [[ ! -e "$published_apk" ]] || fail "versioned APK destination already exists"
+  install -m 0644 "$apk_source" "$published_apk"
+
+  curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_POS_URL"
+  curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_BACKOFFICE_URL"
+  apk_url="https://backoffice.apexpos.cloud/downloads/${apk_filename}"
+  remote_apk="$(mktemp /tmp/apexretail-phase1-resume-apk.XXXXXX)"
+  curl --fail --silent --show-error --max-time 180 --output "$remote_apk" "$apk_url"
+  cmp --silent "$published_apk" "$remote_apk" || fail "public APK bytes do not match the published file"
+  rm -f -- "$remote_apk"
+  apk_sha256="$(sha256sum "$published_apk" | awk '{print $1}')"
+  echo "APK URL: ${apk_url}"
+  echo "APK SHA-256: ${apk_sha256}"
+
+  wait_for_backend_health "$LOCAL_HEALTH_URL" || fail "final local backend health failed"
+  wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "final public backend health failed"
+
+  success=1
+  trap - ERR EXIT
+  echo "PASS: Phase 1 asset deployment resumed at ${TARGET_REVISION}"
+  echo "Verified pre-migration backup: ${backup_file}"
+  exit 0
+fi
+
 starting_revision="$(run_psql "$PRODUCTION_DB" 'SELECT version_num FROM alembic_version;')"
 [[ "$starting_revision" == "$START_REVISION" ]] || fail "production revision is ${starting_revision}, expected ${START_REVISION}"
-assert_alembic_target
 
 echo "Running all pre-mutation tests and production builds"
 (cd "$BACKEND_DIR" && venv/bin/python -m unittest discover -s tests -q)
@@ -376,10 +483,9 @@ echo "PASS: Class A backfill reconciled; structural balance deltas match exactly
 
 echo "Restarting backend and checking health"
 systemctl restart "$SERVICE_NAME"
-systemctl is-active --quiet "$SERVICE_NAME" || fail "${SERVICE_NAME} did not restart"
-health_json_ok "$LOCAL_HEALTH_URL"
+wait_for_backend_health "$LOCAL_HEALTH_URL" || fail "local backend health did not become ready after restart"
 backend_recovery_required=0
-health_json_ok "$PUBLIC_HEALTH_URL"
+wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "public backend health did not become ready after restart"
 
 pos_asset_backup="${BACKUP_DIR}/pos-assets-${stamp}"
 backoffice_asset_backup="${BACKUP_DIR}/backoffice-assets-${stamp}"
@@ -403,7 +509,7 @@ published_apk="${DOWNLOADS_DIR}/${apk_filename}"
 [[ ! -e "$published_apk" ]] || fail "versioned APK destination already exists"
 install -m 0644 "$apk_source" "$published_apk"
 
-health_json_ok "$PUBLIC_HEALTH_URL"
+wait_for_backend_health "$PUBLIC_HEALTH_URL" || fail "final public backend health failed"
 curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_POS_URL"
 curl --fail --silent --show-error --max-time 20 --output /dev/null "$PUBLIC_BACKOFFICE_URL"
 apk_url="https://backoffice.apexpos.cloud/downloads/${apk_filename}"

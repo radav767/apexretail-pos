@@ -46,6 +46,21 @@ The deployment records that `apexpos` was initially active before it attempts to
 
 Always verify the reported recovery result. If automatic recovery failed, inspect the database revision and service logs before an approved operator action. If it succeeded, still inspect the failure point and revision before retrying the deployment.
 
+## Verified migration success with asset publication pending
+
+The 2026-09-01 run reached `c2phase1inventory` and produced the verified pre-migration dump `/root/apexretail-pos/backups/phase1-production/apexretail_pos_before_phase1_20260901T083210Z.dump`, but stopped during the backend startup health check before publishing Backoffice assets or an APK. When the database identity/revision, backend state, both health endpoints, and that exact dump have been reverified, use only the guarded asset-resume mode:
+
+```bash
+cd /root/apexretail-pos
+sudo bash backend/scripts/deploy_phase1_production.sh --resume-phase1-assets
+```
+
+At the prompt, type exactly `RESUME PHASE1 ASSETS AT c2phase1inventory`.
+
+Resume mode requires a clean committed tree, `apexretail_pos` at exactly `c2phase1inventory`, an active and locally/publicly healthy `apexpos`, and the named nonempty mode-600 dump passing `pg_restore --list`. It does not stop or restart the backend, create a new database dump, run Alembic, restore, or downgrade. It rebuilds POS and Backoffice assets, performs Capacitor sync plus a clean Android build, retains timestamped web-asset rollback copies, preserves the Backoffice `downloads` directory, and refuses to overwrite an existing APK filename.
+
+The resume APK is required to declare `versionCode 2` and `versionName 1.1.0`. After publication, retain its printed public URL and SHA-256 and confirm the final local/public backend health results. If any resume guard fails, stop and investigate; do not switch back to the full deployment mode because the database migration has already succeeded.
+
 ## Choose the recovery path from the failure point
 
 ### Failure before Alembic starts
@@ -94,7 +109,7 @@ The Backoffice command must retain `--exclude='/downloads/***'`. Verify that `/v
 
 Never overwrite the previous APK. Installed APKs cannot be remotely rolled back by deleting a download. Keep the new versioned APK as incident evidence unless the incident owner explicitly approves removing it, and restore UI links to the prior known-good filename if a link changed. Verify the chosen APK's signer, SHA-256, and public URL before announcing it.
 
-The current Android package uses the Android debug signer and declares `versionCode 1` / `versionName 1.0`. A future release-keystore and monotonically increasing version-code migration needs a separate signing and upgrade plan; do not improvise it during rollback.
+The resume Android package uses the existing Android signer and declares `versionCode 2` / `versionName 1.1.0`. A future release-keystore migration needs a separate signing and upgrade plan; do not improvise it during rollback.
 
 ## Post-recovery verification
 
