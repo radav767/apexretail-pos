@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, getApiErrorMessage } from "./api/client";
 import { isDeviceOnline } from "./offline/offlineAuth";
+import {
+  canRefundSale,
+  canViewSaleReceipt,
+  isRefundableSale,
+  saleStatusLabel,
+  validateRefundQuantity,
+} from "./salesHistory";
 import type {
   BluetoothStatus,
   PrinterConfig,
@@ -28,12 +35,33 @@ type CashierSession = {
 
 type Sale = {
   id: string;
+  original_sale_id?: string | null;
   receipt_number?: string;
   cashier_name?: string | null;
   payment_method?: string;
   total_amount?: string | number;
   status?: string;
   created_at?: string;
+};
+
+type SaleReceiptItem = {
+  id: string;
+  product_id: string;
+  product_name: string;
+  quantity: string | number;
+  refunded_quantity: string | number;
+  refundable_quantity: string | number;
+  selling_unit?: string;
+  unit_price: string | number;
+  line_total: string | number;
+};
+
+type SaleReceipt = Sale & {
+  subtotal_amount?: string | number;
+  tax_amount?: string | number;
+  amount_received?: string | number;
+  change_due?: string | number;
+  items: SaleReceiptItem[];
 };
 
 type Category = {
@@ -312,6 +340,15 @@ export default function PosModulePage({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [salesDate, setSalesDate] = useState(() => harareDateValue());
+  const [salesRefreshSignal, setSalesRefreshSignal] = useState(0);
+  const [receiptDialog, setReceiptDialog] = useState<{
+    mode: "view" | "refund";
+    receipt: SaleReceipt;
+  } | null>(null);
+  const [refundQuantities, setRefundQuantities] = useState<
+    Record<string, string>
+  >({});
+  const [refundReason, setRefundReason] = useState("");
   const [selectedBranchId, setSelectedBranchId] = useState(branchId);
   const [editingProductId, setEditingProductId] = useState("");
   const [productForm, setProductForm] =
@@ -343,6 +380,8 @@ export default function PosModulePage({
   const canManageSettings =
     cashier?.role === "owner" ||
     Boolean(cashier?.permissions?.settings);
+  const canViewSalesReceipts = canViewSaleReceipt(cashier);
+  const canCreateRefunds = canRefundSale(cashier);
 
   function money(value: string | number | undefined) {
     return `${currencySymbol}${Number(value || 0).toFixed(decimalPlaces)}`;
@@ -681,6 +720,7 @@ export default function PosModulePage({
     branchId,
     companyId,
     salesDate,
+    salesRefreshSignal,
     selectedBranchId,
   ]);
 
@@ -733,6 +773,136 @@ export default function PosModulePage({
     }
 
     return true;
+  }
+
+  async function openSaleReceipt(
+    sale: Sale,
+    mode: "view" | "refund",
+  ) {
+    if (mode === "view" && !canViewSalesReceipts) {
+      setError("Sales permission is required to view receipts.");
+      return;
+    }
+    if (mode === "refund" && !canCreateRefunds) {
+      setError("Refunds permission is required to refund a sale.");
+      return;
+    }
+    if (mode === "refund" && !isRefundableSale(sale)) {
+      setError("This sale has no remaining refundable amount.");
+      return;
+    }
+    if (!(await isDeviceOnline())) {
+      setError("Internet access is required to view or refund this sale.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      const response = await api.get(
+        `/sales/receipt/${companyId}/${sale.id}`,
+        { params: { mark_reprint: false } },
+      );
+      const receipt = response.data as SaleReceipt;
+
+      if (
+        mode === "refund" &&
+        !receipt.items.some(
+          (item) => Number(item.refundable_quantity || 0) > 0,
+        )
+      ) {
+        setError("This sale has been fully refunded.");
+        setSalesRefreshSignal((current) => current + 1);
+        return;
+      }
+
+      setRefundQuantities(
+        Object.fromEntries(
+          receipt.items.map((item) => [item.id, ""]),
+        ),
+      );
+      setRefundReason("");
+      setReceiptDialog({ mode, receipt });
+    } catch (requestError: unknown) {
+      setError(
+        getApiErrorMessage(
+          requestError,
+          mode === "refund"
+            ? "Failed to load refundable sale details."
+            : "Failed to load receipt.",
+        ),
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function submitPartialRefund() {
+    if (!receiptDialog || receiptDialog.mode !== "refund") {
+      return;
+    }
+    if (!canCreateRefunds) {
+      setError("Refunds permission is required to refund a sale.");
+      return;
+    }
+    if (!refundReason.trim()) {
+      setError("Enter a refund reason.");
+      return;
+    }
+
+    const selectedItems = receiptDialog.receipt.items
+      .map((item) => ({
+        item,
+        quantity: refundQuantities[item.id]?.trim() || "",
+      }))
+      .filter(({ quantity }) => quantity !== "" && Number(quantity) > 0);
+
+    if (!selectedItems.length) {
+      setError("Enter a refund quantity for at least one item.");
+      return;
+    }
+
+    for (const { item, quantity } of selectedItems) {
+      const quantityError = validateRefundQuantity(
+        quantity,
+        item.refundable_quantity,
+      );
+      if (quantityError) {
+        setError(`${item.product_name}: ${quantityError}`);
+        return;
+      }
+    }
+
+    try {
+      setSaving(true);
+      setError("");
+      const response = await api.post("/sales/refunds", {
+        company_id: companyId,
+        original_sale_id: receiptDialog.receipt.id,
+        branch_id: branchId || undefined,
+        employee_id: cashier?.id || undefined,
+        device_id: localStorage.getItem("device_id") || undefined,
+        device_key: localStorage.getItem("device_key") || undefined,
+        reason: refundReason.trim(),
+        refund_method: receiptDialog.receipt.payment_method,
+        items: selectedItems.map(({ item, quantity }) => ({
+          sale_item_id: item.id,
+          quantity,
+        })),
+      });
+
+      setReceiptDialog(null);
+      setNotice(
+        `Refund ${String(response.data?.receipt_number || "")} completed.`.trim(),
+      );
+      setSalesRefreshSignal((current) => current + 1);
+    } catch (requestError: unknown) {
+      setError(
+        getApiErrorMessage(requestError, "Refund failed."),
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function refreshProductAndInventoryData() {
@@ -1036,8 +1206,8 @@ export default function PosModulePage({
               </div>
             </div>
 
-            <div className="pos-module-table-wrap">
-              <table className="pos-module-table">
+            <div className="pos-module-table-wrap pos-sales-history-table-wrap">
+              <table className="pos-module-table pos-sales-history-table">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -1052,40 +1222,72 @@ export default function PosModulePage({
                 <tbody>
                   {sales.map((sale) => (
                     <tr key={sale.id}>
-                      <td>
+                      <td data-label="Date">
                         {sale.created_at
                           ? new Date(sale.created_at).toLocaleString()
                           : "—"}
                       </td>
-                      <td>{sale.receipt_number || "—"}</td>
-                      <td>{sale.cashier_name || "Unassigned"}</td>
-                      <td>
+                      <td data-label="Receipt">{sale.receipt_number || "—"}</td>
+                      <td data-label="Cashier">{sale.cashier_name || "Unassigned"}</td>
+                      <td data-label="Payment">
                         {(sale.payment_method || "unknown").toUpperCase()}
                       </td>
-                      <td>{sale.status || "completed"}</td>
-                      <td className="number">
+                      <td data-label="Status">
+                        <span className={`pos-sale-status pos-sale-status-${sale.status || "completed"}`}>
+                          {saleStatusLabel(sale)}
+                        </span>
+                      </td>
+                      <td data-label="Total" className="number">
                         {money(sale.total_amount)}
                       </td>
-                      <td>
-                        <button
-                          type="button"
-                          className="pos-inline-button"
-                          onClick={() => {
-                            void onReprintSale(
-                              sale.id,
-                              sale.receipt_number,
-                            ).catch((printerError) => {
-                              setError(
-                                getApiErrorMessage(
-                                  printerError,
-                                  "Reprint failed.",
-                                ),
-                              );
-                            });
-                          }}
-                        >
-                          Reprint
-                        </button>
+                      <td data-label="Actions" className="pos-sale-actions-cell">
+                        <div className="pos-sale-actions">
+                          {canViewSalesReceipts && (
+                            <button
+                              type="button"
+                              className="pos-inline-button secondary"
+                              disabled={saving}
+                              onClick={() => void openSaleReceipt(sale, "view")}
+                            >
+                              View Receipt
+                            </button>
+                          )}
+                          {canViewSalesReceipts && (
+                            <button
+                              type="button"
+                              className="pos-inline-button secondary"
+                              disabled={saving}
+                              onClick={() => {
+                                void onReprintSale(
+                                  sale.id,
+                                  sale.receipt_number,
+                                ).catch((printerError) => {
+                                  setError(
+                                    getApiErrorMessage(
+                                      printerError,
+                                      "Reprint failed.",
+                                    ),
+                                  );
+                                });
+                              }}
+                            >
+                              Reprint
+                            </button>
+                          )}
+                          {canCreateRefunds && isRefundableSale(sale) && (
+                            <button
+                              type="button"
+                              className="pos-inline-button danger"
+                              disabled={saving}
+                              onClick={() => void openSaleReceipt(sale, "refund")}
+                            >
+                              Refund
+                            </button>
+                          )}
+                          {!canViewSalesReceipts && !canCreateRefunds && (
+                            <span className="pos-sale-no-actions">No permitted actions</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1100,6 +1302,127 @@ export default function PosModulePage({
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {activeModule === "Sales Management" && receiptDialog && (
+          <div className="pos-sale-dialog-backdrop" role="presentation">
+            <section
+              className="pos-sale-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sale-dialog-title"
+            >
+              <header className="pos-sale-dialog-header">
+                <div>
+                  <p className="pos-module-eyebrow">
+                    {receiptDialog.mode === "refund"
+                      ? "Partial refund"
+                      : "On-screen receipt"}
+                  </p>
+                  <h2 id="sale-dialog-title">
+                    {receiptDialog.receipt.receipt_number || "Receipt"}
+                  </h2>
+                  <span className={`pos-sale-status pos-sale-status-${receiptDialog.receipt.status || "completed"}`}>
+                    {saleStatusLabel(receiptDialog.receipt)}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="pos-sale-dialog-close"
+                  aria-label="Close receipt"
+                  onClick={() => setReceiptDialog(null)}
+                >
+                  ×
+                </button>
+              </header>
+
+              <div className="pos-sale-receipt-meta">
+                <span>
+                  {receiptDialog.receipt.created_at
+                    ? new Date(receiptDialog.receipt.created_at).toLocaleString()
+                    : "—"}
+                </span>
+                <span>{receiptDialog.receipt.cashier_name || "Unassigned cashier"}</span>
+                <span>{String(receiptDialog.receipt.payment_method || "unknown").toUpperCase()}</span>
+              </div>
+
+              <div className="pos-sale-dialog-items">
+                {receiptDialog.receipt.items.map((item) => {
+                  const remaining = Number(item.refundable_quantity || 0);
+                  const refunded = Number(item.refunded_quantity || 0);
+                  return (
+                    <article className="pos-refund-item" key={item.id}>
+                      <div className="pos-refund-item-heading">
+                        <strong>{item.product_name}</strong>
+                        <span>{money(item.line_total)}</span>
+                      </div>
+                      <div className="pos-refund-item-state">
+                        <span>Sold: {Number(item.quantity)} {item.selling_unit || "each"}</span>
+                        <span>Refunded: {refunded}</span>
+                        <span>Remaining: {remaining}</span>
+                      </div>
+                      {receiptDialog.mode === "refund" && remaining > 0 && (
+                        <label>
+                          Quantity to refund
+                          <input
+                            type="number"
+                            min="0"
+                            max={remaining}
+                            step="0.001"
+                            inputMode="decimal"
+                            value={refundQuantities[item.id] || ""}
+                            onChange={(event) =>
+                              setRefundQuantities((current) => ({
+                                ...current,
+                                [item.id]: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="pos-sale-receipt-total">
+                <span>Total</span>
+                <strong>{money(receiptDialog.receipt.total_amount)}</strong>
+              </div>
+
+              {receiptDialog.mode === "refund" && (
+                <label className="pos-refund-reason">
+                  Refund reason
+                  <textarea
+                    value={refundReason}
+                    maxLength={500}
+                    placeholder="Required for the audit trail"
+                    onChange={(event) => setRefundReason(event.target.value)}
+                  />
+                </label>
+              )}
+
+              <footer className="pos-sale-dialog-actions">
+                <button
+                  type="button"
+                  className="pos-inline-button secondary"
+                  onClick={() => setReceiptDialog(null)}
+                >
+                  Close
+                </button>
+                {receiptDialog.mode === "refund" && (
+                  <button
+                    type="button"
+                    className="pos-inline-button danger"
+                    disabled={saving}
+                    onClick={() => void submitPartialRefund()}
+                  >
+                    {saving ? "Refunding…" : "Complete Refund"}
+                  </button>
+                )}
+              </footer>
+            </section>
           </div>
         )}
 

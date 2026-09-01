@@ -29,6 +29,7 @@ class SaleCreate(BaseModel):
 class SaleOut(BaseModel):
     id: UUID
     company_id: UUID
+    original_sale_id: UUID | None = None
 
     client_sale_id: UUID | None = None
     client_created_at: datetime | None = None
@@ -72,9 +73,13 @@ class SaleOut(BaseModel):
 
 
 class SaleItemOut(BaseModel):
+    id: UUID
     product_id: UUID
+    original_sale_item_id: UUID | None = None
     product_name: str
     quantity: Decimal
+    refunded_quantity: Decimal = Decimal("0")
+    refundable_quantity: Decimal = Decimal("0")
     selling_unit: str = "each"
     unit_price: Decimal
     line_total: Decimal

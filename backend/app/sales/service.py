@@ -649,19 +649,27 @@ class SalesService:
         sale_id,
         *,
         actor: AuthActor | None,
+        mark_reprint: bool = True,
     ):
         if actor is not None:
             if actor.company_id != company_id:
                 raise HTTPException(403, "Forbidden")
 
-            if (
-                actor.actor_type == "employee"
-                and (
-                    not actor.permissions
-                    or actor.permissions.get("sales") is False
-                )
-            ):
-                raise HTTPException(403, "Permission denied")
+            if actor.actor_type == "employee":
+                permissions = actor.permissions or {}
+                has_sales_permission = bool(permissions.get("sales"))
+                has_refunds_permission = bool(permissions.get("refunds"))
+                if (
+                    (mark_reprint and not has_sales_permission)
+                    or (
+                        not mark_reprint
+                        and not (
+                            has_sales_permission
+                            or has_refunds_permission
+                        )
+                    )
+                ):
+                    raise HTTPException(403, "Permission denied")
 
         sale_with_items = await self.repo.get_sale_receipt(
             company_id,
@@ -673,14 +681,39 @@ class SalesService:
 
         sale, items = sale_with_items
 
-        sale.reprint_count = int(sale.reprint_count or 0) + 1
-        sale.last_reprinted_at = datetime.now(timezone.utc)
-        if hasattr(self.repo.db, "add"):
-            self.repo.db.add(AuditEvent(company_id=company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=getattr(actor.employee, "device_id", None) if actor and actor.actor_type == "employee" else None, action="receipt_reprint", details={"sale_id": str(sale_id), "reprint_count": sale.reprint_count}))
-            if hasattr(self.repo.db, "commit"):
-                await self.repo.db.commit()
+        receipt_items = []
+        for item in items:
+            refunded_quantity = Decimal("0")
+            refundable_quantity = Decimal("0")
+            if sale.original_sale_id is None:
+                refunded_quantity = sum(
+                    (
+                        Decimal(refund_item.quantity or 0)
+                        for refund_item in await self.repo.list_refund_items_for_original_item(item.id)
+                    ),
+                    Decimal("0"),
+                )
+                refundable_quantity = max(
+                    Decimal(item.quantity or 0) - refunded_quantity,
+                    Decimal("0"),
+                )
+            receipt_items.append(
+                {
+                    **item.__dict__,
+                    "refunded_quantity": refunded_quantity,
+                    "refundable_quantity": refundable_quantity,
+                }
+            )
+
+        if mark_reprint:
+            sale.reprint_count = int(sale.reprint_count or 0) + 1
+            sale.last_reprinted_at = datetime.now(timezone.utc)
+            if hasattr(self.repo.db, "add"):
+                self.repo.db.add(AuditEvent(company_id=company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=getattr(actor.employee, "device_id", None) if actor and actor.actor_type == "employee" else None, action="receipt_reprint", details={"sale_id": str(sale_id), "reprint_count": sale.reprint_count}))
+                if hasattr(self.repo.db, "commit"):
+                    await self.repo.db.commit()
 
         return {
             **sale.__dict__,
-            "items": items,
+            "items": receipt_items,
         }

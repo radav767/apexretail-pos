@@ -1,7 +1,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,10 +77,26 @@ async def list_sales_history_by_date(
     branch_id: UUID | None = Query(default=None),
     limit: int = Query(default=500, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
+    actor: AuthActor | None = Depends(get_optional_auth_actor),
 ):
     """
     Return transactions for one selected Zimbabwe calendar date.
     """
+
+    if actor is not None:
+        if actor.company_id != company_id:
+            raise HTTPException(403, "Forbidden")
+        if (
+            actor.actor_type == "employee"
+            and (
+                not actor.permissions
+                or not (
+                    actor.permissions.get("sales")
+                    or actor.permissions.get("refunds")
+                )
+            )
+        ):
+            raise HTTPException(403, "Permission denied")
 
     zimbabwe_timezone = timezone(timedelta(hours=2))
 
@@ -124,15 +140,24 @@ async def list_sales_history_by_date(
 async def get_sale_receipt(
     company_id: UUID,
     sale_id: UUID,
+    mark_reprint: bool = Query(default=True),
     service: SalesService = Depends(get_service),
     actor: AuthActor | None = Depends(
         get_optional_auth_actor
     ),
 ):
+    if mark_reprint:
+        return await service.get_sale_receipt(
+            company_id,
+            sale_id,
+            actor=actor,
+        )
+
     return await service.get_sale_receipt(
         company_id,
         sale_id,
         actor=actor,
+        mark_reprint=False,
     )
 
 

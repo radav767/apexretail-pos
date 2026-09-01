@@ -1161,6 +1161,7 @@ const [loggedIn, setLoggedIn] = useState(
 
       const response = await api.get(
         `/sales/receipt/${companyId}/${saleId}`,
+        { params: { mark_reprint: true } },
       );
 
       const sale = response.data as SaleReceiptResponse;

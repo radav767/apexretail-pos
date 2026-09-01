@@ -216,6 +216,175 @@
   color: #0f172a;
 }
 
+.pos-inline-button.danger {
+  background: #b42318;
+  color: #ffffff;
+}
+
+.pos-inline-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.pos-sale-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pos-sale-actions .pos-inline-button {
+  min-height: 38px;
+  padding: 8px 11px;
+  white-space: nowrap;
+}
+
+.pos-sale-no-actions {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.pos-sale-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.pos-sale-status-completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.pos-sale-status-partially_refunded {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pos-sale-status-refunded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.pos-sale-dialog-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.62);
+}
+
+.pos-sale-dialog {
+  width: min(680px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  padding: 22px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.3);
+}
+
+.pos-sale-dialog-header,
+.pos-refund-item-heading,
+.pos-sale-receipt-total,
+.pos-sale-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.pos-sale-dialog-header h2 {
+  margin: 2px 0 8px;
+}
+
+.pos-sale-dialog-close {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 27px;
+  cursor: pointer;
+}
+
+.pos-sale-receipt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 18px 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.pos-sale-dialog-items {
+  display: grid;
+  gap: 10px;
+}
+
+.pos-refund-item {
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.pos-refund-item-state {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.pos-refund-item label,
+.pos-refund-reason {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.pos-refund-item input,
+.pos-refund-reason textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  font: inherit;
+}
+
+.pos-refund-reason textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.pos-sale-receipt-total {
+  margin-top: 16px;
+  padding: 14px 0;
+  border-top: 2px solid #0f172a;
+  font-size: 19px;
+}
+
+.pos-sale-dialog-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
 .pos-module-management-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(280px, 1fr));
@@ -555,5 +724,96 @@
   .pos-module-date-actions input {
     flex: 1;
     min-width: 0;
+  }
+
+  .pos-sales-history-table-wrap {
+    overflow-x: visible;
+  }
+
+  .pos-sales-history-table {
+    min-width: 0;
+  }
+
+  .pos-sales-history-table thead {
+    display: none;
+  }
+
+  .pos-sales-history-table,
+  .pos-sales-history-table tbody,
+  .pos-sales-history-table tr,
+  .pos-sales-history-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .pos-sales-history-table tr {
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border: 1px solid #dce3ed;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+  }
+
+  .pos-sales-history-table td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 9px 0;
+    border-bottom: 1px solid #eef2f7;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .pos-sales-history-table td::before {
+    content: attr(data-label);
+    flex: 0 0 82px;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .pos-sales-history-table td.number {
+    text-align: right;
+  }
+
+  .pos-sales-history-table .pos-sale-actions-cell {
+    display: block;
+    border-bottom: 0;
+  }
+
+  .pos-sales-history-table .pos-sale-actions-cell::before {
+    display: block;
+    margin-bottom: 9px;
+  }
+
+  .pos-sale-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pos-sale-actions .pos-inline-button {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .pos-sale-dialog-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .pos-sale-dialog {
+    width: 100%;
+    max-height: 92dvh;
+    padding: 18px 16px;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .pos-sale-dialog-actions .pos-inline-button {
+    flex: 1;
   }
 }

@@ -712,6 +712,7 @@ class RouteCompatibilityTest(unittest.IsolatedAsyncioTestCase):
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "items": [
                         {
+                            "id": str(uuid4()),
                             "product_id": str(uuid4()),
                             "product_name": "Bread",
                             "quantity": "1.000",
