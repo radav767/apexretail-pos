@@ -2,6 +2,7 @@
 # Guarded Phase 1 production deployment. This script intentionally performs no
 # automatic database restore or Alembic downgrade on failure.
 set -Eeuo pipefail
+umask 077
 
 readonly REPO_DIR="/root/apexretail-pos"
 readonly BACKEND_DIR="${REPO_DIR}/backend"
@@ -19,10 +20,14 @@ readonly LOCAL_HEALTH_URL="http://127.0.0.1:8000/api/health"
 readonly PUBLIC_HEALTH_URL="https://api.apexpos.cloud/api/health"
 readonly PUBLIC_POS_URL="https://pos.apexpos.cloud/"
 readonly PUBLIC_BACKOFFICE_URL="https://backoffice.apexpos.cloud/"
+readonly DEPLOY_SHELL_PID="$BASHPID"
 
 success=0
-service_stopped=0
+service_initially_active=0
+backend_recovery_required=0
 backup_file=""
+backup_verified=0
+backup_preflight_file=""
 evidence_file=""
 pos_asset_backup=""
 backoffice_asset_backup=""
@@ -32,21 +37,37 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 recovery_instructions() {
   local status=$?
+  # ERR is inherited by functions and command substitutions under errtrace.
+  # Let only the top-level shell perform recovery and reporting.
+  [[ "$BASHPID" -eq "$DEPLOY_SHELL_PID" ]] || return "$status"
   [[ "$success" -eq 1 ]] && return 0
   trap - ERR EXIT
   set +e
   echo >&2
   echo "DEPLOYMENT STOPPED (exit ${status}). No automatic restore or downgrade was attempted." >&2
-  [[ -n "$backup_file" ]] && echo "Database backup: ${backup_file}" >&2
+  if [[ "$backup_verified" -eq 1 ]]; then
+    echo "Verified database backup: ${backup_file}" >&2
+  elif [[ -n "$backup_file" ]]; then
+    echo "Database dump is not verified and must not be used: ${backup_file} (it may be failed, partial, empty, or nonexistent)" >&2
+  fi
   [[ -n "$evidence_file" ]] && echo "Inventory evidence: ${evidence_file}" >&2
   [[ -n "$pos_asset_backup" ]] && echo "POS asset backup: ${pos_asset_backup}" >&2
   [[ -n "$backoffice_asset_backup" ]] && echo "Backoffice asset backup: ${backoffice_asset_backup}" >&2
   [[ -n "$published_apk" ]] && echo "Published APK (do not overwrite the prior APK): ${published_apk}" >&2
-  if [[ "$service_stopped" -eq 1 ]]; then
-    echo "The backend may still be stopped. Inspect the database revision and logs before deciding whether to start it:" >&2
-    echo "  sudo -u postgres psql -X -Atqc 'SELECT version_num FROM alembic_version;' apexretail_pos" >&2
-    echo "  journalctl -u apexpos -n 200 --no-pager" >&2
-    echo "  systemctl start apexpos" >&2
+  if [[ -n "$backup_preflight_file" ]]; then
+    rm -f -- "$backup_preflight_file"
+  fi
+  if [[ "$service_initially_active" -eq 1 && "$backend_recovery_required" -eq 1 ]]; then
+    echo "Recovery: attempting to restart the initially active ${SERVICE_NAME} backend." >&2
+    if systemctl start "$SERVICE_NAME"; then
+      if systemctl is-active --quiet "$SERVICE_NAME" && health_json_ok "$LOCAL_HEALTH_URL"; then
+        echo "Recovery succeeded: ${SERVICE_NAME} is active and local health passed." >&2
+      else
+        echo "RECOVERY FAILED: ${SERVICE_NAME} did not become active and locally healthy; operator attention is required." >&2
+      fi
+    else
+      echo "RECOVERY FAILED: systemctl could not start ${SERVICE_NAME}; operator attention is required." >&2
+    fi
   fi
   echo "Follow backend/scripts/rollback_phase1_production.md. Do not restore the backup or run alembic downgrade without an approved recovery decision." >&2
   exit "$status"
@@ -63,7 +84,7 @@ read -r -p "Type 'DEPLOY c2phase1inventory TO apexretail_pos' to continue: " con
 unset confirmation
 
 for command in sudo psql pg_dump pg_restore pg_isready systemctl curl rsync npm npx git flock \
-  sha256sum keytool unzip nginx cmp comm find awk stat wc install grep; do
+  sha256sum keytool unzip nginx cmp comm find awk stat wc install grep df; do
   command -v "$command" >/dev/null || fail "required command not found: ${command}"
 done
 [[ -x "${BACKEND_DIR}/venv/bin/python" ]] || fail "backend virtualenv Python is missing"
@@ -113,7 +134,7 @@ flock -n 9 || fail "another Phase 1 deployment is already running"
 run_psql() {
   local database="$1" sql="$2"
   [[ "$database" == "$PRODUCTION_DB" ]] || fail "refusing PostgreSQL target other than ${PRODUCTION_DB}"
-  sudo -u postgres psql -X --no-psqlrc -v ON_ERROR_STOP=1 -qAt --dbname="$database" -c "$sql"
+  (cd /tmp && sudo -u postgres psql -X --no-psqlrc -v ON_ERROR_STOP=1 -qAt --dbname="$database" -c "$sql")
 }
 
 assert_alembic_target() {
@@ -221,8 +242,12 @@ FROM inventory_balances ORDER BY 1;" >"$destination"
 }
 
 systemctl is-active --quiet postgresql || fail "PostgreSQL is not active"
-pg_isready --quiet || fail "PostgreSQL is not accepting connections"
-systemctl is-active --quiet "$SERVICE_NAME" || fail "${SERVICE_NAME} is not active"
+(cd /tmp && pg_isready --quiet) || fail "PostgreSQL is not accepting connections"
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+  service_initially_active=1
+else
+  fail "${SERVICE_NAME} is not active"
+fi
 health_json_ok "$LOCAL_HEALTH_URL"
 health_json_ok "$PUBLIC_HEALTH_URL"
 nginx -t
@@ -253,23 +278,41 @@ if [[ -n "$existing_apk" ]]; then
 fi
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-install -d -m 700 -o postgres -g postgres "$BACKUP_DIR"
+install -d -m 700 -o root -g root "$BACKUP_DIR"
 backup_file="${BACKUP_DIR}/${PRODUCTION_DB}_before_phase1_${stamp}.dump"
 evidence_file="${BACKUP_DIR}/inventory_before_phase1_${stamp}.txt"
 candidate_file="${BACKUP_DIR}/class_a_candidates_${stamp}.txt"
 post_balances_file="${BACKUP_DIR}/balances_after_phase1_${stamp}.txt"
 matched_candidates_file="${BACKUP_DIR}/class_a_matched_${stamp}.txt"
 
+backup_preflight_file="${BACKUP_DIR}/.phase1-backup-preflight-${stamp}"
+printf '%s\n' "phase1-backup-preflight-${stamp}" >"$backup_preflight_file"
+read -r backup_preflight_value <"$backup_preflight_file"
+[[ "$backup_preflight_value" == "phase1-backup-preflight-${stamp}" ]] || fail "backup path preflight read did not match"
+rm -f -- "$backup_preflight_file"
+backup_preflight_file=""
+
+database_size_bytes="$(run_psql "$PRODUCTION_DB" 'SELECT pg_database_size(current_database());')"
+available_backup_bytes="$(df --output=avail -B1 "$BACKUP_DIR" | awk 'NR == 2 { print $1 }')"
+[[ "$database_size_bytes" =~ ^[0-9]+$ ]] || fail "could not determine production database size"
+[[ "$available_backup_bytes" =~ ^[0-9]+$ ]] || fail "could not determine backup filesystem free space"
+required_backup_bytes=$((database_size_bytes + 1073741824))
+(( available_backup_bytes >= required_backup_bytes )) || \
+  fail "insufficient backup space: ${available_backup_bytes} bytes available, ${required_backup_bytes} required"
+echo "PASS: backup path write/read/remove preflight and disk-space check succeeded"
+
 echo "Stopping backend to prevent concurrent writes during backup and migration"
+backend_recovery_required=1
 systemctl stop "$SERVICE_NAME"
-service_stopped=1
 systemctl is-active --quiet "$SERVICE_NAME" && fail "${SERVICE_NAME} did not stop"
 
-sudo -u postgres pg_dump --format=custom --no-owner --file="$backup_file" "$PRODUCTION_DB"
-chmod 600 "$backup_file"
+(cd /tmp && sudo -u postgres pg_dump --format=custom --no-owner "$PRODUCTION_DB") >"$backup_file"
 [[ -s "$backup_file" ]] || fail "production backup is empty"
+[[ "$(stat -c '%U:%G' "$backup_file")" == "root:root" ]] || fail "production backup ownership is not root:root"
 [[ "$(stat -c '%a' "$backup_file")" == 600 ]] || fail "production backup permissions are not 600"
-sudo -u postgres pg_restore --list "$backup_file" >/dev/null
+(cd /tmp && sudo -u postgres pg_restore --list) <"$backup_file" >/dev/null
+backup_verified=1
+echo "PASS: root-owned mode-600 database backup is nonempty and pg_restore validation succeeded"
 
 before_state="$(inventory_state)"
 printf '%s\n' "$before_state" >"$evidence_file"
@@ -333,9 +376,9 @@ echo "PASS: Class A backfill reconciled; structural balance deltas match exactly
 
 echo "Restarting backend and checking health"
 systemctl restart "$SERVICE_NAME"
-service_stopped=0
 systemctl is-active --quiet "$SERVICE_NAME" || fail "${SERVICE_NAME} did not restart"
 health_json_ok "$LOCAL_HEALTH_URL"
+backend_recovery_required=0
 health_json_ok "$PUBLIC_HEALTH_URL"
 
 pos_asset_backup="${BACKUP_DIR}/pos-assets-${stamp}"

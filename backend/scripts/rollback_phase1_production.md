@@ -18,33 +18,39 @@ Never paste `.env`, database URLs, JWT secrets, Paynow keys, entitlement private
 
 ## First response after any failure
 
-1. Stop and record the exact failed step, UTC time, deployed Git commit, backup path, inventory-evidence path, and current service state.
+1. Stop and record the exact failed step, UTC time, deployed Git commit, any reported backup status/path, inventory-evidence path, automatic backend-recovery status, and current service state.
 2. Do not rerun the deployment blindly. Do not run `alembic downgrade`, `pg_restore --clean`, or overwrite `apexretail_pos`.
 3. Inspect only non-sensitive state:
 
    ```bash
    cd /root/apexretail-pos
-   sudo -u postgres psql -X -Atqc 'SELECT current_database(), version_num FROM alembic_version;' apexretail_pos
+   (cd /tmp && sudo -u postgres psql -X -Atqc 'SELECT current_database(), version_num FROM alembic_version;' apexretail_pos)
    systemctl status apexpos --no-pager
    journalctl -u apexpos -n 200 --no-pager
    curl --fail --silent --show-error http://127.0.0.1:8000/api/health
    curl --fail --silent --show-error https://api.apexpos.cloud/api/health
    ```
 
-4. Verify the named backup without restoring it:
+4. Treat a dump as usable only when the deployment output calls it a **verified database backup**. If dump creation or validation failed, the reported path may be nonexistent, empty, partial, or invalid and is not a backup. Do not use it for recovery. Independently re-check a verified dump without restoring it:
 
    ```bash
    stat -c '%a %U:%G %n' /root/apexretail-pos/backups/phase1-production/apexretail_pos_before_phase1_TIMESTAMP.dump
-   sudo -u postgres pg_restore --list /root/apexretail-pos/backups/phase1-production/apexretail_pos_before_phase1_TIMESTAMP.dump >/dev/null
+   (cd /tmp && sudo -u postgres pg_restore --list) < /root/apexretail-pos/backups/phase1-production/apexretail_pos_before_phase1_TIMESTAMP.dump >/dev/null
    ```
 
-The backup mode must be `600`. Replace `TIMESTAMP` only after copying the exact filename from the deployment output.
+The backup must be owned by `root:root`, have mode `600`, be nonempty, and pass `pg_restore --list`. Replace `TIMESTAMP` only after copying the exact verified filename from the deployment output. A failed/nonexistent dump must never be described as retained or usable evidence.
+
+## Automatic backend recovery on deployment abort
+
+The deployment records that `apexpos` was initially active before it attempts to stop it. If any later step aborts before the backend has restarted and passed local health, the EXIT/error trap attempts `systemctl start apexpos`, confirms the service is active, and checks `http://127.0.0.1:8000/api/health`. It prints either a clear recovery success or `RECOVERY FAILED` while preserving the deployment's original nonzero exit code. It never restores a database or runs an Alembic downgrade.
+
+Always verify the reported recovery result. If automatic recovery failed, inspect the database revision and service logs before an approved operator action. If it succeeded, still inspect the failure point and revision before retrying the deployment.
 
 ## Choose the recovery path from the failure point
 
 ### Failure before Alembic starts
 
-Production remains at `b8e51d8f4a21`; no database restore is appropriate. If the script stopped `apexpos`, review its logs and start it:
+Production remains at `b8e51d8f4a21`; no database restore is appropriate. The deployment trap should already have attempted to restart an initially active `apexpos`. Confirm its result; if recovery failed, review the logs before an approved manual start:
 
 ```bash
 systemctl start apexpos
@@ -56,10 +62,10 @@ Correct the packaging, test, backup, or Class A precondition failure before sche
 
 ### Failure during or after migration
 
-Keep the backend stopped until the current revision and schema state are known. Alembic/PostgreSQL transactional DDL may have rolled back the failing revision, but never assume that it did.
+The deployment trap attempts to restore backend availability even for an abort during or after migration; this service recovery is not a database rollback. Alembic/PostgreSQL transactional DDL may have rolled back the failing revision, but never assume that it did. Immediately establish the current revision and schema state, and treat a failed local-health recovery as an incident requiring operator attention.
 
 ```bash
-sudo -u postgres psql -X -Atqc 'SELECT version_num FROM alembic_version;' apexretail_pos
+(cd /tmp && sudo -u postgres psql -X -Atqc 'SELECT version_num FROM alembic_version;' apexretail_pos)
 journalctl -u apexpos -n 200 --no-pager
 ```
 
