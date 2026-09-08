@@ -21,6 +21,7 @@ class SaleCreate(BaseModel):
     device_key: str | None = Field(default=None, max_length=255)
     payment_method: str = "cash"
     amount_received: Decimal | None = None
+    discount_amount: Decimal | None = Field(default=None, ge=0)
     client_sale_id: UUID | None = None
     client_created_at: datetime | None = None
     items: list[SaleItemCreate]
@@ -58,6 +59,7 @@ class SaleOut(BaseModel):
 
     tax_inclusive: bool
     total_amount: Decimal
+    discount_amount: Decimal | None = None
     amount_received: Decimal
     change_due: Decimal
     payment_method: str

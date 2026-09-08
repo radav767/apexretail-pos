@@ -46,6 +46,16 @@ class SalesService:
                         "Permission denied",
                     )
 
+                if (
+                    data.discount_amount is not None
+                    and data.discount_amount > 0
+                    and not actor.permissions.get("discounts")
+                ):
+                    raise HTTPException(
+                        403,
+                        "Discount permission denied",
+                    )
+
                 data.employee_id = actor.employee.id
 
         # An Android device may submit the same queued sale more than
@@ -171,6 +181,7 @@ class SalesService:
 
 
         total = Decimal("0")
+        undiscounted_total = Decimal("0")
         sale_items = []
         products = []
         balances = []
@@ -251,6 +262,12 @@ class SalesService:
             if line_total <= 0:
                 raise HTTPException(400, "Line total must be greater than zero")
             total += line_total
+            undiscounted_total += (
+                selling_price * item.quantity
+            ).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
 
             balance.quantity = after_qty
             await self.repo.sync_product_total(product)
@@ -297,6 +314,28 @@ class SalesService:
 
         # Calculate the final tax snapshot.
         raw_item_total = total
+        discount_amount = None
+        if data.discount_amount is not None:
+            discount_amount = Decimal(
+                data.discount_amount
+            ).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            inferred_discount = (
+                undiscounted_total - raw_item_total
+            ).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            if inferred_discount < 0 or discount_amount != inferred_discount:
+                raise HTTPException(
+                    400,
+                    (
+                        "discount_amount must equal the reduction from "
+                        "unit-price totals to submitted line totals"
+                    ),
+                )
 
         if tax_rate > 0:
             tax_fraction = tax_rate / Decimal("100")
@@ -439,6 +478,7 @@ class SalesService:
             tax_amount=tax_amount,
             tax_inclusive=tax_inclusive,
             total_amount=total,
+            discount_amount=discount_amount,
             amount_received=amount_received,
             change_due=change_due,
             payment_method=payment_method,

@@ -143,6 +143,9 @@ class Sale(Base):
 
 
     total_amount = Column(Numeric(12, 2), nullable=False, default=0)
+    # Nullable by design: pre-Phase-2 and legacy-client rows do not contain
+    # enough evidence to distinguish a discount from a price override.
+    discount_amount = Column(Numeric(12, 2), nullable=True)
     amount_received = Column(Numeric(12, 2), nullable=False, default=0)
     change_due = Column(Numeric(12, 2), nullable=False, default=0)
 
