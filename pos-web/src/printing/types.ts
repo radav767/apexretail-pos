@@ -71,7 +71,7 @@ export type ReceiptSnapshot = {
   reprint_count?: number;
   cashier_name?: string | null;
   subtotal_amount?: string;
-  discount_amount?: string;
+  discount_amount?: string | null;
   tax_name?: string | null;
   tax_rate?: string;
   tax_amount?: string;

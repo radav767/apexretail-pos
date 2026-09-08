@@ -9,7 +9,8 @@
     "test:entitlement": "node scripts/run-entitlement-tests.mjs",
     "test:sales-history": "node scripts/run-sales-history-tests.mjs",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:discounts": "node scripts/run-discount-tests.mjs && node scripts/test-offline-discounts.mjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",

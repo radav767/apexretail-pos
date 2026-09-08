@@ -261,6 +261,10 @@ class SalesService:
             )
             if line_total <= 0:
                 raise HTTPException(400, "Line total must be greater than zero")
+            if data.discount_amount is not None and line_total > (
+                selling_price * item.quantity
+            ).quantize(money_quantum, rounding=ROUND_HALF_UP):
+                raise HTTPException(400, "Discounted line total exceeds unit-price total")
             total += line_total
             undiscounted_total += (
                 selling_price * item.quantity
@@ -437,6 +441,12 @@ class SalesService:
                     403,
                     "Permission denied",
                 )
+
+            if discount_amount and not permissions.get("discounts"):
+                raise HTTPException(403, "Discount permission denied")
+
+        if total >= Decimal("10000000000"):
+            raise HTTPException(400, "Sale amount exceeds supported limit")
 
         sale = Sale(
             id=sale_id,
@@ -660,10 +670,10 @@ class SalesService:
             created_at=datetime.now(timezone.utc),
         )
         requested = {i.sale_item_id: i.quantity for i in data.items}
-        original_sale.status = "refunded" if all(
+        original_sale.status = "refunded" if all([
             requested.get(item.id, Decimal("0")) + sum((Decimal(x.quantity or 0) for x in await self.repo.list_refund_items_for_original_item(item.id)), Decimal("0")) >= Decimal(item.quantity or 0)
             for item in sale_items.values()
-        ) else "partially_refunded"
+        ]) else "partially_refunded"
         self.repo.db.add(AuditEvent(company_id=data.company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=data.device_id or original_sale.device_id, action="refund", reason=data.reason.strip(), details={"original_sale_id": str(original_sale.id), "refund_sale_id": str(refund_id)}))
         return await self.repo.save_sale(
             refund_sale,

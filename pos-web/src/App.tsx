@@ -1,3 +1,4 @@
+import { applyDiscounts } from "./discounts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
@@ -83,6 +84,7 @@ type Product = {
 };
 
 type CartItem = Product & {
+  line_discount?: string;
   quantity: string;
   selling_unit: string;
   line_total: string;
@@ -113,6 +115,7 @@ type Receipt = {
   tax_amount?: string;
   tax_inclusive?: boolean;
   total_amount: string;
+  discount_amount?: string | null;
   amount_received: string;
   change_due: string;
   payment_method: string;
@@ -237,6 +240,7 @@ const [loggedIn, setLoggedIn] = useState(
 
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [saleDiscount, setSaleDiscount] = useState("0");
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [message, setMessage] = useState("");
@@ -380,6 +384,7 @@ const [loggedIn, setLoggedIn] = useState(
       setCashier(null);
       setPinMessage("This POS session was ended on another device. Please sign in again.");
       setCart([]);
+      setSaleDiscount("0");
     };
     window.addEventListener("apex-session-invalidated", onInvalidated);
     return () => window.removeEventListener("apex-session-invalidated", onInvalidated);
@@ -538,11 +543,14 @@ const [loggedIn, setLoggedIn] = useState(
     );
   }, [products, search]);
 
-  const cartAmountCents = cart.reduce(
-    (sum, item) => sum + parseMoneyToCents(item.line_total),
-    0n,
-  );
-  const cartAmount = Number(formatCents(cartAmountCents));
+  let discountError = "";
+  let discounted = { items: cart, discount_amount: "0.00", total: "0.00" };
+  try {
+    discounted = applyDiscounts(cart, cart.length ? saleDiscount : "0");
+  } catch (error) {
+    discountError = (error as Error).message;
+  }
+  const cartAmount = Number(discounted.total);
 
   const configuredTaxRate = Math.max(
     0,
@@ -778,6 +786,7 @@ const [loggedIn, setLoggedIn] = useState(
       tax_amount: sale.tax_amount,
       tax_inclusive: sale.tax_inclusive,
       total_amount: sale.total_amount,
+      discount_amount: sale.discount_amount,
       amount_received: sale.amount_received,
       change_due: sale.change_due,
       payment_method: sale.payment_method,
@@ -1669,6 +1678,7 @@ const [loggedIn, setLoggedIn] = useState(
     setCashierPin("");
     setPinMessage("");
     setCart([]);
+    setSaleDiscount("0");
     setShowTender(false);
     setAmountReceived("");
     setReceipt(null);
@@ -1824,6 +1834,7 @@ const [loggedIn, setLoggedIn] = useState(
 
   function startPayment() {
     setMessage("");
+    if (discountError) { setMessage(discountError); return; }
 
     if (!cart.length) {
       setMessage("Add at least one product to the cart");
@@ -1840,6 +1851,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   async function submitSale(cashAmount?: number) {
+    if (discountError) { setMessage(discountError); return; }
     if (!cart.length || processing) {
       return;
     }
@@ -1852,7 +1864,7 @@ const [loggedIn, setLoggedIn] = useState(
     setProcessing(true);
     setMessage("");
 
-    const completedItems = [...cart];
+    const completedItems = discounted.items;
     const clientSaleId = createClientSaleId();
 
     const payload: OfflineSalePayload = {
@@ -1865,7 +1877,8 @@ const [loggedIn, setLoggedIn] = useState(
       device_key:
         localStorage.getItem("device_key") || null,
       payment_method: paymentMethod,
-      items: cart.map((item) => ({
+      discount_amount: discounted.discount_amount,
+      items: completedItems.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,
         selling_unit: item.selling_unit,
@@ -1981,6 +1994,7 @@ const [loggedIn, setLoggedIn] = useState(
               ).toFixed(2)
             : "0.00",
         payment_method: paymentMethod,
+        discount_amount: payload.discount_amount,
         status: "offline_pending",
         created_at:
           new Date().toISOString(),
@@ -1991,6 +2005,7 @@ const [loggedIn, setLoggedIn] = useState(
       setReceiptItems(completedItems);
       setShowTender(false);
       setCart([]);
+      setSaleDiscount("0");
       setAmountReceived("");
 
       setMessage(
@@ -2023,6 +2038,7 @@ const [loggedIn, setLoggedIn] = useState(
         setReceiptItems(completedItems);
         setShowTender(false);
         setCart([]);
+        setSaleDiscount("0");
         setAmountReceived("");
         setMessage(
           "Sale completed successfully",
@@ -2119,6 +2135,7 @@ const [loggedIn, setLoggedIn] = useState(
     setLoggedIn(false);
     setProducts([]);
     setCart([]);
+    setSaleDiscount("0");
     setReceipt(null);
     setReceiptItems([]);
     setBusinessSettings(null);
@@ -3005,7 +3022,7 @@ const [loggedIn, setLoggedIn] = useState(
             </p>
           )}
 
-          {cart.map((item) => (
+          {cart.map((item, cartIndex) => (
             <div key={item.id} style={cartRow}>
               <div>
                 <strong>{item.name}</strong>
@@ -3020,10 +3037,15 @@ const [loggedIn, setLoggedIn] = useState(
                     : ""}
                 </p>
                 <p style={{ margin: "5px 0 0", fontWeight: 700 }}>
-                  {formatMoney(item.line_total)}
+                  {formatMoney(discounted.items[cartIndex]?.line_total || item.line_total)}
                 </p>
               </div>
 
+              {cashier?.permissions?.discounts && <label>Line discount
+                <input aria-label={`Discount for ${item.name}`} inputMode="decimal" style={{ width: 75 }}
+                  value={item.line_discount || ""} disabled={processing}
+                  onChange={(event) => setCart((current) => current.map((line, index) => index === cartIndex ? { ...line, line_discount: event.target.value } : line))} />
+              </label>}
               <div style={quantityBox}>
                 <button
                   style={quantityButton}
@@ -3059,6 +3081,12 @@ const [loggedIn, setLoggedIn] = useState(
           ))}
         </div>
 
+        {cashier?.permissions?.discounts && <label>Sale discount
+          <input aria-label="Sale discount" inputMode="decimal" value={saleDiscount} disabled={processing}
+            onChange={(event) => setSaleDiscount(event.target.value)} />
+        </label>}
+        {discountError && <p role="alert">{discountError}</p>}
+        <p>Discount: {formatMoney(discounted.discount_amount)}</p>
         <div data-tax-summary="true"
           style={{
             marginTop: 22,

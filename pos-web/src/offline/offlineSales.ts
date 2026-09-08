@@ -23,6 +23,7 @@ export type OfflineSalePayload = {
   device_key?: string | null;
   payment_method: string;
   amount_received?: string;
+  discount_amount?: string | null;
   items: Array<{
     product_id: string;
     quantity: string;

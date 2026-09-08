@@ -7,10 +7,10 @@ from pydantic import BaseModel, Field
 
 class SaleItemCreate(BaseModel):
     product_id: UUID
-    quantity: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
     selling_unit: str | None = Field(default=None, max_length=20)
-    unit_price: Decimal | None = Field(default=None, gt=0)
-    line_total: Decimal | None = Field(default=None, gt=0)
+    unit_price: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    line_total: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
 
 
 class SaleCreate(BaseModel):
@@ -20,8 +20,8 @@ class SaleCreate(BaseModel):
     device_id: UUID | None = None
     device_key: str | None = Field(default=None, max_length=255)
     payment_method: str = "cash"
-    amount_received: Decimal | None = None
-    discount_amount: Decimal | None = Field(default=None, ge=0)
+    amount_received: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    discount_amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     client_sale_id: UUID | None = None
     client_created_at: datetime | None = None
     items: list[SaleItemCreate]
@@ -96,7 +96,7 @@ class SaleReceiptOut(SaleOut):
 
 class RefundItemCreate(BaseModel):
     sale_item_id: UUID
-    quantity: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
 
 
 class RefundCreate(BaseModel):
