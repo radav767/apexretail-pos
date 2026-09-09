@@ -56,10 +56,10 @@ service restart, APK rebuild, or publication was performed. Only isolated tempor
 
 - Historical sales and older deployed POS clients may omit discount snapshots;
   those report ranges correctly show Discounts as unavailable. The updated POS
-  source sends snapshots, but no APK was rebuilt or released.
+  source sends snapshots.
 - Mobile checks used Chromium viewport emulation, not physical Android hardware.
   POS discount calculation and offline synchronization were tested programmatically;
-  a physical-device checkout/printing test remains outside this validation.
+  a physical-device discount checkout/printing test remains outside this validation.
 - Historical cost snapshots and tax semantics are inherited from Phase 1.
 - Migration testing used a synthetic Phase 1 clone, not production data.
 - Phase 2 is local and unpushed. Applying its migration and deployment require
@@ -117,6 +117,25 @@ Passed:
 - Authenticated employee without reports permission received HTTP 403 and no
   metric cards.
 - No browser runtime errors or external application requests.
+
+## Android release-candidate and physical-device upgrade
+
+Validated on 2026-09-09 using the uniquely named Phase 2 release candidate built
+from `424b45ed063e0ac4f41a6614442c6b2ad6c9292f` with `versionCode 4` and
+`versionName 1.2.0`. The APK package is `cloud.apexpos.pos`. Its signing
+certificate SHA-256 fingerprint exactly matched the published v1.1.1 build 3
+fingerprint, and APK signature verification passed for v1, v2, and v3.
+
+The candidate was installed on a physical Android device directly over the
+existing v1.1.1 build 3 application, without uninstalling or clearing application
+data. Installation succeeded, the upgraded application launched, and the prior
+login, shop, and terminal state was retained. This confirms the required in-place
+upgrade path from build 3 to build 4 with the compatible existing signer.
+
+The public candidate download matched the protected server copy byte-for-byte,
+ZIP integrity passed, and its embedded POS payload matched an independent clean
+release rebuild outside signing metadata. No signing key material was printed,
+copied, replaced, or committed.
 
 Chromium required two libraries extracted only under `/tmp`; no system packages
 were installed. A test selector was corrected to account for a CSS icon in the
