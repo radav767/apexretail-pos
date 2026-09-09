@@ -7,6 +7,14 @@ automatically. Retain the entire timestamped directory under
 `/root/apexretail-pos/backups/phase2-production`, every test database and all
 published APKs until an incident owner approves cleanup.
 
+The first authorized attempt on 2026-09-09 stopped during APK preflight before
+any database dump, asset backup, service stop, migration, or publication. The APK
+was valid; `zipinfo | grep -q` produced a false failure under `pipefail` when the
+matcher exited before `zipinfo`. The corrected preflight writes the complete APK
+listing to a root-only evidence file before matching required entries. Signer and
+badging producers are also fully consumed before their output is parsed. Retain
+the failed-attempt evidence directory beginning with `20260909T114350Z-b7e80d1c`.
+
 ## First response
 
 Stop the deployment command after any failure. Record its exit status and output,
