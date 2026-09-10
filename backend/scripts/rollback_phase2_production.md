@@ -15,6 +15,18 @@ listing to a root-only evidence file before matching required entries. Signer an
 badging producers are also fully consumed before their output is parsed. Retain
 the failed-attempt evidence directory beginning with `20260909T114350Z-b7e80d1c`.
 
+The renewed deployment completed migration, aggregate checks, service recovery,
+asset and APK publication, public-file checks, and the authenticated Dashboard
+request before reporting a late nonzero status. The final verifier attempted to
+assign to the readonly `DASHBOARD_COMPANY_ID` shell variable; its database client
+also required the application's `postgresql+asyncpg` URL to be adapted to the
+synchronous `postgresql` driver for `psycopg2`. The finalizer now passes the ID as
+`EXPECTED_DASHBOARD_COMPANY_ID` and invokes an independently mocked and tested
+Python verifier. This class of failure does not by itself justify redeployment,
+rollback, service restart, or republication: confirm the production revision,
+health, published bytes, and preserved Dashboard response before deciding that
+only finalization failed. Retain the `20260909T151202Z-e45651f...` evidence.
+
 ## First response
 
 Stop the deployment command after any failure. Record its exit status and output,

@@ -155,3 +155,21 @@ results JSON, and extracted browser libraries were removed by explicit path;
 the browser results are retained above. Test ports and processes were checked
 again after cleanup. The retained stash remains
 `4bf05469530c72b04d5db1342e2ffd55b5b7ec53`.
+
+## Production finalizer correction (2026-09-10)
+
+The production migration, health checks, web publication, APK publication, and
+authenticated Dashboard request completed on 2026-09-09. The deployment then
+reported a late nonzero status because its verifier assigned to the readonly
+`DASHBOARD_COMPANY_ID`; the verifier would also have passed a
+`postgresql+asyncpg` URL directly to `psycopg2`. Production was independently
+confirmed operational, and deployment was not rerun.
+
+The deployment tooling now exports a distinct
+`EXPECTED_DASHBOARD_COMPANY_ID` and converts the application URL to the
+synchronous `postgresql` driver. The real semantic verifier is exercised with a
+mocked PostgreSQL connection for a successful response, exact company-ID
+propagation, URL conversion, and a metric-mismatch failure. Bash syntax,
+preflight, and wrong-commit fail-fast recovery checks also pass without accessing
+production. The retained stash, deployment evidence, backups, and published
+artifacts remain unchanged.

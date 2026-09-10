@@ -254,54 +254,9 @@ verify_public_dashboard() {
     "${PUBLIC_HEALTH_URL%/health}/dashboard/summary-v2/${DASHBOARD_COMPANY_ID}?range_key=today" \
     --output "$response_file"
   chmod 600 "$response_file"
-  DASHBOARD_RESPONSE="$response_file" DASHBOARD_COMPANY_ID="$DASHBOARD_COMPANY_ID" \
-    "${BACKEND_DIR}/venv/bin/python" - <<'PY'
-import json, os
-from datetime import datetime, time, timedelta, timezone
-from decimal import Decimal
-from zoneinfo import ZoneInfo
-import psycopg2
-from dotenv import dotenv_values
-from sqlalchemy.engine import make_url
-
-body = json.load(open(os.environ['DASHBOARD_RESPONSE']))
-if body.get('range_key') != 'today' or body.get('reporting_timezone') != 'Africa/Harare':
-    raise SystemExit('Dashboard range/timezone mismatch')
-metrics = body.get('metrics', {})
-if set(metrics) != {'gross_sales','net_sales','cost_of_sales','gross_profit','discounts','refunds'}:
-    raise SystemExit('Dashboard metric set mismatch')
-tz = ZoneInfo('Africa/Harare')
-day = datetime.now(tz).date()
-start = datetime.combine(day, time.min, tzinfo=tz).astimezone(timezone.utc)
-end = datetime.combine(day + timedelta(days=1), time.min, tzinfo=tz).astimezone(timezone.utc)
-url = make_url(dotenv_values('/root/apexretail-pos/backend/.env')['DATABASE_URL'])
-conn = psycopg2.connect(url.render_as_string(hide_password=False))
-with conn, conn.cursor() as q:
-    q.execute('''WITH tx AS (SELECT * FROM sales s WHERE s.company_id=%s AND s.created_at >= %s
-      AND s.created_at < %s AND ((s.original_sale_id IS NULL AND lower(s.status) IN
-      ('completed','partially_refunded','refunded')) OR
-      (s.original_sale_id IS NOT NULL AND lower(s.status)='refunded'))),
-      sales AS (SELECT COALESCE(sum(total_amount) FILTER(WHERE original_sale_id IS NULL),0) gross,
-      COALESCE(-sum(total_amount) FILTER(WHERE original_sale_id IS NOT NULL),0) refunds,
-      COALESCE(sum(discount_amount) FILTER(WHERE original_sale_id IS NULL),0) discounts,
-      count(*) FILTER(WHERE original_sale_id IS NULL) originals,
-      count(discount_amount) FILTER(WHERE original_sale_id IS NULL) known FROM tx),
-      costs AS (SELECT COALESCE(sum(i.line_cost),0) cost FROM sale_items i JOIN tx ON tx.id=i.sale_id)
-      SELECT gross,refunds,gross-refunds,cost,gross-refunds-cost,discounts,originals=known FROM sales,costs''',
-      (os.environ['DASHBOARD_COMPANY_ID'], start, end))
-    gross, refunds, net, cost, profit, discounts, known = q.fetchone()
-expected = {'gross_sales':gross,'refunds':refunds,'net_sales':net,
-            'cost_of_sales':cost,'gross_profit':profit}
-for name, value in expected.items():
-    metric = metrics[name]
-    if not metric.get('available') or Decimal(str(metric.get('value'))) != Decimal(value).quantize(Decimal('.01')):
-        raise SystemExit(f'Dashboard {name} mismatch')
-discount_metric = metrics['discounts']
-if bool(discount_metric.get('available')) != bool(known):
-    raise SystemExit('Dashboard discount availability mismatch')
-if known and Decimal(str(discount_metric.get('value'))) != Decimal(discounts).quantize(Decimal('.01')):
-    raise SystemExit('Dashboard discounts mismatch')
-PY
+  DASHBOARD_RESPONSE="$response_file" EXPECTED_DASHBOARD_COMPANY_ID="$DASHBOARD_COMPANY_ID" \
+    "${BACKEND_DIR}/venv/bin/python" \
+      "${BACKEND_DIR}/scripts/verify_phase2_dashboard.py"
 }
 
 systemctl is-active --quiet postgresql || fail "PostgreSQL is not active"
