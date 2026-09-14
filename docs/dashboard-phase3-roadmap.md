@@ -1,7 +1,8 @@
 # Dashboard Phase 3 roadmap
 
-Status: approved for local implementation on `phase3/dashboard-analytics`.
-Production release remains separately gated.
+Status: feature scope frozen on `phase3/dashboard-analytics`; only corrective
+release work is permitted. Production release remains separately gated. Phase 4
+requirements are documented separately and must not enter the Phase 3 candidate.
 
 ## Objective
 
@@ -70,6 +71,9 @@ accounting population and the same company, shop, and Africa/Harare date bounds.
     before any index or reporting structure is proposed.
 11. Backend, migration-cycle, Backoffice, POS compatibility, browser, and mobile
     validation pass without accessing production or rebuilding an APK.
+
+The representative query methodology, evidence, and 2,000 ms per-query release
+gate are defined in [Dashboard Phase 3 performance gate](dashboard-phase3-performance.md).
 
 ## Release gates
 

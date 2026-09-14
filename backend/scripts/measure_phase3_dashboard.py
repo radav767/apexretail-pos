@@ -16,6 +16,32 @@ from app.dashboard.accounting import transaction_filters, transaction_population
 
 COMPANY_ID = UUID("33333333-3333-3333-3333-333333333333")
 SHOP_ID = UUID("44444444-4444-4444-4444-444444444444")
+MAX_QUERY_EXECUTION_MS = 2000.0
+
+
+def plan_evidence(node):
+    """Keep the plan evidence needed to diagnose scans and joins."""
+    evidence = {
+        key: node[key]
+        for key in (
+            "Node Type", "Join Type", "Relation Name", "Index Name",
+            "Actual Rows", "Actual Loops", "Actual Total Time",
+            "Rows Removed by Filter",
+        )
+        if key in node
+    }
+    children = [plan_evidence(child) for child in node.get("Plans", [])]
+    if children:
+        evidence["Plans"] = children
+    return evidence
+
+
+def threshold_failures(measurements):
+    return {
+        name: measurement["execution_ms"]
+        for name, measurement in measurements.items()
+        if measurement["execution_ms"] > MAX_QUERY_EXECUTION_MS
+    }
 
 
 async def main():
@@ -25,6 +51,8 @@ async def main():
         raise SystemExit("refusing performance measurement outside a Phase 2/3 test database")
 
     engine = create_async_engine(database_url)
+    report = None
+    failures = None
     async with engine.connect() as connection:
         transaction = await connection.begin()
         try:
@@ -91,6 +119,11 @@ async def main():
             """))
             fixture_ms = (time.perf_counter() - started) * 1000
 
+            # The fixture is intentionally rolled back, so PostgreSQL's existing
+            # statistics still describe the much smaller restored clone. Refresh
+            # them inside this transaction before evaluating representative plans.
+            await connection.execute(text("ANALYZE sales, sale_items"))
+
             start_at, end_at = utc_bounds(date(2026, 1, 1), date(2026, 12, 31))
             params = {
                 "company_id": COMPANY_ID, "shop_id": None,
@@ -112,17 +145,31 @@ async def main():
                     "planning_ms": round(float(plan["Planning Time"]), 3),
                     "execution_ms": round(float(plan["Execution Time"]), 3),
                     "root_plan": plan["Plan"]["Node Type"],
+                    "plan": plan_evidence(plan["Plan"]),
                 }
-            print(json.dumps({
+            failures = threshold_failures(measurements)
+            report = {
                 "database": database_name, "synthetic_sales": 25000,
                 "synthetic_sale_items": 75000,
                 "fixture_insert_ms": round(fixture_ms, 3),
                 "measurements": measurements, "indexes_added": False,
-                "transaction_rolled_back": True,
-            }, indent=2, sort_keys=True))
+                "max_query_execution_ms": MAX_QUERY_EXECUTION_MS,
+                "threshold_passed": not failures,
+                "transaction_rolled_back": False,
+            }
         finally:
             await transaction.rollback()
     await engine.dispose()
+    report["transaction_rolled_back"] = True
+    print(json.dumps(report, indent=2, sort_keys=True))
+    if failures:
+        raise RuntimeError(
+            "Phase 3 query latency threshold exceeded: "
+            + ", ".join(
+                f"{name}={duration:.3f}ms"
+                for name, duration in sorted(failures.items())
+            )
+        )
 
 
 if __name__ == "__main__":
