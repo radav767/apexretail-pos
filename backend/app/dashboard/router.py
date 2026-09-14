@@ -2,7 +2,7 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import (
@@ -13,6 +13,8 @@ from app.auth.dependencies import (
 from app.dashboard.repository import DashboardRepository
 from app.dashboard.schema import (
     DashboardPhase2Summary,
+    DashboardDrilldown,
+    DashboardPhase3Summary,
     DashboardSummary,
 )
 from app.dashboard.service import DashboardService
@@ -47,6 +49,7 @@ async def require_dashboard_reports_access(
 async def dashboard_summary(
     company_id: UUID,
     service: DashboardService = Depends(get_service),
+    _actor: AuthActor = Depends(require_dashboard_reports_access),
 ):
     return await service.get_summary(company_id)
 
@@ -78,4 +81,92 @@ async def dashboard_summary_phase2(
         date_from=date_from,
         date_to=date_to,
         shop_id=shop_id,
+    )
+
+
+@router.get("/analytics-v3/{company_id}", response_model=DashboardPhase3Summary)
+async def dashboard_analytics_phase3(
+    company_id: UUID,
+    range_key: Literal["today", "yesterday", "last_7_days", "last_month", "custom"] = Query(default="today"),
+    granularity: Literal["day", "week", "month"] = Query(default="day"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    shop_id: UUID | None = Query(default=None),
+    top_limit: int = Query(default=10, ge=1, le=50),
+    service: DashboardService = Depends(get_service),
+    _actor: AuthActor = Depends(require_dashboard_reports_access),
+):
+    return await service.get_phase3_summary(
+        company_id, range_key=range_key, granularity=granularity,
+        date_from=date_from, date_to=date_to, shop_id=shop_id,
+        top_limit=top_limit,
+    )
+
+
+@router.get("/analytics-v3/{company_id}/sales", response_model=DashboardDrilldown)
+async def dashboard_analytics_drilldown(
+    company_id: UUID,
+    range_key: Literal["today", "yesterday", "last_7_days", "last_month", "custom"] = Query(default="today"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    shop_id: UUID | None = Query(default=None),
+    metric: Literal["gross_sales", "refunds", "net_sales", "cost_of_sales", "gross_profit", "discounts"] = Query(default="net_sales"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    service: DashboardService = Depends(get_service),
+    _actor: AuthActor = Depends(require_dashboard_reports_access),
+):
+    return await service.get_drilldown(
+        company_id, range_key=range_key, date_from=date_from,
+        date_to=date_to, shop_id=shop_id, metric=metric,
+        limit=limit, offset=offset,
+    )
+
+
+@router.get("/analytics-v3/{company_id}/export.csv")
+async def dashboard_analytics_export(
+    company_id: UUID,
+    section: Literal[
+        "trends", "top_products", "top_categories", "payment_methods",
+        "shop_breakdown", "cashier_breakdown", "discount_breakdown",
+        "refund_breakdown",
+    ] = Query(default="trends"),
+    range_key: Literal["today", "yesterday", "last_7_days", "last_month", "custom"] = Query(default="today"),
+    granularity: Literal["day", "week", "month"] = Query(default="day"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    shop_id: UUID | None = Query(default=None),
+    top_limit: int = Query(default=10, ge=1, le=50),
+    service: DashboardService = Depends(get_service),
+    _actor: AuthActor = Depends(require_dashboard_reports_access),
+):
+    content = await service.export_phase3(
+        company_id, section=section, range_key=range_key,
+        granularity=granularity, date_from=date_from, date_to=date_to,
+        shop_id=shop_id, top_limit=top_limit,
+    )
+    return Response(
+        content=content, media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="dashboard-{section}.csv"'},
+    )
+
+
+@router.get("/analytics-v3/{company_id}/sales.csv")
+async def dashboard_analytics_drilldown_export(
+    company_id: UUID,
+    range_key: Literal["today", "yesterday", "last_7_days", "last_month", "custom"] = Query(default="today"),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    shop_id: UUID | None = Query(default=None),
+    metric: Literal["gross_sales", "refunds", "net_sales", "cost_of_sales", "gross_profit", "discounts"] = Query(default="net_sales"),
+    service: DashboardService = Depends(get_service),
+    _actor: AuthActor = Depends(require_dashboard_reports_access),
+):
+    content = await service.export_drilldown(
+        company_id, range_key=range_key, date_from=date_from,
+        date_to=date_to, shop_id=shop_id, metric=metric,
+    )
+    return Response(
+        content=content, media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="dashboard-sales.csv"'},
     )

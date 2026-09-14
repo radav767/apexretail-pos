@@ -31,6 +31,73 @@ export type DashboardPhase2Summary = {
   };
 };
 
+export type DashboardChange = {
+  available: boolean;
+  amount: string | null;
+  percentage: string | null;
+  reason: string | null;
+};
+
+export type DashboardRankedRow = {
+  id: string | null;
+  name: string;
+  revenue: string;
+  quantity: string;
+  gross_profit: string;
+};
+
+export type DashboardBreakdownRow = {
+  key: string;
+  name: string;
+  transactions: number;
+  gross_sales: string;
+  refunds: string;
+  net_sales: string;
+  gross_profit: string;
+  discounts: DashboardMetric;
+};
+
+export type DashboardPhase3Summary = DashboardPhase2Summary & {
+  granularity: "day" | "week" | "month";
+  comparison: {
+    date_from: string;
+    date_to: string;
+    metrics: Record<string, DashboardChange>;
+  };
+  trends: Array<{
+    period_start: string;
+    period_end: string;
+    metrics: DashboardPhase2Summary["metrics"];
+  }>;
+  top_products: DashboardRankedRow[];
+  top_categories: DashboardRankedRow[];
+  payment_methods: DashboardBreakdownRow[];
+  shop_breakdown: DashboardBreakdownRow[];
+  cashier_breakdown: DashboardBreakdownRow[];
+  discount_breakdown: DashboardBreakdownRow[];
+  refund_breakdown: DashboardBreakdownRow[];
+};
+
+export type DashboardDrilldown = {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: Array<{
+    id: string;
+    receipt_number: string;
+    created_at: string;
+    shop_name: string;
+    cashier_name: string;
+    payment_method: string;
+    status: string;
+    gross_sales: string;
+    refunds: string;
+    net_sales: string;
+    gross_profit: string;
+    discounts: DashboardMetric;
+  }>;
+};
+
 export const dashboardRangeOptions: Array<{
   key: DashboardRangeKey;
   label: string;

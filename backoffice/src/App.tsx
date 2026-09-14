@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import "./App.css";
 import {
-  type DashboardPhase2Summary,
+  type DashboardPhase3Summary,
   type DashboardRangeKey,
 } from "./dashboard";
-import { DashboardPanel } from "./DashboardPanel";
+import { DashboardPanel, type ExportSection } from "./DashboardPanel";
 import ProductsPage from "./pages/ProductsPage";
 import InventoryPage from "./pages/InventoryPage";
 import ShopsDevicesPage from "./pages/ShopsDevicesPage";
@@ -43,9 +43,10 @@ function App() {
     localStorage.getItem("backoffice_company_id") || "",
   );
   const [dashboardSummary, setDashboardSummary] =
-    useState<DashboardPhase2Summary | null>(null);
+    useState<DashboardPhase3Summary | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
-  const [dashboardShops, setDashboardShops] = useState<DashboardPhase2Summary["shops"]>([]);
+  const [dashboardShops, setDashboardShops] = useState<DashboardPhase3Summary["shops"]>([]);
+  const [granularity, setGranularity] = useState<"day" | "week" | "month">("day");
   const [page, setPage] = useState<
     | "dashboard"
     | "sales"
@@ -130,10 +131,11 @@ function App() {
         setMessage("");
 
         const response = await api.get(
-          `/dashboard/summary-v2/${id}`,
+          `/dashboard/analytics-v3/${id}`,
           {
             params: {
               range_key: rangeKey,
+              granularity,
               shop_id: selectedShopId || undefined,
               date_from:
                 rangeKey === "custom"
@@ -161,8 +163,33 @@ function App() {
         if (requestId === dashboardRequest.current) setDashboardLoading(false);
       }
     },
-    [rangeKey, selectedShopId, customDateFrom, customDateTo],
+    [rangeKey, granularity, selectedShopId, customDateFrom, customDateTo],
   );
+
+  const dashboardParams = useCallback(() => ({
+    range_key: rangeKey,
+    granularity,
+    shop_id: selectedShopId || undefined,
+    date_from: rangeKey === "custom" ? customDateFrom : undefined,
+    date_to: rangeKey === "custom" ? customDateTo : undefined,
+  }), [rangeKey, granularity, selectedShopId, customDateFrom, customDateTo]);
+
+  async function exportDashboard(section: ExportSection) {
+    try {
+      setMessage("");
+      const response = await api.get(`/dashboard/analytics-v3/${companyId}/export.csv`, {
+        params: { ...dashboardParams(), section }, responseType: "blob",
+      });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `dashboard-${section}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      setMessage(error.response?.data?.detail || "Failed to export dashboard CSV");
+    }
+  }
 
   const loadBackofficeData = useCallback(
     async (id: string) => {
@@ -397,13 +424,16 @@ function App() {
             summary={dashboardSummary}
             shops={dashboardShops}
             rangeKey={rangeKey}
+            granularity={granularity}
             selectedShopId={selectedShopId}
             customDateFrom={customDateFrom}
             customDateTo={customDateTo}
             onRangeChange={setRangeKey}
+            onGranularityChange={setGranularity}
             onShopChange={setSelectedShopId}
             onDateFromChange={setCustomDateFrom}
             onDateToChange={setCustomDateTo}
+            onExport={(section) => void exportDashboard(section)}
           />
         )}
 

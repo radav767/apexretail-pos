@@ -2,7 +2,12 @@ import type {
   PrinterConfig,
   ReceiptLineItem,
   ReceiptSnapshot,
-} from "./types";
+} from "./types.ts";
+import {
+  formatCents,
+  multiplyPriceByQuantity,
+  parseMoneyToCents,
+} from "../decimal.ts";
 
 function money(value: string | number | undefined) {
   return Number(value || 0).toFixed(2);
@@ -35,7 +40,9 @@ function alignLine(left: string, right: string, width: number) {
 }
 
 function buildItemLines(item: ReceiptLineItem, width: number) {
-  const total = money(item.line_total);
+  const grossTotal = money(
+    multiplyPriceByQuantity(item.unit_price, item.quantity),
+  );
   const quantity = Number(item.quantity || 0)
     .toFixed(3)
     .replace(/\.?0+$/, "");
@@ -49,8 +56,28 @@ function buildItemLines(item: ReceiptLineItem, width: number) {
 
   return [
     item.name.slice(0, width),
-    alignLine(qtyAndPrice, total, width),
+    alignLine(qtyAndPrice, grossTotal, width),
+    ...(Number(item.line_discount_amount || 0) > 0
+      ? [alignLine("  Line discount", `-${money(item.line_discount_amount || 0)}`, width)]
+      : []),
   ];
+}
+
+function grossItemsTotal(snapshot: ReceiptSnapshot): string {
+  return formatCents(
+    snapshot.items.reduce(
+      (sum, item) =>
+        sum + parseMoneyToCents(
+          multiplyPriceByQuantity(item.unit_price, item.quantity),
+        ),
+      0n,
+    ),
+  );
+}
+
+function hasExplicitDiscountComponents(snapshot: ReceiptSnapshot): boolean {
+  return snapshot.sale_discount_amount != null
+    || snapshot.items.some((item) => item.line_discount_amount != null);
 }
 
 function buildEscPosLines(snapshot: ReceiptSnapshot, config: PrinterConfig) {
@@ -120,18 +147,41 @@ function buildEscPosLines(snapshot: ReceiptSnapshot, config: PrinterConfig) {
 
   lines.push("-".repeat(width));
 
-  if (snapshot.subtotal_amount) {
-    lines.push(alignLine("Subtotal", money(snapshot.subtotal_amount), width));
-  }
+  lines.push(alignLine("Items before discounts", money(grossItemsTotal(snapshot)), width));
 
-  if (snapshot.discount_amount && Number(snapshot.discount_amount) > 0) {
-    lines.push(alignLine("Discount", money(snapshot.discount_amount), width));
+  if (
+    hasExplicitDiscountComponents(snapshot)
+    && Number(snapshot.sale_discount_amount || 0) > 0
+  ) {
+    lines.push(
+      alignLine(
+        "Sale-wide discount",
+        `-${money(snapshot.sale_discount_amount || 0)}`,
+        width,
+      ),
+    );
+  } else if (
+    !hasExplicitDiscountComponents(snapshot)
+    && snapshot.discount_amount
+    && Number(snapshot.discount_amount) > 0
+  ) {
+    lines.push(
+      alignLine(
+        "Discount (combined)",
+        `-${money(snapshot.discount_amount)}`,
+        width,
+      ),
+    );
   }
 
   if (snapshot.tax_amount && Number(snapshot.tax_amount) > 0) {
     const taxLabel =
       snapshot.tax_name?.trim() || "Tax";
-    lines.push(alignLine(taxLabel, money(snapshot.tax_amount), width));
+    lines.push(alignLine(
+      `${taxLabel}${snapshot.tax_inclusive ? " (included)" : ""}`,
+      money(snapshot.tax_amount),
+      width,
+    ));
   }
 
   lines.push(alignLine("TOTAL", money(snapshot.total_amount), width));
@@ -197,14 +247,20 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
 
   const itemRows = snapshot.items
     .map(
-      (item) => `
+      (item) => {
+        const lineDiscount = Number(item.line_discount_amount || 0) > 0
+          ? `<tr class="discount-detail"><td colspan="3">Line discount</td><td style="text-align:right">-${money(item.line_discount_amount || 0)}</td></tr>`
+          : "";
+        return `
         <tr>
           <td>${escapeHtml(item.name)}</td>
           <td style="text-align:center">${Number(item.quantity).toFixed(3).replace(/\.?0+$/, "")}${item.selling_unit ? ` ${escapeHtml(item.selling_unit)}` : ""}</td>
           <td style="text-align:right">${money(item.unit_price)}${item.selling_unit ? `/${escapeHtml(item.selling_unit)}` : ""}</td>
-          <td style="text-align:right">${money(item.line_total)}</td>
+          <td style="text-align:right">${money(multiplyPriceByQuantity(item.unit_price, item.quantity))}</td>
         </tr>
-      `,
+        ${lineDiscount}
+      `;
+      },
     )
     .join("");
 
@@ -212,20 +268,23 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
     snapshot.tax_amount && Number(snapshot.tax_amount) > 0
       ? `
         <div class="summary-row">
-          <span>${escapeHtml(snapshot.tax_name?.trim() || "Tax")}</span>
+          <span>${escapeHtml(snapshot.tax_name?.trim() || "Tax")}${snapshot.tax_inclusive ? " (included)" : ""}</span>
           <span>${money(snapshot.tax_amount)}</span>
         </div>
       `
       : "";
 
-  const discountRow =
-    snapshot.discount_amount && Number(snapshot.discount_amount) > 0
+  const discountRow = hasExplicitDiscountComponents(snapshot)
+    ? snapshot.sale_discount_amount && Number(snapshot.sale_discount_amount) > 0
       ? `
         <div class="summary-row">
-          <span>Discount</span>
-          <span>${money(snapshot.discount_amount)}</span>
+          <span>Sale-wide discount</span>
+          <span>-${money(snapshot.sale_discount_amount)}</span>
         </div>
       `
+      : ""
+    : snapshot.discount_amount && Number(snapshot.discount_amount) > 0
+      ? `<div class="summary-row"><span>Discount (combined)</span><span>-${money(snapshot.discount_amount)}</span></div>`
       : "";
 
   return `
@@ -339,14 +398,12 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
           </table>
           <div class="summary">
             ${
-              snapshot.subtotal_amount
-                ? `
+              `
                   <div class="summary-row">
-                    <span>Subtotal</span>
-                    <span>${money(snapshot.subtotal_amount)}</span>
+                    <span>Items before discounts</span>
+                    <span>${money(grossItemsTotal(snapshot))}</span>
                   </div>
                 `
-                : ""
             }
             ${discountRow}
             ${taxRow}

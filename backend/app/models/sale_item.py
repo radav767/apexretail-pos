@@ -19,6 +19,9 @@ class SaleItem(Base):
     selling_unit = Column(String(20), nullable=False, default="each")
     unit_price = Column(Numeric(12, 2), default=0)
     line_total = Column(Numeric(12, 2), default=0)
+    # The entered line-level component, separate from any sale-wide amount
+    # allocated into line_total. Nullable for pre-fix receipts.
+    line_discount_amount = Column(Numeric(12, 2), nullable=True)
 
     unit_cost = Column(Numeric(12, 2), default=0)
     line_cost = Column(Numeric(12, 2), default=0)

@@ -11,6 +11,9 @@ class SaleItemCreate(BaseModel):
     selling_unit: str | None = Field(default=None, max_length=20)
     unit_price: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     line_total: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    line_discount_amount: Decimal | None = Field(
+        default=None, ge=0, max_digits=12, decimal_places=2
+    )
 
 
 class SaleCreate(BaseModel):
@@ -22,6 +25,9 @@ class SaleCreate(BaseModel):
     payment_method: str = "cash"
     amount_received: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     discount_amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    sale_discount_amount: Decimal | None = Field(
+        default=None, ge=0, max_digits=12, decimal_places=2
+    )
     client_sale_id: UUID | None = None
     client_created_at: datetime | None = None
     items: list[SaleItemCreate]
@@ -60,6 +66,7 @@ class SaleOut(BaseModel):
     tax_inclusive: bool
     total_amount: Decimal
     discount_amount: Decimal | None = None
+    sale_discount_amount: Decimal | None = None
     amount_received: Decimal
     change_due: Decimal
     payment_method: str
@@ -85,6 +92,7 @@ class SaleItemOut(BaseModel):
     selling_unit: str = "each"
     unit_price: Decimal
     line_total: Decimal
+    line_discount_amount: Decimal | None = None
 
     class Config:
         from_attributes = True

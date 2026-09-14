@@ -6,7 +6,13 @@ import {
   getApiErrorMessage,
 } from "./api/client";
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
-import { getOrCreateDeviceKey, registerCurrentDevice } from "./device";
+import {
+  clearAuthenticationPreservingDeviceIdentity,
+  getOrCreateDeviceKey,
+  getPinLoginDeviceIdentity,
+  rememberDeviceIdentity,
+} from "./deviceIdentity";
+import { registerCurrentDevice } from "./device";
 import {
   authenticateOfflineCashier,
   cacheOfflineCashier,
@@ -85,6 +91,7 @@ type Product = {
 
 type CartItem = Product & {
   line_discount?: string;
+  line_discount_amount?: string;
   quantity: string;
   selling_unit: string;
   line_total: string;
@@ -116,6 +123,7 @@ type Receipt = {
   tax_inclusive?: boolean;
   total_amount: string;
   discount_amount?: string | null;
+  sale_discount_amount?: string | null;
   amount_received: string;
   change_due: string;
   payment_method: string;
@@ -168,6 +176,7 @@ type SaleReceiptResponse = Receipt & {
     selling_unit?: string;
     unit_price: string;
     line_total: string;
+    line_discount_amount?: string | null;
   }>;
   cashier_name?: string | null;
 };
@@ -292,6 +301,10 @@ const [loggedIn, setLoggedIn] = useState(
   const [selectedShopId, setSelectedShopId] = useState("");
   const [selectedTerminalId, setSelectedTerminalId] = useState("");
   const [takeoverPrompt, setTakeoverPrompt] = useState(false);
+  const [takeoverSelection, setTakeoverSelection] = useState<{
+    shop_id: string;
+    device_id: string;
+  } | null>(null);
   const latestDiscoveryRequestIdRef = useRef(0);
   const activeDiscoveryScopeRef = useRef<string | null>(null);
 
@@ -544,7 +557,13 @@ const [loggedIn, setLoggedIn] = useState(
   }, [products, search]);
 
   let discountError = "";
-  let discounted = { items: cart, discount_amount: "0.00", total: "0.00" };
+  let discounted = {
+    items: cart,
+    line_discount_total: "0.00",
+    discount_amount: "0.00",
+    sale_discount_amount: "0.00",
+    total: "0.00",
+  };
   try {
     discounted = applyDiscounts(cart, cart.length ? saleDiscount : "0");
   } catch (error) {
@@ -787,6 +806,7 @@ const [loggedIn, setLoggedIn] = useState(
       tax_inclusive: sale.tax_inclusive,
       total_amount: sale.total_amount,
       discount_amount: sale.discount_amount,
+      sale_discount_amount: sale.sale_discount_amount,
       amount_received: sale.amount_received,
       change_due: sale.change_due,
       payment_method: sale.payment_method,
@@ -1054,6 +1074,7 @@ const [loggedIn, setLoggedIn] = useState(
         selling_unit: item.selling_unit,
         unit_price: item.selling_price,
         line_total: item.line_total,
+        line_discount_amount: item.line_discount_amount,
       })),
     );
 
@@ -1183,6 +1204,7 @@ const [loggedIn, setLoggedIn] = useState(
           selling_unit: item.selling_unit,
           unit_price: item.unit_price,
           line_total: item.line_total,
+          line_discount_amount: item.line_discount_amount,
         })),
         sale.cashier_name,
       );
@@ -1268,14 +1290,6 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   async function completeAuthentication(data: any) {
-    const authenticatedDeviceKey = String(
-      data?.device?.device_key || "",
-    ).trim();
-
-    if (authenticatedDeviceKey) {
-      localStorage.setItem("device_key", authenticatedDeviceKey);
-    }
-
     const nextCompanyId = String(
       data?.company_id || data?.company?.id || "",
     );
@@ -1287,6 +1301,7 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     const previousCompanyId =
+      localStorage.getItem("device_company_id") ||
       localStorage.getItem("company_id");
 
     if (
@@ -1302,6 +1317,22 @@ const [loggedIn, setLoggedIn] = useState(
       localStorage.removeItem("pos_name");
       localStorage.removeItem("pos_number");
       localStorage.removeItem("shop_address_snapshot");
+    }
+
+    const authenticatedDeviceKey = String(
+      data?.device?.device_key || "",
+    ).trim();
+    const authenticatedDeviceId = String(
+      data?.device?.id || data?.device_id || "",
+    ).trim();
+    if (authenticatedDeviceKey) {
+      rememberDeviceIdentity(
+        nextCompanyId,
+        authenticatedDeviceKey,
+        authenticatedDeviceId || undefined,
+      );
+    } else {
+      getOrCreateDeviceKey(nextCompanyId);
     }
 
     localStorage.setItem("token", String(data.token));
@@ -1365,7 +1396,11 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     if (deviceKey) {
-      localStorage.setItem("device_key", deviceKey);
+      rememberDeviceIdentity(
+        nextCompanyId,
+        deviceKey,
+        String(data?.device?.id || data?.device_id || "") || undefined,
+      );
     }
 
     if (data?.device?.id || data?.device_id) {
@@ -1474,6 +1509,12 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
+    const storedIdentity = getPinLoginDeviceIdentity(companyId);
+    const attemptedSelection = {
+      shop_id: selection?.shop_id || localStorage.getItem("shop_id") || "",
+      device_id: selection?.device_id || storedIdentity.device_id || "",
+    };
+
     try {
       setPinLoading(true);
       setPinMessage("");
@@ -1537,7 +1578,9 @@ const [loggedIn, setLoggedIn] = useState(
           {
             company_id: companyId,
             branch_id: branchId,
+            shop_id: localStorage.getItem("shop_id") || undefined,
             pin: enteredPin,
+            ...storedIdentity,
             ...(selection || {}),
           },
         );
@@ -1579,6 +1622,8 @@ const [loggedIn, setLoggedIn] = useState(
 
         setCashier(authenticatedCashier);
         setPinSelection(null);
+        setTakeoverPrompt(false);
+        setTakeoverSelection(null);
         if (result.device_id) localStorage.setItem("device_id", String(result.device_id));
         localStorage.setItem("employee_id", employeeId);
         if (result.access_token) {
@@ -1662,6 +1707,11 @@ const [loggedIn, setLoggedIn] = useState(
       const detail = getApiErrorMessage(error, "Employee PIN login failed");
       if (detail.toLowerCase().includes("already signed in") || detail.toLowerCase().includes("already in use")) {
         setTakeoverPrompt(true);
+        setTakeoverSelection(
+          attemptedSelection.shop_id && attemptedSelection.device_id
+            ? attemptedSelection
+            : null,
+        );
       } else {
         setPinMessage(detail);
       }
@@ -1878,12 +1928,14 @@ const [loggedIn, setLoggedIn] = useState(
         localStorage.getItem("device_key") || null,
       payment_method: paymentMethod,
       discount_amount: discounted.discount_amount,
+      sale_discount_amount: discounted.sale_discount_amount,
       items: completedItems.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,
         selling_unit: item.selling_unit,
         unit_price: item.selling_price,
         line_total: item.line_total,
+        line_discount_amount: item.line_discount_amount,
       })),
     };
 
@@ -1995,6 +2047,7 @@ const [loggedIn, setLoggedIn] = useState(
             : "0.00",
         payment_method: paymentMethod,
         discount_amount: payload.discount_amount,
+        sale_discount_amount: payload.sale_discount_amount,
         status: "offline_pending",
         created_at:
           new Date().toISOString(),
@@ -2022,6 +2075,7 @@ const [loggedIn, setLoggedIn] = useState(
             selling_unit: item.selling_unit,
             unit_price: item.selling_price,
             line_total: item.line_total,
+            line_discount_amount: item.line_discount_amount,
           })),
         ),
       );
@@ -2054,6 +2108,7 @@ const [loggedIn, setLoggedIn] = useState(
               selling_unit: item.selling_unit,
               unit_price: item.selling_price,
               line_total: item.line_total,
+              line_discount_amount: item.line_discount_amount,
             })),
           ),
         );
@@ -2126,7 +2181,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   function logout() {
-    localStorage.clear();
+    clearAuthenticationPreservingDeviceIdentity();
 
     setBranchId("");
     setCashier(null);
@@ -2194,6 +2249,18 @@ const [loggedIn, setLoggedIn] = useState(
           synchronizedBranchId,
         );
 
+        const synchronizedShopId = String(
+          device?.shop_id ||
+          device?.shop?.id ||
+          response?.shop_id ||
+          response?.shop?.id ||
+          "",
+        );
+
+        if (synchronizedShopId) {
+          localStorage.setItem("shop_id", synchronizedShopId);
+        }
+
         if (synchronizedBranchName) {
           localStorage.setItem(
             "branch_name",
@@ -2205,6 +2272,20 @@ const [loggedIn, setLoggedIn] = useState(
           localStorage.setItem(
             "shop_name",
             String(device.shop_name),
+          );
+        }
+
+        if (device?.friendly_name || device?.name) {
+          localStorage.setItem(
+            "pos_name",
+            String(device.friendly_name || device.name),
+          );
+        }
+
+        if (device?.pos_number != null) {
+          localStorage.setItem(
+            "pos_number",
+            String(device.pos_number),
           );
         }
 
@@ -2595,7 +2676,7 @@ const [loggedIn, setLoggedIn] = useState(
             {!terminals.length && selectedShopId && <p style={errorText}>No available active terminals in this shop.</p>}
             <button type="button" style={primaryButton} disabled={!selectedShopId || !selectedTerminalId || pinLoading} onClick={() => void loginWithEmployeePin({shop_id: selectedShopId, device_id: selectedTerminalId})}>{pinLoading ? "Signing in..." : "Enter POS"}</button>
             <button type="button" style={secondaryButton} onClick={() => { setPinSelection(null); setSelectedShopId(""); setSelectedTerminalId(""); }}>Cancel</button>
-            {takeoverPrompt && <div role="alert" style={{ marginTop: 12, border: "1px solid #f59e0b", padding: 12 }}><p>You are already signed in elsewhere. Taking over will immediately sign out that device.</p><button type="button" style={secondaryButton} onClick={() => setTakeoverPrompt(false)}>Cancel</button><button type="button" style={primaryButton} onClick={() => { setTakeoverPrompt(false); void loginWithEmployeePin({ shop_id: selectedShopId, device_id: selectedTerminalId, takeover: true }); }}>Take over this session</button></div>}
+            {takeoverPrompt && <div role="alert" style={{ marginTop: 12, border: "1px solid #f59e0b", padding: 12 }}><p>You are already signed in elsewhere. Taking over will immediately sign out that device.</p><button type="button" style={secondaryButton} onClick={() => { setTakeoverPrompt(false); setTakeoverSelection(null); }}>Cancel</button><button type="button" style={primaryButton} onClick={() => { setTakeoverPrompt(false); void loginWithEmployeePin({ shop_id: selectedShopId, device_id: selectedTerminalId, takeover: true }); }}>Take over this session</button></div>}
           </>}
           {pinMessage && <p style={errorText}>{pinMessage}</p>}
         </div></div>
@@ -2668,7 +2749,7 @@ const [loggedIn, setLoggedIn] = useState(
               {pinMessage}
             </p>
           )}
-          {takeoverPrompt && <div role="alert" style={{ marginTop: 12, border: "1px solid #f59e0b", padding: 12 }}><p>You are already signed in elsewhere. Taking over will immediately sign out that device.</p><button type="button" style={secondaryButton} onClick={() => setTakeoverPrompt(false)}>Cancel</button>{pinSelection ? <button type="button" style={primaryButton} onClick={() => { setTakeoverPrompt(false); void loginWithEmployeePin({ shop_id: selectedShopId, device_id: selectedTerminalId, takeover: true }); }}>Take over this session</button> : null}</div>}
+          {takeoverPrompt && <div role="alert" style={{ marginTop: 12, border: "1px solid #f59e0b", padding: 12 }}><p>You are already signed in elsewhere. Taking over will immediately sign out that device.</p><button type="button" style={secondaryButton} onClick={() => { setTakeoverPrompt(false); setTakeoverSelection(null); }}>Cancel</button>{takeoverSelection ? <button type="button" style={primaryButton} onClick={() => { const target = takeoverSelection; setTakeoverPrompt(false); void loginWithEmployeePin({ ...target, takeover: true }); }}>Take over this session</button> : null}</div>}
 
           <button
             type="button"
@@ -3023,8 +3104,8 @@ const [loggedIn, setLoggedIn] = useState(
           )}
 
           {cart.map((item, cartIndex) => (
-            <div key={item.id} style={cartRow}>
-              <div>
+            <div key={item.id} style={cartRow} className="pos-cart-row">
+              <div className="pos-cart-item-summary">
                 <strong>{item.name}</strong>
                 <p style={{ margin: "5px 0 0" }}>
                   {formatQuantity(
@@ -3037,16 +3118,16 @@ const [loggedIn, setLoggedIn] = useState(
                     : ""}
                 </p>
                 <p style={{ margin: "5px 0 0", fontWeight: 700 }}>
-                  {formatMoney(discounted.items[cartIndex]?.line_total || item.line_total)}
+                  Item total: {formatMoney(discounted.items[cartIndex]?.line_total || item.line_total)}
                 </p>
               </div>
 
-              {cashier?.permissions?.discounts && <label>Line discount
-                <input aria-label={`Discount for ${item.name}`} inputMode="decimal" style={{ width: 75 }}
+              {cashier?.permissions?.discounts && <label className="pos-item-discount-field"><span>Item discount</span>
+                <input aria-label={`Item discount for ${item.name}`} inputMode="decimal"
                   value={item.line_discount || ""} disabled={processing}
                   onChange={(event) => setCart((current) => current.map((line, index) => index === cartIndex ? { ...line, line_discount: event.target.value } : line))} />
               </label>}
-              <div style={quantityBox}>
+              <div style={quantityBox} className="pos-quantity-control" aria-label={`Quantity for ${item.name}`}>
                 <button
                   style={quantityButton}
                   onClick={() => changeQty(item.id, -1)}
@@ -3073,6 +3154,8 @@ const [loggedIn, setLoggedIn] = useState(
 
               <button
                 style={removeButton}
+                className="pos-remove-item"
+                aria-label={`Remove ${item.name}`}
                 onClick={() => removeFromCart(item.id)}
               >
                 ×
@@ -3081,12 +3164,17 @@ const [loggedIn, setLoggedIn] = useState(
           ))}
         </div>
 
-        {cashier?.permissions?.discounts && <label>Sale discount
-          <input aria-label="Sale discount" inputMode="decimal" value={saleDiscount} disabled={processing}
+        {cashier?.permissions?.discounts && <label className="pos-whole-sale-discount-field"><span>Whole-sale discount</span>
+          <input aria-label="Whole-sale discount" inputMode="decimal" value={saleDiscount} disabled={processing}
             onChange={(event) => setSaleDiscount(event.target.value)} />
         </label>}
         {discountError && <p role="alert">{discountError}</p>}
-        <p>Discount: {formatMoney(discounted.discount_amount)}</p>
+        {Number(discounted.line_discount_total) > 0 && (
+          <p className="pos-discount-applied">Item discounts applied: −{formatMoney(discounted.line_discount_total)}</p>
+        )}
+        {Number(discounted.sale_discount_amount) > 0 && (
+          <p className="pos-discount-applied">Whole-sale discount applied: −{formatMoney(discounted.sale_discount_amount)}</p>
+        )}
         <div data-tax-summary="true"
           style={{
             marginTop: 22,
@@ -3102,7 +3190,7 @@ const [loggedIn, setLoggedIn] = useState(
               fontSize: 18,
             }}
           >
-            <span>Subtotal</span>
+            <span>{Number(discounted.discount_amount) > 0 ? "Subtotal after discounts" : "Subtotal"}</span>
             <strong>{formatMoney(subtotal)}</strong>
           </div>
 
@@ -3365,6 +3453,20 @@ const [loggedIn, setLoggedIn] = useState(
             </p>
 
             <div style={receiptSummary}>
+              {receipt.discount_amount && Number(receipt.discount_amount) > 0 && (
+                <div>
+                  <span>
+                    {receipt.sale_discount_amount != null
+                      ? "Line / sale-wide discounts"
+                      : "Discount (combined)"}
+                  </span>
+                  <strong>
+                    {receipt.sale_discount_amount != null
+                      ? `${formatMoney(Number(receipt.discount_amount) - Number(receipt.sale_discount_amount))} / ${formatMoney(receipt.sale_discount_amount)}`
+                      : formatMoney(receipt.discount_amount)}
+                  </strong>
+                </div>
+              )}
               <div>
                 <span>Total</span>
                 <strong>
@@ -3503,10 +3605,6 @@ const cartItemsArea: CSSProperties = {
 };
 
 const cartRow: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1fr) 105px 34px",
-  gap: 8,
-  alignItems: "center",
   borderBottom: "1px solid #eee",
   padding: "12px 0",
 };

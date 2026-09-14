@@ -38,6 +38,7 @@ export type ReceiptLineItem = {
   selling_unit?: string;
   unit_price: string;
   line_total: string;
+  line_discount_amount?: string | null;
 };
 
 export type ReceiptSnapshot = {
@@ -72,6 +73,7 @@ export type ReceiptSnapshot = {
   cashier_name?: string | null;
   subtotal_amount?: string;
   discount_amount?: string | null;
+  sale_discount_amount?: string | null;
   tax_name?: string | null;
   tax_rate?: string;
   tax_amount?: string;

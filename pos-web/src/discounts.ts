@@ -5,6 +5,7 @@ export type DiscountLine = {
   quantity: string;
   line_total: string;
   line_discount?: string;
+  line_discount_amount?: string;
 };
 
 function discountCents(value: string): bigint {
@@ -27,17 +28,25 @@ export function applyDiscounts<T extends DiscountLine>(items: T[], saleDiscount 
   if (reduction > 0n && reduction >= subtotal) throw new Error("Sale discount must be less than the sale amount");
   let cumulative = 0n;
   let allocated = 0n;
-  const discountedItems = lines.map(({ item, net }) => {
+  const discountedItems = lines.map(({ item, net, gross }) => {
     cumulative += net;
     const next = subtotal ? reduction * cumulative / subtotal : 0n;
     const paid = net - (next - allocated);
     allocated = next;
     if (paid <= 0n) throw new Error("Discount must leave at least one cent on every line");
-    return { ...item, line_total: formatCents(paid) };
+    return {
+      ...item,
+      line_total: formatCents(paid),
+      line_discount_amount: formatCents(gross - net),
+    };
   });
   return {
     items: discountedItems,
+    line_discount_total: formatCents(
+      lines.reduce((sum, line) => sum + line.gross - line.net, 0n),
+    ),
     discount_amount: formatCents(lines.reduce((sum, line) => sum + line.gross - line.net, reduction)),
+    sale_discount_amount: formatCents(reduction),
     total: formatCents(subtotal - reduction),
   };
 }

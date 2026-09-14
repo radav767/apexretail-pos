@@ -164,6 +164,7 @@ class DashboardPhase2RepositoryTest(unittest.IsolatedAsyncioTestCase):
             execute=AsyncMock(
                 side_effect=[
                     FakeResult(rows=[shop]),
+                    FakeResult(scalar=setting),
                     FakeResult(
                         row={
                             "gross_sales": Decimal("150.00"),
@@ -171,12 +172,11 @@ class DashboardPhase2RepositoryTest(unittest.IsolatedAsyncioTestCase):
                             "discounts": Decimal("5.00"),
                             "original_sale_count": 2,
                             "known_discount_count": 1,
+                            "net_sales": Decimal("120.00"),
+                            "cost_of_sales": Decimal("72.00"),
+                            "gross_profit": Decimal("48.00"),
                         }
                     ),
-                    FakeResult(
-                        row={"cost_of_sales": Decimal("72.00")}
-                    ),
-                    FakeResult(scalar=setting),
                 ]
             )
         )
@@ -187,13 +187,12 @@ class DashboardPhase2RepositoryTest(unittest.IsolatedAsyncioTestCase):
             shop_id=shop_id,
         )
 
-        sales_sql = str(db.execute.await_args_list[1].args[0])
-        costs_sql = str(db.execute.await_args_list[2].args[0])
-        self.assertNotIn("JOIN sale_items", sales_sql)
+        sales_sql = str(db.execute.await_args_list[2].args[0])
+        self.assertIn("GROUP BY si.sale_id", sales_sql)
+        self.assertIn("LEFT JOIN item_costs", sales_sql)
         self.assertIn("s.original_sale_id IS NULL", sales_sql)
         self.assertIn("partially_refunded", sales_sql)
         self.assertIn("s.original_sale_id IS NOT NULL", sales_sql)
-        self.assertIn("INNER JOIN sales", costs_sql)
         self.assertEqual(
             summary["metrics"]["net_sales"]["value"],
             Decimal("120.00"),

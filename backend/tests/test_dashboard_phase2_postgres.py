@@ -214,3 +214,52 @@ class DashboardPhase2PostgresTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(one_shop["metrics"]["gross_profit"]["value"], Decimal("40.00"))
         self.assertTrue(one_shop["metrics"]["discounts"]["available"])
         self.assertEqual(one_shop["metrics"]["discounts"]["value"], Decimal("10.00"))
+
+        analytics = await repository.get_phase3_summary(
+            company_id,
+            range_key="custom",
+            date_from=date(2026, 8, 1),
+            date_to=date(2026, 8, 31),
+            granularity="day",
+        )
+        self.assertEqual(analytics["metrics"], all_shops["metrics"])
+        self.assertEqual(len(analytics["trends"]), 31)
+        self.assertEqual(
+            sum(point["metrics"]["net_sales"]["value"] for point in analytics["trends"]),
+            Decimal("130.00"),
+        )
+        self.assertEqual(analytics["comparison"]["date_from"], date(2026, 7, 1))
+        self.assertEqual(
+            analytics["comparison"]["metrics"]["gross_sales"]["amount"],
+            Decimal("-750.00"),
+        )
+        self.assertFalse(analytics["comparison"]["metrics"]["discounts"]["available"])
+        self.assertEqual(
+            sum(row["revenue"] for row in analytics["top_products"]),
+            Decimal("4.00"),
+        )
+        self.assertEqual(analytics["top_categories"][0]["name"], "Uncategorised")
+        self.assertEqual(analytics["payment_methods"][0]["net_sales"], Decimal("130.00"))
+        self.assertEqual(
+            sum(row["net_sales"] for row in analytics["shop_breakdown"]),
+            Decimal("130.00"),
+        )
+        self.assertEqual(analytics["refund_breakdown"][0]["refunds"], Decimal("20.00"))
+        self.assertEqual(
+            {row["key"] for row in analytics["discount_breakdown"]},
+            {"discounted", "unavailable"},
+        )
+
+        drilldown = await repository.get_drilldown(
+            company_id,
+            range_key="custom",
+            date_from=date(2026, 8, 1),
+            date_to=date(2026, 8, 31),
+            metric="refunds",
+            limit=10,
+            offset=0,
+        )
+        self.assertEqual(drilldown["total"], 1)
+        self.assertEqual(drilldown["rows"][0]["id"], refund_id)
+        self.assertEqual(drilldown["rows"][0]["refunds"], Decimal("20.00"))
+        self.assertTrue(drilldown["rows"][0]["discounts"]["available"])

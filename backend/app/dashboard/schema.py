@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -51,3 +51,79 @@ class DashboardPhase2Summary(BaseModel):
     decimal_places: int
     shops: list[DashboardShopOption]
     metrics: DashboardPhase2Metrics
+
+
+class DashboardChange(BaseModel):
+    available: bool = True
+    amount: Decimal | None = None
+    percentage: Decimal | None = None
+    reason: str | None = None
+
+
+class DashboardComparison(BaseModel):
+    date_from: date
+    date_to: date
+    metrics: dict[str, DashboardChange]
+
+
+class DashboardTrendPoint(BaseModel):
+    period_start: date
+    period_end: date
+    metrics: DashboardPhase2Metrics
+
+
+class DashboardRankedRow(BaseModel):
+    id: UUID | None = None
+    name: str
+    revenue: Decimal
+    quantity: Decimal
+    gross_profit: Decimal
+
+
+class DashboardBreakdownRow(BaseModel):
+    key: str
+    name: str
+    transactions: int
+    gross_sales: Decimal
+    refunds: Decimal
+    net_sales: Decimal
+    gross_profit: Decimal
+    discounts: DashboardMetric
+
+
+class DashboardPhase3Summary(DashboardPhase2Summary):
+    granularity: Literal["day", "week", "month"]
+    comparison: DashboardComparison
+    trends: list[DashboardTrendPoint]
+    top_products: list[DashboardRankedRow]
+    top_categories: list[DashboardRankedRow]
+    payment_methods: list[DashboardBreakdownRow]
+    shop_breakdown: list[DashboardBreakdownRow]
+    cashier_breakdown: list[DashboardBreakdownRow]
+    discount_breakdown: list[DashboardBreakdownRow]
+    refund_breakdown: list[DashboardBreakdownRow]
+
+
+class DashboardSaleRow(BaseModel):
+    id: UUID
+    receipt_number: str
+    created_at: datetime
+    shop_id: UUID | None = None
+    shop_name: str
+    cashier_name: str
+    payment_method: str
+    status: str
+    original_sale_id: UUID | None = None
+    gross_sales: Decimal
+    refunds: Decimal
+    net_sales: Decimal
+    cost_of_sales: Decimal
+    gross_profit: Decimal
+    discounts: DashboardMetric
+
+
+class DashboardDrilldown(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    rows: list[DashboardSaleRow]

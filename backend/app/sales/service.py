@@ -183,6 +183,7 @@ class SalesService:
         total = Decimal("0")
         undiscounted_total = Decimal("0")
         sale_items = []
+        line_discount_total = Decimal("0.00")
         products = []
         balances = []
         inventory_movements = []
@@ -265,6 +266,27 @@ class SalesService:
                 selling_price * item.quantity
             ).quantize(money_quantum, rounding=ROUND_HALF_UP):
                 raise HTTPException(400, "Discounted line total exceeds unit-price total")
+            line_discount_amount = (
+                Decimal(item.line_discount_amount).quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+                if item.line_discount_amount is not None
+                else None
+            )
+            gross_line_total = (selling_price * item.quantity).quantize(
+                money_quantum,
+                rounding=ROUND_HALF_UP,
+            )
+            if (
+                line_discount_amount is not None
+                and line_discount_amount >= gross_line_total
+            ):
+                raise HTTPException(
+                    400,
+                    "Line discount must be less than the line amount",
+                )
+            line_discount_total += line_discount_amount or Decimal("0.00")
             total += line_total
             undiscounted_total += (
                 selling_price * item.quantity
@@ -288,6 +310,7 @@ class SalesService:
                     selling_unit=selling_unit,
                     unit_price=selling_price,
                     line_total=line_total,
+                    line_discount_amount=line_discount_amount,
                     unit_cost=unit_cost,
                     line_cost=line_cost,
                 )
@@ -319,6 +342,7 @@ class SalesService:
         # Calculate the final tax snapshot.
         raw_item_total = total
         discount_amount = None
+        sale_discount_amount = None
         if data.discount_amount is not None:
             discount_amount = Decimal(
                 data.discount_amount
@@ -340,6 +364,40 @@ class SalesService:
                         "unit-price totals to submitted line totals"
                     ),
                 )
+            if data.sale_discount_amount is not None:
+                sale_discount_amount = Decimal(
+                    data.sale_discount_amount
+                ).quantize(
+                    money_quantum,
+                    rounding=ROUND_HALF_UP,
+                )
+                if (
+                    line_discount_total + sale_discount_amount
+                    != discount_amount
+                ):
+                    raise HTTPException(
+                        400,
+                        (
+                            "discount_amount must equal line discounts plus "
+                            "the sale-wide discount"
+                        ),
+                    )
+            elif any(
+                item.line_discount_amount is not None
+                for item in data.items
+            ):
+                raise HTTPException(
+                    400,
+                    "sale_discount_amount is required with explicit line discounts",
+                )
+        elif (
+            data.sale_discount_amount is not None
+            or any(item.line_discount_amount is not None for item in data.items)
+        ):
+            raise HTTPException(
+                400,
+                "discount_amount is required with discount components",
+            )
 
         if tax_rate > 0:
             tax_fraction = tax_rate / Decimal("100")
@@ -489,6 +547,7 @@ class SalesService:
             tax_inclusive=tax_inclusive,
             total_amount=total,
             discount_amount=discount_amount,
+            sale_discount_amount=sale_discount_amount,
             amount_received=amount_received,
             change_due=change_due,
             payment_method=payment_method,

@@ -24,12 +24,14 @@ export type OfflineSalePayload = {
   payment_method: string;
   amount_received?: string;
   discount_amount?: string | null;
+  sale_discount_amount?: string | null;
   items: Array<{
     product_id: string;
     quantity: string;
     selling_unit?: string;
     unit_price?: string;
     line_total?: string;
+    line_discount_amount?: string | null;
   }>;
 };
 

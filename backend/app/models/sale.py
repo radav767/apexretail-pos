@@ -146,6 +146,9 @@ class Sale(Base):
     # Nullable by design: pre-Phase-2 and legacy-client rows do not contain
     # enough evidence to distinguish a discount from a price override.
     discount_amount = Column(Numeric(12, 2), nullable=True)
+    # Explicit sale-wide component. Nullable keeps legacy receipts honest:
+    # older rows only persisted the combined discount total.
+    sale_discount_amount = Column(Numeric(12, 2), nullable=True)
     amount_received = Column(Numeric(12, 2), nullable=False, default=0)
     change_due = Column(Numeric(12, 2), nullable=False, default=0)
 

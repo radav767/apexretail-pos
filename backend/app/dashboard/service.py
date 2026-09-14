@@ -1,3 +1,6 @@
+import csv
+import io
+
 from app.dashboard.repository import DashboardRepository
 
 
@@ -24,3 +27,80 @@ class DashboardService:
             date_to=date_to,
             shop_id=shop_id,
         )
+
+    async def get_phase3_summary(self, company_id, **filters):
+        return await self.repo.get_phase3_summary(company_id, **filters)
+
+    async def get_drilldown(self, company_id, **filters):
+        return await self.repo.get_drilldown(company_id, **filters)
+
+    @staticmethod
+    def _safe_csv(value):
+        rendered = "" if value is None else str(value)
+        if rendered.startswith(("=", "+", "-", "@")):
+            return "'" + rendered
+        return rendered
+
+    async def export_phase3(self, company_id, *, section, **filters):
+        summary = await self.get_phase3_summary(company_id, **filters)
+        output = io.StringIO(newline="")
+        writer = csv.writer(output, lineterminator="\n")
+
+        if section == "trends":
+            writer.writerow([
+                "period_start", "period_end", "gross_sales", "refunds",
+                "net_sales", "cost_of_sales", "gross_profit", "discounts",
+                "discounts_available",
+            ])
+            for point in summary["trends"]:
+                metrics = point["metrics"]
+                writer.writerow([
+                    point["period_start"], point["period_end"],
+                    metrics["gross_sales"]["value"], metrics["refunds"]["value"],
+                    metrics["net_sales"]["value"], metrics["cost_of_sales"]["value"],
+                    metrics["gross_profit"]["value"], metrics["discounts"]["value"],
+                    metrics["discounts"]["available"],
+                ])
+        elif section in {"top_products", "top_categories"}:
+            writer.writerow(["id", "name", "revenue", "quantity", "gross_profit"])
+            for row in summary[section]:
+                writer.writerow([self._safe_csv(row.get(key)) for key in (
+                    "id", "name", "revenue", "quantity", "gross_profit"
+                )])
+        else:
+            writer.writerow([
+                "key", "name", "transactions", "gross_sales", "refunds",
+                "net_sales", "gross_profit", "discounts", "discounts_available",
+            ])
+            for row in summary[section]:
+                writer.writerow([
+                    self._safe_csv(row.get("key")), self._safe_csv(row.get("name")),
+                    row["transactions"], row["gross_sales"], row["refunds"],
+                    row["net_sales"], row["gross_profit"],
+                    row["discounts"]["value"], row["discounts"]["available"],
+                ])
+        return output.getvalue()
+
+    async def export_drilldown(self, company_id, **filters):
+        drilldown = await self.get_drilldown(
+            company_id, **filters, limit=10000, offset=0
+        )
+        output = io.StringIO(newline="")
+        writer = csv.writer(output, lineterminator="\n")
+        writer.writerow([
+            "id", "receipt_number", "created_at", "shop", "cashier",
+            "payment_method", "status", "gross_sales", "refunds",
+            "net_sales", "cost_of_sales", "gross_profit", "discounts",
+            "discounts_available",
+        ])
+        for row in drilldown["rows"]:
+            writer.writerow([
+                self._safe_csv(row.get("id")), self._safe_csv(row.get("receipt_number")),
+                row.get("created_at"), self._safe_csv(row.get("shop_name")),
+                self._safe_csv(row.get("cashier_name")),
+                self._safe_csv(row.get("payment_method")), self._safe_csv(row.get("status")),
+                row.get("gross_sales"), row.get("refunds"), row.get("net_sales"),
+                row.get("cost_of_sales"), row.get("gross_profit"),
+                row["discounts"]["value"], row["discounts"]["available"],
+            ])
+        return output.getvalue()

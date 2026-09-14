@@ -402,6 +402,60 @@ class EmployeeService:
                 now = datetime.now(timezone.utc)
                 existing = (await self.repo.db.execute(select(PosSession).where(PosSession.employee_id == employee.id, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update())).scalars().first()
                 terminal_existing = (await self.repo.db.execute(select(PosSession).where(PosSession.device_id == device.id, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update())).scalars().first()
+                same_device_identity = bool(
+                    data.device_key
+                    and hmac.compare_digest(
+                        data.device_key.strip(),
+                        str(device.device_key),
+                    )
+                )
+                resumable = None
+                if (
+                    existing
+                    and existing.device_id == device.id
+                    and same_device_identity
+                ):
+                    resumable = existing
+                elif not existing and same_device_identity:
+                    resumable = (
+                        await self.repo.db.execute(
+                            select(PosSession)
+                            .where(
+                                PosSession.employee_id == employee.id,
+                                PosSession.device_id == device.id,
+                                PosSession.revoked_at.is_(None),
+                            )
+                            .order_by(PosSession.created_at.desc())
+                            .with_for_update()
+                        )
+                    ).scalars().first()
+
+                if resumable is not None:
+                    supplied_token = (data.session_token or "").strip()
+                    token_matches = bool(
+                        supplied_token
+                        and hmac.compare_digest(
+                            hash_session_token(supplied_token),
+                            resumable.token_hash,
+                        )
+                    )
+                    token = supplied_token if token_matches else create_session_token()
+                    if not token_matches:
+                        resumable.token_hash = hash_session_token(token)
+                    resumable.expires_at = now + timedelta(hours=12)
+                    resumable.last_authenticated_at = now
+                    await self.repo.db.commit()
+                    return {
+                        "id": employee.id,
+                        "company_id": employee.company_id,
+                        "shop_id": device.shop_id,
+                        "branch_id": device.branch_id,
+                        "name": employee.name,
+                        "role": employee.role,
+                        "permissions": permissions,
+                        "access_token": token,
+                        "device_id": device.id,
+                    }
                 if existing and not data.takeover:
                     raise HTTPException(409, "You are already signed in on another device. Choose Cancel or Take over this session.")
                 if terminal_existing and terminal_existing.id != (existing.id if existing else None) and not data.takeover:

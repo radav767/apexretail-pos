@@ -96,6 +96,8 @@ class PinLoginRequest(BaseModel):
     branch_id: UUID | None = None
     shop_id: UUID | None = None
     device_id: UUID | None = None
+    device_key: str | None = Field(default=None, min_length=1, max_length=255)
+    session_token: str | None = Field(default=None, min_length=1, max_length=512)
     takeover: bool = False
 
     pin: str = Field(

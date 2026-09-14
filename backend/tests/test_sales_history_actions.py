@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.auth.dependencies import AuthActor
 from app.sales.schema import RefundCreate, RefundItemCreate
 from app.sales.service import SalesService
+from app.sales.router import list_sales
 
 
 class RecordingDB:
@@ -42,6 +43,7 @@ class SalesHistoryActionsTest(unittest.TestCase):
             selling_unit="each",
             unit_price=Decimal("2.00"),
             line_total=Decimal("6.00"),
+            line_discount_amount=Decimal("1.00"),
         )
         prior_refund = SimpleNamespace(quantity=Decimal("1.000"))
         db = RecordingDB()
@@ -71,6 +73,7 @@ class SalesHistoryActionsTest(unittest.TestCase):
         db.commit.assert_not_awaited()
         self.assertEqual(result["items"][0]["refunded_quantity"], Decimal("1.000"))
         self.assertEqual(result["items"][0]["refundable_quantity"], Decimal("2.000"))
+        self.assertEqual(result["items"][0]["line_discount_amount"], Decimal("1.00"))
         repo.list_refund_items_for_original_item.assert_awaited_once_with(item.id)
 
     def test_reprint_marks_and_audits_separately(self):
@@ -177,6 +180,53 @@ class SalesHistoryActionsTest(unittest.TestCase):
 
         self.assertEqual(caught.exception.status_code, 400)
         self.assertIn("exceeds remaining", caught.exception.detail)
+
+    def test_sales_history_rejects_cross_tenant_actor(self):
+        company_id = uuid4()
+        actor = AuthActor(
+            actor_type="user",
+            company_id=uuid4(),
+            role="owner",
+            user=SimpleNamespace(id=uuid4()),
+        )
+        service = SimpleNamespace(list_sales=AsyncMock(return_value=[]))
+        with self.assertRaises(HTTPException) as caught:
+            asyncio.run(
+                list_sales(company_id, limit=100, service=service, actor=actor)
+            )
+        self.assertEqual(caught.exception.status_code, 403)
+        service.list_sales.assert_not_awaited()
+
+    def test_sales_history_requires_employee_sales_or_refunds_permission(self):
+        company_id = uuid4()
+        actor = AuthActor(
+            actor_type="employee",
+            company_id=company_id,
+            role="cashier",
+            employee=SimpleNamespace(id=uuid4()),
+            permissions={"sales": False, "refunds": False},
+        )
+        service = SimpleNamespace(list_sales=AsyncMock(return_value=[]))
+        with self.assertRaises(HTTPException) as caught:
+            asyncio.run(
+                list_sales(company_id, limit=100, service=service, actor=actor)
+            )
+        self.assertEqual(caught.exception.status_code, 403)
+
+    def test_sales_history_allows_same_tenant_sales_permission(self):
+        company_id = uuid4()
+        actor = AuthActor(
+            actor_type="employee",
+            company_id=company_id,
+            role="cashier",
+            employee=SimpleNamespace(id=uuid4()),
+            permissions={"sales": True, "refunds": False},
+        )
+        service = SimpleNamespace(list_sales=AsyncMock(return_value=["sale"]))
+        result = asyncio.run(
+            list_sales(company_id, limit=100, service=service, actor=actor)
+        )
+        self.assertEqual(result, ["sale"])
 
 
 if __name__ == "__main__":

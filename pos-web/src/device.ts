@@ -1,25 +1,15 @@
-import { api } from "./api/client";
+import { api } from "./api/client.ts";
+import {
+  getOrCreateDeviceKey,
+  rememberDeviceIdentity,
+} from "./deviceIdentity.ts";
 
-export function getOrCreateDeviceKey(): string {
-  const existing = localStorage.getItem("device_key");
-
-  if (existing) {
-    return existing;
-  }
-
-  const generated =
-    globalThis.crypto?.randomUUID?.() ||
-    `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
-  localStorage.setItem("device_key", generated);
-
-  return generated;
-}
+export { getOrCreateDeviceKey } from "./deviceIdentity.ts";
 
 export async function registerCurrentDevice(companyId: string) {
   const response = await api.post("/devices/register", {
     company_id: companyId,
-    device_key: getOrCreateDeviceKey(),
+    device_key: getOrCreateDeviceKey(companyId),
     name: "Web POS",
     platform: "web",
     app_version: "1.0.0",
@@ -28,13 +18,12 @@ export async function registerCurrentDevice(companyId: string) {
   const result = response.data?.device || response.data;
 
   if (result?.device_key) {
-    localStorage.setItem(
-      "device_key",
+    rememberDeviceIdentity(
+      companyId,
       String(result.device_key),
+      result?.id ? String(result.id) : undefined,
     );
-  }
-
-  if (result?.id) {
+  } else if (result?.id) {
     localStorage.setItem("device_id", String(result.id));
   }
 

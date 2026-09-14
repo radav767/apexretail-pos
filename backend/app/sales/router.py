@@ -169,7 +169,22 @@ async def list_sales(
     company_id: UUID,
     limit: int = Query(default=100, ge=1, le=500),
     service: SalesService = Depends(get_service),
+    actor: AuthActor | None = Depends(get_optional_auth_actor),
 ):
+    if actor is not None:
+        if actor.company_id != company_id:
+            raise HTTPException(403, "Forbidden")
+        if (
+            actor.actor_type == "employee"
+            and (
+                not actor.permissions
+                or not (
+                    actor.permissions.get("sales")
+                    or actor.permissions.get("refunds")
+                )
+            )
+        ):
+            raise HTTPException(403, "Permission denied")
     return await service.list_sales(
         company_id,
         limit,

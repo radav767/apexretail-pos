@@ -30,7 +30,7 @@ export DATABASE_URL="postgresql+asyncpg://postgres@/apexretail_phase2_test_clone
 venv/bin/python -m alembic upgrade head
 "$pg_bin/psql" -d apexretail_phase2_test_clone -v ON_ERROR_STOP=1 <<'SQL'
 DO $$ BEGIN
-  ASSERT (SELECT discount_amount IS NULL AND total_amount=12 FROM sales WHERE receipt_number='PHASE2-HISTORICAL'), 'Historical sale changed';
+  ASSERT (SELECT discount_amount IS NULL AND sale_discount_amount IS NULL AND total_amount=12 FROM sales WHERE receipt_number='PHASE2-HISTORICAL'), 'Historical sale changed';
   ASSERT (SELECT is_nullable='YES' AND column_default IS NULL FROM information_schema.columns WHERE table_name='sales' AND column_name='discount_amount'), 'Unexpected discount default';
 END $$;
 SQL

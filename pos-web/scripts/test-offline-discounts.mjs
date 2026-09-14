@@ -36,9 +36,17 @@ source = source.replace(/import[\s\S]*?from ["'][^"']+["'];/g, "");
 source = "const { Capacitor, Network, CapacitorSQLite, SQLiteConnection, api } = globalThis.__offlineMocks;\n" + source;
 const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext } }).outputText;
 const { queueOfflineSale, syncPendingOfflineSales } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
-for (const discount of [undefined, null, "0.00", "0.20"]) {
-  const payload = { client_sale_id: `sale-${discount}`, company_id: "company", payment_method: "cash", items: [] };
+for (const discount of [undefined, null, "0.00", "0.30"]) {
+  const payload = {
+    client_sale_id: `sale-${discount}`,
+    company_id: "company",
+    payment_method: "cash",
+    items: discount === "0.30"
+      ? [{ product_id: "product", quantity: "1", unit_price: "1.00", line_total: "0.70", line_discount_amount: "0.20" }]
+      : [],
+  };
   if (discount !== undefined) payload.discount_amount = discount;
+  if (discount === "0.30") payload.sale_discount_amount = "0.10";
   await queueOfflineSale(payload);
   await queueOfflineSale({ ...payload, discount_amount: "99.00" });
   failures = 1;
@@ -50,4 +58,4 @@ for (const discount of [undefined, null, "0.00", "0.20"]) {
   assert.deepEqual(sent.at(-1), payload);
   assert.deepEqual(sent.at(-2), payload);
 }
-console.log("PASS: SQLite queue, duplicate enqueue, network failure, retry, concurrent sync, legacy omitted/null and explicit discounts");
+console.log("PASS: SQLite queue, duplicate enqueue, network failure, retry, concurrent sync, legacy and separated discount components remain idempotent");

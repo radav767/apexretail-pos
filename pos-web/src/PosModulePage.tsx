@@ -54,6 +54,7 @@ type SaleReceiptItem = {
   selling_unit?: string;
   unit_price: string | number;
   line_total: string | number;
+  line_discount_amount?: string | number | null;
 };
 
 type SaleReceipt = Sale & {
@@ -61,6 +62,8 @@ type SaleReceipt = Sale & {
   tax_amount?: string | number;
   amount_received?: string | number;
   change_due?: string | number;
+  discount_amount?: string | number | null;
+  sale_discount_amount?: string | number | null;
   items: SaleReceiptItem[];
 };
 
@@ -1359,6 +1362,9 @@ export default function PosModulePage({
                       </div>
                       <div className="pos-refund-item-state">
                         <span>Sold: {Number(item.quantity)} {item.selling_unit || "each"}</span>
+                        {Number(item.line_discount_amount || 0) > 0 && (
+                          <span>Line discount: {money(item.line_discount_amount || 0)}</span>
+                        )}
                         <span>Refunded: {refunded}</span>
                         <span>Remaining: {remaining}</span>
                       </div>
@@ -1387,7 +1393,15 @@ export default function PosModulePage({
               </div>
 
               <div className="pos-sale-receipt-total">
-                <span>Total</span>
+                <span>
+                  {receiptDialog.receipt.discount_amount && Number(receiptDialog.receipt.discount_amount) > 0
+                    ? receiptDialog.receipt.sale_discount_amount != null
+                      ? Number(receiptDialog.receipt.sale_discount_amount) > 0
+                        ? `Sale-wide discount: ${money(receiptDialog.receipt.sale_discount_amount)} · Total`
+                        : "Total"
+                      : `Discount: ${money(receiptDialog.receipt.discount_amount)} combined · Total`
+                    : "Total"}
+                </span>
                 <strong>{money(receiptDialog.receipt.total_amount)}</strong>
               </div>
 
