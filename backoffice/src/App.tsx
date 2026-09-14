@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import "./App.css";
 import {
+  type DashboardDrilldown,
+  type DashboardDrilldownRequest,
   type DashboardPhase3Summary,
   type DashboardRangeKey,
 } from "./dashboard";
 import { DashboardPanel, type ExportSection } from "./DashboardPanel";
+import { DashboardDrilldownDialog } from "./DashboardDrilldownDialog";
 import ProductsPage from "./pages/ProductsPage";
 import InventoryPage from "./pages/InventoryPage";
 import ShopsDevicesPage from "./pages/ShopsDevicesPage";
@@ -61,6 +64,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const dashboardRequest = useRef(0);
+  const drilldownRequestId = useRef(0);
   const [rangeKey, setRangeKey] =
     useState<DashboardRangeKey>("today");
   const [selectedShopId, setSelectedShopId] = useState("");
@@ -70,6 +74,12 @@ function App() {
   const [customDateTo, setCustomDateTo] = useState(
     localDateValue(new Date()),
   );
+  const [drilldownRequest, setDrilldownRequest] =
+    useState<DashboardDrilldownRequest | null>(null);
+  const [drilldownData, setDrilldownData] =
+    useState<DashboardDrilldown | null>(null);
+  const [drilldownLoading, setDrilldownLoading] = useState(false);
+  const [drilldownError, setDrilldownError] = useState("");
 
   async function login() {
     try {
@@ -174,6 +184,104 @@ function App() {
     date_to: rangeKey === "custom" ? customDateTo : undefined,
   }), [rangeKey, granularity, selectedShopId, customDateFrom, customDateTo]);
 
+  const drilldownParams = useCallback((request: DashboardDrilldownRequest) => ({
+    ...dashboardParams(),
+    ...(request.dateFrom && request.dateTo
+      ? {
+          range_key: "custom",
+          date_from: request.dateFrom,
+          date_to: request.dateTo,
+        }
+      : {}),
+    metric: request.metric,
+    dimension: request.dimension,
+    dimension_key: request.dimensionKey,
+  }), [dashboardParams]);
+
+  async function readApiError(error: any, fallback: string) {
+    const responseData = error?.response?.data;
+    if (responseData instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await responseData.text());
+        return parsed?.detail || fallback;
+      } catch {
+        return fallback;
+      }
+    }
+    return responseData?.detail || fallback;
+  }
+
+  async function loadDashboardDrilldown(
+    request: DashboardDrilldownRequest,
+    offset = 0,
+  ) {
+    const requestId = ++drilldownRequestId.current;
+    setDrilldownLoading(true);
+    setDrilldownError("");
+    try {
+      const response = await api.get(
+        `/dashboard/analytics-v3/${companyId}/sales`,
+        { params: { ...drilldownParams(request), limit: 25, offset } },
+      );
+      if (requestId === drilldownRequestId.current) {
+        setDrilldownData(response.data);
+      }
+    } catch (error: any) {
+      if (requestId === drilldownRequestId.current) {
+        setDrilldownData(null);
+        setDrilldownError(
+          error?.response?.status === 403
+            ? "You do not have reports permission for these contributing sales."
+            : await readApiError(error, "Failed to load contributing sales"),
+        );
+      }
+    } finally {
+      if (requestId === drilldownRequestId.current) {
+        setDrilldownLoading(false);
+      }
+    }
+  }
+
+  function openDashboardDrilldown(request: DashboardDrilldownRequest) {
+    setDrilldownRequest(request);
+    setDrilldownData(null);
+    void loadDashboardDrilldown(request);
+  }
+
+  function closeDashboardDrilldown() {
+    drilldownRequestId.current += 1;
+    setDrilldownRequest(null);
+    setDrilldownData(null);
+    setDrilldownError("");
+    setDrilldownLoading(false);
+  }
+
+  async function exportDashboardDrilldown() {
+    if (!drilldownRequest) return;
+    try {
+      setDrilldownError("");
+      const response = await api.get(
+        `/dashboard/analytics-v3/${companyId}/sales.csv`,
+        {
+          params: drilldownParams(drilldownRequest),
+          responseType: "blob",
+        },
+      );
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "dashboard-contributing-sales.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      setDrilldownError(
+        error?.response?.status === 403
+          ? "You do not have reports permission to export these sales."
+          : await readApiError(error, "Failed to export contributing sales"),
+      );
+    }
+  }
+
   async function exportDashboard(section: ExportSection) {
     try {
       setMessage("");
@@ -230,11 +338,13 @@ function App() {
     setCompanyId("");
     setDashboardSummary(null);
     setSales([]);
+    closeDashboardDrilldown();
   }
 
   function navigateTo(nextPage: typeof page) {
     setPage(nextPage);
     setMobileMenuOpen(false);
+    closeDashboardDrilldown();
   }
 
   useEffect(() => {
@@ -428,12 +538,28 @@ function App() {
             selectedShopId={selectedShopId}
             customDateFrom={customDateFrom}
             customDateTo={customDateTo}
-            onRangeChange={setRangeKey}
-            onGranularityChange={setGranularity}
-            onShopChange={setSelectedShopId}
-            onDateFromChange={setCustomDateFrom}
-            onDateToChange={setCustomDateTo}
+            onRangeChange={(value) => { closeDashboardDrilldown(); setRangeKey(value); }}
+            onGranularityChange={(value) => { closeDashboardDrilldown(); setGranularity(value); }}
+            onShopChange={(value) => { closeDashboardDrilldown(); setSelectedShopId(value); }}
+            onDateFromChange={(value) => { closeDashboardDrilldown(); setCustomDateFrom(value); }}
+            onDateToChange={(value) => { closeDashboardDrilldown(); setCustomDateTo(value); }}
             onExport={(section) => void exportDashboard(section)}
+            onOpenDrilldown={openDashboardDrilldown}
+          />
+        )}
+
+        {page === "dashboard" && drilldownRequest && (
+          <DashboardDrilldownDialog
+            request={drilldownRequest}
+            data={drilldownData}
+            loading={drilldownLoading}
+            error={drilldownError}
+            currencySymbol={dashboardSummary?.currency_symbol || "$"}
+            decimalPlaces={dashboardSummary?.decimal_places ?? 2}
+            reportingTimezone={dashboardSummary?.reporting_timezone || "Africa/Harare"}
+            onClose={closeDashboardDrilldown}
+            onPage={(offset) => void loadDashboardDrilldown(drilldownRequest, offset)}
+            onExport={() => void exportDashboardDrilldown()}
           />
         )}
 

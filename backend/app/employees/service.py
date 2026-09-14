@@ -1,5 +1,6 @@
 import hmac
 import secrets
+import uuid
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 
@@ -19,7 +20,7 @@ from app.employees.schema import (
     PinLoginRequest,
 )
 from app.models import Employee, Device, PosSession, AuditEvent, EmployeeShopAccess, Shop
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 
 PERMISSION_KEYS = {
@@ -378,6 +379,34 @@ class EmployeeService:
                 data.pin,
                 employee.pin,
             ):
+                if data.takeover and (data.device_id is None or not data.device_key):
+                    raise HTTPException(
+                        400,
+                        "Explicit takeover requires a terminal and device identity",
+                    )
+                if data.takeover:
+                    # Serialize identity transfers for this tenant before taking
+                    # row locks. This prevents concurrent swaps/replays from
+                    # committing conflicting terminal keys or sessions.
+                    await self.repo.db.execute(
+                        text(
+                            "SELECT pg_advisory_xact_lock("
+                            "hashtextextended(:company_id, 0))"
+                        ),
+                        {"company_id": str(data.company_id)},
+                    )
+                    # The device key is globally unique, so serialize its
+                    # ownership independently of the tenant lock. Concurrent
+                    # cross-tenant claims then observe the committed owner and
+                    # return a controlled conflict instead of a uniqueness
+                    # failure at commit time.
+                    await self.repo.db.execute(
+                        text(
+                            "SELECT pg_advisory_xact_lock("
+                            "hashtextextended(:device_key, 1))"
+                        ),
+                        {"device_key": data.device_key.strip()},
+                    )
                 permissions = self.build_permissions(
                     employee.role,
                     employee.permissions,
@@ -396,7 +425,7 @@ class EmployeeService:
                 q = select(Device).where(Device.company_id == data.company_id, Device.shop_id == shop_id, Device.active == True, Device.deleted == False, Device.removed_at.is_(None), Device.deactivated_at.is_(None))
                 if data.device_id:
                     q = q.where(Device.id == data.device_id)
-                device = (await self.repo.db.execute(q.order_by(Device.pos_number.asc().nullslast()))).scalars().first()
+                device = (await self.repo.db.execute(q.order_by(Device.pos_number.asc().nullslast()).with_for_update())).scalars().first()
                 if not device:
                     raise HTTPException(409, "No active POS terminal is available for this shop")
                 now = datetime.now(timezone.utc)
@@ -444,8 +473,7 @@ class EmployeeService:
                         resumable.token_hash = hash_session_token(token)
                     resumable.expires_at = now + timedelta(hours=12)
                     resumable.last_authenticated_at = now
-                    await self.repo.db.commit()
-                    return {
+                    response = {
                         "id": employee.id,
                         "company_id": employee.company_id,
                         "shop_id": device.shop_id,
@@ -455,21 +483,99 @@ class EmployeeService:
                         "permissions": permissions,
                         "access_token": token,
                         "device_id": device.id,
+                        "device_key": device.device_key,
                     }
+                    await self.repo.db.commit()
+                    return response
                 if existing and not data.takeover:
                     raise HTTPException(409, "You are already signed in on another device. Choose Cancel or Take over this session.")
                 if terminal_existing and terminal_existing.id != (existing.id if existing else None) and not data.takeover:
                     raise HTTPException(409, "This POS terminal is already in use. Choose another terminal or take over the session.")
+                previous_device_key = str(device.device_key)
+                prior_key_owner = None
+                source_terminal_existing = None
+                if data.takeover:
+                    requested_device_key = data.device_key.strip()
+                    prior_key_owner = (
+                        await self.repo.db.execute(
+                            select(Device)
+                            .where(
+                                Device.device_key == requested_device_key,
+                                Device.deleted == False,
+                            )
+                            .with_for_update()
+                        )
+                    ).scalars().first()
+                    if (
+                        prior_key_owner
+                        and prior_key_owner.company_id != data.company_id
+                    ):
+                        raise HTTPException(
+                            409,
+                            "This device identity belongs to another company",
+                        )
+                    if prior_key_owner and prior_key_owner.id != device.id:
+                        source_terminal_existing = (
+                            await self.repo.db.execute(
+                                select(PosSession).where(
+                                    PosSession.device_id == prior_key_owner.id,
+                                    PosSession.revoked_at.is_(None),
+                                    PosSession.expires_at > now,
+                                ).with_for_update()
+                            )
+                        ).scalars().first()
+                        prior_key_owner.device_key = f"released-{uuid.uuid4()}"
+                        await self.repo.db.flush()
+                    device.device_key = requested_device_key
                 if existing:
                     existing.revoked_at = now; existing.revoke_reason = "takeover"
                     self.repo.db.add(AuditEvent(company_id=data.company_id, actor_employee_id=employee.id, device_id=device.id, action="session_takeover", details={"old_device_id": str(existing.device_id), "new_device_id": str(device.id)}))
                 if terminal_existing and terminal_existing.id != (existing.id if existing else None):
                     terminal_existing.revoked_at = now; terminal_existing.revoke_reason = "terminal_takeover"
                     self.repo.db.add(AuditEvent(company_id=data.company_id, actor_employee_id=employee.id, device_id=device.id, action="session_takeover", details={"old_device_id": str(device.id), "old_employee_id": str(terminal_existing.employee_id), "reason": "terminal_takeover"}))
+                if (
+                    source_terminal_existing
+                    and source_terminal_existing.id
+                    not in {
+                        existing.id if existing else None,
+                        terminal_existing.id if terminal_existing else None,
+                    }
+                ):
+                    source_terminal_existing.revoked_at = now
+                    source_terminal_existing.revoke_reason = "device_identity_transfer"
+                    self.repo.db.add(AuditEvent(
+                        company_id=data.company_id,
+                        actor_employee_id=employee.id,
+                        device_id=prior_key_owner.id,
+                        action="session_takeover",
+                        details={
+                            "old_device_id": str(prior_key_owner.id),
+                            "old_employee_id": str(source_terminal_existing.employee_id),
+                            "reason": "device_identity_transfer",
+                        },
+                    ))
+                if data.takeover and not hmac.compare_digest(
+                    previous_device_key,
+                    str(device.device_key),
+                ):
+                    self.repo.db.add(AuditEvent(
+                        company_id=data.company_id,
+                        actor_employee_id=employee.id,
+                        device_id=device.id,
+                        action="device_identity_transfer",
+                        details={
+                            "source_device_id": (
+                                str(prior_key_owner.id)
+                                if prior_key_owner
+                                and prior_key_owner.id != device.id
+                                else None
+                            ),
+                            "terminal_id": str(device.id),
+                        },
+                    ))
                 token = create_session_token()
-                self.repo.db.add(PosSession(id=__import__('uuid').uuid4(), company_id=data.company_id, employee_id=employee.id, device_id=device.id, shop_id=device.shop_id, branch_id=device.branch_id, token_hash=hash_session_token(token), expires_at=now + timedelta(hours=12), last_authenticated_at=now))
-                await self.repo.db.commit()
-                return {
+                self.repo.db.add(PosSession(id=uuid.uuid4(), company_id=data.company_id, employee_id=employee.id, device_id=device.id, shop_id=device.shop_id, branch_id=device.branch_id, token_hash=hash_session_token(token), expires_at=now + timedelta(hours=12), last_authenticated_at=now))
+                response = {
                     "id": employee.id,
                     "company_id": employee.company_id,
                     "shop_id": device.shop_id,
@@ -479,7 +585,14 @@ class EmployeeService:
                     "permissions": permissions,
                     "access_token": token,
                     "device_id": device.id,
+                    "device_key": device.device_key,
                 }
+                try:
+                    await self.repo.db.commit()
+                except Exception:
+                    await self.repo.db.rollback()
+                    raise
+                return response
 
         raise HTTPException(
             401,

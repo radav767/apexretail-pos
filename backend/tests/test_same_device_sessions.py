@@ -26,7 +26,10 @@ class Result:
 
 
 class SameDeviceSessionTest(unittest.IsolatedAsyncioTestCase):
-    def fixture(self, *, existing_kind=None, historical_kind=None):
+    def fixture(
+        self, *, existing_kind=None, historical_kind=None,
+        requested_key_owner=None, source_terminal_existing=None,
+    ):
         company_id = uuid4()
         shop_id = uuid4()
         branch_id = uuid4()
@@ -60,9 +63,23 @@ class SameDeviceSessionTest(unittest.IsolatedAsyncioTestCase):
         ]
         if existing is None:
             responses.append(Result([historical] if historical else []))
+        responses.extend([
+            Result([requested_key_owner] if requested_key_owner else []),
+        ])
+        if requested_key_owner and requested_key_owner.id != device.id:
+            responses.append(
+                Result([source_terminal_existing] if source_terminal_existing else [])
+            )
+        response_iter = iter(responses)
+
+        async def execute(statement, _params=None):
+            if "pg_advisory_xact_lock" in str(statement):
+                return Result([])
+            return next(response_iter)
+
         db = SimpleNamespace(
-            execute=AsyncMock(side_effect=responses),
-            commit=AsyncMock(), add=Mock(),
+            execute=AsyncMock(side_effect=execute), commit=AsyncMock(),
+            rollback=AsyncMock(), flush=AsyncMock(), add=Mock(),
         )
         repo = SimpleNamespace(
             db=db,
@@ -129,17 +146,59 @@ class SameDeviceSessionTest(unittest.IsolatedAsyncioTestCase):
         db.commit.assert_not_awaited()
 
     async def test_explicit_takeover_still_moves_a_genuinely_different_device(self):
-        service, db, employee, device, active = self.fixture(existing_kind="other")
+        source = SimpleNamespace(
+            id=uuid4(), company_id=uuid4(), device_key="new-browser-key",
+        )
+        # Rebuild with the same-tenant device that currently owns the browser
+        # identity so both sides of the transfer are exercised.
+        service, db, employee, device, active = self.fixture(
+            existing_kind="other", requested_key_owner=source,
+        )
+        source.company_id = employee.company_id
+        requested_key = source.device_key
         result = await service.pin_login(PinLoginRequest(
             company_id=employee.company_id, branch_id=device.branch_id,
             shop_id=device.shop_id, device_id=device.id, pin="1234",
-            device_key=device.device_key, takeover=True,
+            device_key=requested_key, takeover=True,
         ))
         self.assertEqual(result["device_id"], device.id)
+        self.assertEqual(result["device_key"], requested_key)
+        self.assertEqual(device.device_key, requested_key)
+        self.assertTrue(str(source.device_key).startswith("released-"))
         self.assertIsNotNone(active.revoked_at)
         self.assertEqual(active.revoke_reason, "takeover")
-        self.assertEqual(db.add.call_count, 2)
+        self.assertEqual(db.add.call_count, 3)
+        db.flush.assert_awaited_once()
         db.commit.assert_awaited_once()
+
+    async def test_cross_company_device_key_cannot_be_taken_over(self):
+        foreign_owner = SimpleNamespace(
+            id=uuid4(), company_id=uuid4(), device_key="foreign-key",
+        )
+        service, db, employee, device, _active = self.fixture(
+            existing_kind="other", requested_key_owner=foreign_owner,
+        )
+        with self.assertRaises(HTTPException) as caught:
+            await service.pin_login(PinLoginRequest(
+                company_id=employee.company_id, branch_id=device.branch_id,
+                shop_id=device.shop_id, device_id=device.id, pin="1234",
+                device_key=foreign_owner.device_key, takeover=True,
+            ))
+        self.assertEqual(caught.exception.status_code, 409)
+        self.assertIn("another company", caught.exception.detail)
+        db.commit.assert_not_awaited()
+
+    async def test_takeover_commit_failure_rolls_back_transaction(self):
+        service, db, employee, device, active = self.fixture(existing_kind="other")
+        db.commit.side_effect = RuntimeError("synthetic commit failure")
+        with self.assertRaisesRegex(RuntimeError, "synthetic commit failure"):
+            await service.pin_login(PinLoginRequest(
+                company_id=employee.company_id, branch_id=device.branch_id,
+                shop_id=device.shop_id, device_id=device.id, pin="1234",
+                device_key="new-browser-key", takeover=True,
+            ))
+        self.assertIsNotNone(active.revoked_at)
+        db.rollback.assert_awaited_once()
 
 
 if __name__ == "__main__":

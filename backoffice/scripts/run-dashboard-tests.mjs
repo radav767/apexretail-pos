@@ -13,6 +13,7 @@ try {
     [
       "tests/dashboard.test.tsx",
       "src/DashboardPanel.tsx",
+      "src/DashboardDrilldownDialog.tsx",
       "--ignoreConfig",
       "--outDir",
       outputDir,

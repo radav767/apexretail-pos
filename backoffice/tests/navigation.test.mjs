@@ -29,3 +29,14 @@ test("mobile menu opens, closes after navigation, and contains Logout", () => {
   assert.match(css, /@media \(max-width: 390px\)/);
   assert.match(css, /@media \(min-width: 761px\)/);
 });
+
+test("Dashboard drill-down uses filtered paginated routes and stays separate from Sales History", () => {
+  assert.match(app, /analytics-v3\/\$\{companyId\}\/sales/);
+  assert.match(app, /analytics-v3\/\$\{companyId\}\/sales\.csv/);
+  assert.match(app, /limit: 25, offset/);
+  assert.match(app, /dimension_key: request\.dimensionKey/);
+  assert.match(app, /page === "dashboard" && drilldownRequest/);
+  assert.match(app, /page === "sales" && \(/);
+  assert.match(css, /\.dashboard-dialog-backdrop/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.dashboard-dialog/);
+});

@@ -111,6 +111,11 @@ async def dashboard_analytics_drilldown(
     date_to: date | None = Query(default=None),
     shop_id: UUID | None = Query(default=None),
     metric: Literal["gross_sales", "refunds", "net_sales", "cost_of_sales", "gross_profit", "discounts"] = Query(default="net_sales"),
+    dimension: Literal[
+        "product", "category", "payment", "shop", "cashier",
+        "discount", "refund",
+    ] | None = Query(default=None),
+    dimension_key: str | None = Query(default=None, max_length=255),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     service: DashboardService = Depends(get_service),
@@ -119,6 +124,7 @@ async def dashboard_analytics_drilldown(
     return await service.get_drilldown(
         company_id, range_key=range_key, date_from=date_from,
         date_to=date_to, shop_id=shop_id, metric=metric,
+        dimension=dimension, dimension_key=dimension_key,
         limit=limit, offset=offset,
     )
 
@@ -159,12 +165,18 @@ async def dashboard_analytics_drilldown_export(
     date_to: date | None = Query(default=None),
     shop_id: UUID | None = Query(default=None),
     metric: Literal["gross_sales", "refunds", "net_sales", "cost_of_sales", "gross_profit", "discounts"] = Query(default="net_sales"),
+    dimension: Literal[
+        "product", "category", "payment", "shop", "cashier",
+        "discount", "refund",
+    ] | None = Query(default=None),
+    dimension_key: str | None = Query(default=None, max_length=255),
     service: DashboardService = Depends(get_service),
     _actor: AuthActor = Depends(require_dashboard_reports_access),
 ):
     content = await service.export_drilldown(
         company_id, range_key=range_key, date_from=date_from,
         date_to=date_to, shop_id=shop_id, metric=metric,
+        dimension=dimension, dimension_key=dimension_key,
     )
     return Response(
         content=content, media_type="text/csv; charset=utf-8",

@@ -1,6 +1,7 @@
 import {
   dashboardRangeOptions, formatDashboardMoney,
   type DashboardBreakdownRow, type DashboardMetric,
+  type DashboardDrilldownRequest, type DashboardMetricKey,
   type DashboardPhase3Summary, type DashboardRangeKey, type DashboardRankedRow,
 } from "./dashboard";
 
@@ -20,6 +21,7 @@ type Props = {
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
   onExport: (section: ExportSection) => void;
+  onOpenDrilldown: (request: DashboardDrilldownRequest) => void;
 };
 
 const money = (value: string | number, summary: DashboardPhase3Summary) =>
@@ -29,26 +31,26 @@ function ExportButton({ section, onExport }: { section: ExportSection; onExport:
   return <button type="button" className="dashboard-export" onClick={() => onExport(section)}>Export CSV</button>;
 }
 
-function RankedTable({ title, rows, summary, section, onExport }: { title: string; rows: DashboardRankedRow[]; summary: DashboardPhase3Summary; section: ExportSection; onExport: Props["onExport"] }) {
+function RankedTable({ title, rows, summary, section, dimension, onExport, onOpenDrilldown }: { title: string; rows: DashboardRankedRow[]; summary: DashboardPhase3Summary; section: ExportSection; dimension: "product" | "category"; onExport: Props["onExport"]; onOpenDrilldown: Props["onOpenDrilldown"] }) {
   return <section className="panel analytics-panel">
     <div className="panel-header"><div><h2>{title}</h2><p>Ranked by revenue</p></div><ExportButton section={section} onExport={onExport} /></div>
     <div className="analytics-table-wrap"><table className="analytics-table"><caption className="sr-only">{title}</caption><thead><tr><th>Name</th><th>Revenue</th><th>Quantity</th><th>Gross profit</th></tr></thead><tbody>
-      {rows.length ? rows.map((row) => <tr key={`${row.id}-${row.name}`}><th scope="row">{row.name}</th><td>{money(row.revenue, summary)}</td><td>{Number(row.quantity).toFixed(3)}</td><td>{money(row.gross_profit, summary)}</td></tr>) : <tr><td colSpan={4}>No contributing sales</td></tr>}
+      {rows.length ? rows.map((row) => <tr key={`${row.id}-${row.name}`}><th scope="row"><button type="button" className="dashboard-detail-link" onClick={() => onOpenDrilldown({ title: `${title}: ${row.name}`, metric: "net_sales", dimension, dimensionKey: row.id || "unassigned" })}>{row.name}</button></th><td>{money(row.revenue, summary)}</td><td>{Number(row.quantity).toFixed(3)}</td><td>{money(row.gross_profit, summary)}</td></tr>) : <tr><td colSpan={4}>No contributing sales</td></tr>}
     </tbody></table></div>
   </section>;
 }
 
-function BreakdownTable({ title, rows, summary, section, onExport }: { title: string; rows: DashboardBreakdownRow[]; summary: DashboardPhase3Summary; section: ExportSection; onExport: Props["onExport"] }) {
+function BreakdownTable({ title, rows, summary, section, metric = "net_sales", dimension, onExport, onOpenDrilldown }: { title: string; rows: DashboardBreakdownRow[]; summary: DashboardPhase3Summary; section: ExportSection; metric?: DashboardMetricKey; dimension: "payment" | "shop" | "cashier" | "discount" | "refund"; onExport: Props["onExport"]; onOpenDrilldown: Props["onOpenDrilldown"] }) {
   return <section className="panel analytics-panel">
     <div className="panel-header"><div><h2>{title}</h2><p>Selected reporting population</p></div><ExportButton section={section} onExport={onExport} /></div>
     <div className="analytics-table-wrap"><table className="analytics-table"><caption className="sr-only">{title}</caption><thead><tr><th>Name</th><th>Transactions</th><th>Gross</th><th>Refunds</th><th>Net</th><th>Profit</th><th>Discounts</th></tr></thead><tbody>
-      {rows.length ? rows.map((row) => <tr key={row.key}><th scope="row">{row.name}</th><td>{row.transactions}</td><td>{money(row.gross_sales, summary)}</td><td>{money(row.refunds, summary)}</td><td>{money(row.net_sales, summary)}</td><td>{money(row.gross_profit, summary)}</td><td>{formatDashboardMoney(row.discounts, summary.currency_symbol, summary.decimal_places)}</td></tr>) : <tr><td colSpan={7}>No contributing sales</td></tr>}
+      {rows.length ? rows.map((row) => <tr key={row.key}><th scope="row"><button type="button" className="dashboard-detail-link" onClick={() => onOpenDrilldown({ title: `${title}: ${row.name}`, metric, dimension, dimensionKey: row.key })}>{row.name}</button></th><td>{row.transactions}</td><td>{money(row.gross_sales, summary)}</td><td>{money(row.refunds, summary)}</td><td>{money(row.net_sales, summary)}</td><td>{money(row.gross_profit, summary)}</td><td>{formatDashboardMoney(row.discounts, summary.currency_symbol, summary.decimal_places)}</td></tr>) : <tr><td colSpan={7}>No contributing sales</td></tr>}
     </tbody></table></div>
   </section>;
 }
 
 export function DashboardPanel(props: Props) {
-  const { summary, shops, rangeKey, granularity, selectedShopId, customDateFrom, customDateTo, onRangeChange, onGranularityChange, onShopChange, onDateFromChange, onDateToChange, onExport } = props;
+  const { summary, shops, rangeKey, granularity, selectedShopId, customDateFrom, customDateTo, onRangeChange, onGranularityChange, onShopChange, onDateFromChange, onDateToChange, onExport, onOpenDrilldown } = props;
   const cards = summary ? [
     ["Gross Sales", "gross_sales", summary.metrics.gross_sales],
     ["Net Sales", "net_sales", summary.metrics.net_sales],
@@ -73,16 +75,16 @@ export function DashboardPanel(props: Props) {
     <section className="summary-grid" aria-label="Financial summary">{cards.map(([title, key, metric]) => {
       const change = summary?.comparison.metrics[key];
       const changeText = change && summary && change.available && change.amount !== null ? `${Number(change.amount) >= 0 ? "+" : ""}${money(change.amount, summary)} vs previous${change.percentage === null ? " (percentage unavailable)" : ` (${Number(change.percentage) >= 0 ? "+" : ""}${change.percentage}%)`}` : change?.reason || "Completed sales and recorded refunds";
-      return <article className={`summary-card ${metric.available ? "" : "muted"}`} key={title}><span>{title}</span><strong>{formatDashboardMoney(metric, summary?.currency_symbol || "$", summary?.decimal_places ?? 2)}</strong><small>{changeText}</small>{metric.reason ? <p>{metric.reason}</p> : null}</article>;
+      return <button type="button" className={`summary-card dashboard-drilldown-trigger ${metric.available ? "" : "muted"}`} key={title} onClick={() => onOpenDrilldown({ title: `${title} contributing sales`, metric: key as DashboardMetricKey })}><span>{title}</span><strong>{formatDashboardMoney(metric, summary?.currency_symbol || "$", summary?.decimal_places ?? 2)}</strong><small>{changeText}</small>{metric.reason ? <p>{metric.reason}</p> : null}</button>;
     })}</section>
 
     {summary && <>
-      <section className="panel analytics-panel"><div className="panel-header"><div><h2>Sales and gross-profit trend</h2><p>Grouped by {granularity}</p></div><ExportButton section="trends" onExport={onExport} /></div><div className="analytics-table-wrap"><table className="analytics-table"><caption className="sr-only">Sales and gross-profit trend</caption><thead><tr><th>Period</th><th>Gross sales</th><th>Refunds</th><th>Net sales</th><th>Gross profit</th><th>Discounts</th></tr></thead><tbody>{summary.trends.length ? summary.trends.map((point) => <tr key={point.period_start}><th scope="row">{point.period_start} – {point.period_end}</th><td>{formatDashboardMoney(point.metrics.gross_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.refunds, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.net_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.gross_profit, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.discounts, summary.currency_symbol, summary.decimal_places)}</td></tr>) : <tr><td colSpan={6}>No contributing sales</td></tr>}</tbody></table></div></section>
-      <div className="analytics-grid"><RankedTable title="Top products" rows={summary.top_products} summary={summary} section="top_products" onExport={onExport} /><RankedTable title="Top categories" rows={summary.top_categories} summary={summary} section="top_categories" onExport={onExport} /></div>
-      <BreakdownTable title="Payment methods" rows={summary.payment_methods} summary={summary} section="payment_methods" onExport={onExport} />
-      <BreakdownTable title="Shops" rows={summary.shop_breakdown} summary={summary} section="shop_breakdown" onExport={onExport} />
-      <BreakdownTable title="Cashiers" rows={summary.cashier_breakdown} summary={summary} section="cashier_breakdown" onExport={onExport} />
-      <div className="analytics-grid"><BreakdownTable title="Discounts" rows={summary.discount_breakdown} summary={summary} section="discount_breakdown" onExport={onExport} /><BreakdownTable title="Refunds" rows={summary.refund_breakdown} summary={summary} section="refund_breakdown" onExport={onExport} /></div>
+      <section className="panel analytics-panel"><div className="panel-header"><div><h2>Sales and gross-profit trend</h2><p>Grouped by {granularity}</p></div><ExportButton section="trends" onExport={onExport} /></div><div className="analytics-table-wrap"><table className="analytics-table"><caption className="sr-only">Sales and gross-profit trend</caption><thead><tr><th>Period</th><th>Gross sales</th><th>Refunds</th><th>Net sales</th><th>Gross profit</th><th>Discounts</th></tr></thead><tbody>{summary.trends.length ? summary.trends.map((point) => <tr key={point.period_start}><th scope="row"><button type="button" className="dashboard-detail-link" onClick={() => onOpenDrilldown({ title: `Sales from ${point.period_start} to ${point.period_end}`, metric: "net_sales", dateFrom: point.period_start, dateTo: point.period_end })}>{point.period_start} – {point.period_end}</button></th><td>{formatDashboardMoney(point.metrics.gross_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.refunds, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.net_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.gross_profit, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.discounts, summary.currency_symbol, summary.decimal_places)}</td></tr>) : <tr><td colSpan={6}>No contributing sales</td></tr>}</tbody></table></div></section>
+      <div className="analytics-grid"><RankedTable title="Top products" rows={summary.top_products} summary={summary} section="top_products" dimension="product" onExport={onExport} onOpenDrilldown={onOpenDrilldown} /><RankedTable title="Top categories" rows={summary.top_categories} summary={summary} section="top_categories" dimension="category" onExport={onExport} onOpenDrilldown={onOpenDrilldown} /></div>
+      <BreakdownTable title="Payment methods" rows={summary.payment_methods} summary={summary} section="payment_methods" dimension="payment" onExport={onExport} onOpenDrilldown={onOpenDrilldown} />
+      <BreakdownTable title="Shops" rows={summary.shop_breakdown} summary={summary} section="shop_breakdown" dimension="shop" onExport={onExport} onOpenDrilldown={onOpenDrilldown} />
+      <BreakdownTable title="Cashiers" rows={summary.cashier_breakdown} summary={summary} section="cashier_breakdown" dimension="cashier" onExport={onExport} onOpenDrilldown={onOpenDrilldown} />
+      <div className="analytics-grid"><BreakdownTable title="Discounts" rows={summary.discount_breakdown} summary={summary} section="discount_breakdown" metric="discounts" dimension="discount" onExport={onExport} onOpenDrilldown={onOpenDrilldown} /><BreakdownTable title="Refunds" rows={summary.refund_breakdown} summary={summary} section="refund_breakdown" metric="refunds" dimension="refund" onExport={onExport} onOpenDrilldown={onOpenDrilldown} /></div>
     </>}
   </>;
 }

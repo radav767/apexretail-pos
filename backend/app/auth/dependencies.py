@@ -85,8 +85,18 @@ async def resolve_auth_actor(
             session.revoked_at = datetime.now(timezone.utc); session.revoke_reason = "employee_inactive"; await db.commit(); return None
         session.last_authenticated_at = datetime.now(timezone.utc)
         session.expires_at = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=12)
+        actor = AuthActor(
+            actor_type="employee",
+            company_id=employee.company_id,
+            role=employee.role,
+            employee=employee,
+            permissions=EmployeeService.build_permissions(
+                employee.role,
+                employee.permissions,
+            ),
+        )
         await db.commit()
-        return AuthActor(actor_type="employee", company_id=employee.company_id, role=employee.role, employee=employee, permissions=EmployeeService.build_permissions(employee.role, employee.permissions))
+        return actor
 
     try:
         payload = decode_access_token(token)

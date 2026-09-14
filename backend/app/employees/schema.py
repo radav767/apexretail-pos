@@ -116,6 +116,7 @@ class PinLoginOut(BaseModel):
     permissions: dict[str, bool]
     access_token: str
     device_id: UUID | None = None
+    device_key: str | None = None
     selection_required: bool = False
     shops: list[dict] = Field(default_factory=list)
     terminals: list[dict] = Field(default_factory=list)

@@ -1624,7 +1624,13 @@ const [loggedIn, setLoggedIn] = useState(
         setPinSelection(null);
         setTakeoverPrompt(false);
         setTakeoverSelection(null);
-        if (result.device_id) localStorage.setItem("device_id", String(result.device_id));
+        if (result.device_id) {
+          rememberDeviceIdentity(
+            companyId,
+            String(result.device_key || storedIdentity.device_key),
+            String(result.device_id),
+          );
+        }
         localStorage.setItem("employee_id", employeeId);
         if (result.access_token) {
           localStorage.setItem(

@@ -126,4 +126,5 @@ class DashboardDrilldown(BaseModel):
     total: int
     limit: int
     offset: int
+    metrics: DashboardPhase2Metrics
     rows: list[DashboardSaleRow]

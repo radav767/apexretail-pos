@@ -80,6 +80,29 @@ test("a genuinely different browser gets a different identity", () => {
   assert.equal(getPinLoginDeviceIdentity("company-a", secondStorage).device_id, undefined);
 });
 
+test("approved takeover atomically persists the returned terminal binding", () => {
+  const { storage, key: formerKey } = preparedDevice();
+  const approvedDeviceKey = "approved-new-device-key";
+
+  // This mirrors the successful PIN response handler: the server-returned
+  // terminal and identity replace the prior binding together.
+  rememberDeviceIdentity(
+    "company-a", approvedDeviceKey, "terminal-b", storage,
+  );
+  storage.setItem("employee_token", "renewed-session");
+
+  assert.deepEqual(getPinLoginDeviceIdentity("company-a", storage), {
+    device_id: "terminal-b",
+    device_key: approvedDeviceKey,
+    session_token: "renewed-session",
+  });
+  assert.notEqual(storage.getItem("device_key"), formerKey);
+
+  clearAuthenticationPreservingDeviceIdentity(storage);
+  assert.equal(getOrCreateDeviceKey("company-a", storage), approvedDeviceKey);
+  assert.equal(storage.getItem("device_id"), "terminal-b");
+});
+
 test("switching tenants rotates identity instead of crossing tenant ownership", () => {
   const { storage, key } = preparedDevice();
   const nextKey = getOrCreateDeviceKey("company-b", storage);

@@ -78,10 +78,31 @@ export type DashboardPhase3Summary = DashboardPhase2Summary & {
   refund_breakdown: DashboardBreakdownRow[];
 };
 
+export type DashboardMetricKey = keyof DashboardPhase2Summary["metrics"];
+
+export type DashboardDimension =
+  | "product"
+  | "category"
+  | "payment"
+  | "shop"
+  | "cashier"
+  | "discount"
+  | "refund";
+
+export type DashboardDrilldownRequest = {
+  title: string;
+  metric: DashboardMetricKey;
+  dimension?: DashboardDimension;
+  dimensionKey?: string;
+  dateFrom?: string;
+  dateTo?: string;
+};
+
 export type DashboardDrilldown = {
   total: number;
   limit: number;
   offset: number;
+  metrics: DashboardPhase2Summary["metrics"];
   rows: Array<{
     id: string;
     receipt_number: string;

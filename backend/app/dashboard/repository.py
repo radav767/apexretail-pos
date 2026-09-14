@@ -434,7 +434,8 @@ class DashboardRepository:
 
     async def get_drilldown(
         self, company_id, *, range_key, date_from=None, date_to=None,
-        shop_id=None, metric="net_sales", limit=50, offset=0,
+        shop_id=None, metric="net_sales", dimension=None, dimension_key=None,
+        limit=50, offset=0,
     ):
         start_date, end_date = resolve_date_range(
             range_key, date_from=date_from, date_to=date_to
@@ -447,12 +448,82 @@ class DashboardRepository:
             "net_sales": "TRUE", "cost_of_sales": "TRUE", "gross_profit": "TRUE",
             "discounts": "tp.original_sale_id IS NULL",
         }
-        condition = conditions[metric]
+        if metric not in conditions:
+            raise HTTPException(400, "Invalid drill-down metric")
+        clauses = [conditions[metric]]
+        if (dimension is None) != (dimension_key is None):
+            raise HTTPException(
+                400, "Drill-down dimension and dimension_key are required together"
+            )
+        if dimension is not None:
+            valid_dimensions = {
+                "product", "category", "payment", "shop", "cashier",
+                "discount", "refund",
+            }
+            if dimension not in valid_dimensions:
+                raise HTTPException(400, "Invalid drill-down dimension")
+            key = str(dimension_key).strip()
+            if not key:
+                raise HTTPException(400, "Drill-down dimension_key cannot be empty")
+            params["dimension_key"] = key
+            if dimension == "product" or (
+                dimension == "category" and key != "unassigned"
+            ):
+                try:
+                    params["dimension_uuid"] = UUID(key)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, "Invalid drill-down dimension identifier")
+            dimension_conditions = {
+                "product": """EXISTS (
+                    SELECT 1 FROM sale_items AS detail_item
+                    WHERE detail_item.sale_id = tp.id
+                    AND detail_item.product_id = :dimension_uuid
+                )""",
+                "category": """EXISTS (
+                    SELECT 1 FROM sale_items AS detail_item
+                    JOIN products AS detail_product
+                      ON detail_product.id = detail_item.product_id
+                     AND detail_product.company_id = :company_id
+                    WHERE detail_item.sale_id = tp.id
+                    AND detail_product.category_id = :dimension_uuid
+                )""",
+                "payment": "COALESCE(tp.payment_method, 'unknown') = :dimension_key",
+                "shop": "COALESCE(tp.shop_id::text, 'unassigned') = :dimension_key",
+                "cashier": "COALESCE(tp.employee_id::text, tp.cashier_name, 'unassigned') = :dimension_key",
+                "discount": """CASE
+                    WHEN tp.discount_amount IS NULL THEN 'unavailable'
+                    WHEN tp.discount_amount > 0 THEN 'discounted'
+                    ELSE 'no_discount' END = :dimension_key""",
+                "refund": "COALESCE(tp.refund_method, 'unspecified') = :dimension_key",
+            }
+            if dimension == "category" and key == "unassigned":
+                dimension_conditions["category"] = """EXISTS (
+                    SELECT 1 FROM sale_items AS detail_item
+                    LEFT JOIN products AS detail_product
+                      ON detail_product.id = detail_item.product_id
+                     AND detail_product.company_id = :company_id
+                    WHERE detail_item.sale_id = tp.id
+                    AND detail_product.category_id IS NULL
+                )"""
+            clauses.append(dimension_conditions[dimension])
+        condition = " AND ".join(f"({clause})" for clause in clauses)
         cte = transaction_population_cte(transaction_filters())
-        count_result = await self.db.execute(
-            text(cte + f"SELECT COUNT(*) FROM transaction_population tp WHERE {condition}"), params
+        totals_result = await self.db.execute(
+            text(cte + f"""
+                SELECT COUNT(*) AS transaction_count,
+                    COALESCE(SUM(gross_sales), 0) AS gross_sales,
+                    COALESCE(SUM(refunds), 0) AS refunds,
+                    COALESCE(SUM(net_sales), 0) AS net_sales,
+                    COALESCE(SUM(cost_of_sales), 0) AS cost_of_sales,
+                    COALESCE(SUM(gross_profit), 0) AS gross_profit,
+                    COALESCE(SUM(discounts), 0) AS discounts,
+                    COALESCE(SUM(original_sale_count), 0) AS original_sale_count,
+                    COALESCE(SUM(known_discount_count), 0) AS known_discount_count
+                FROM transaction_population tp WHERE {condition}
+            """), params
         )
-        total = int(count_result.scalar_one())
+        totals = dict(totals_result.mappings().first() or {})
+        total = int(totals.get("transaction_count") or 0)
         result = await self.db.execute(text(cte + f"""
             SELECT tp.*, COALESCE(tp.shop_name_snapshot, sh.name, 'Unassigned shop') AS shop_name
             FROM transaction_population tp
@@ -482,4 +553,10 @@ class DashboardRepository:
                     )
                 ),
             })
-        return {"total": total, "limit": limit, "offset": offset, "rows": rows}
+        return {
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "metrics": build_metrics(totals),
+            "rows": rows,
+        }

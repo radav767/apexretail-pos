@@ -8,6 +8,7 @@ import {
   type DashboardPhase3Summary,
 } from "../src/dashboard.js";
 import { DashboardPanel } from "../src/DashboardPanel.js";
+import { DashboardDrilldownDialog } from "../src/DashboardDrilldownDialog.js";
 
 
 const available = (value: string): DashboardMetric => ({
@@ -73,6 +74,7 @@ const analyticsProps = {
   granularity: "day" as const,
   onGranularityChange: () => undefined,
   onExport: () => undefined,
+  onOpenDrilldown: () => undefined,
 };
 
 test("dashboard renders ranges, shop filter, and metrics", () => {
@@ -124,9 +126,36 @@ test("dashboard renders ranges, shop filter, and metrics", () => {
   assert.ok(markup.includes("Showing 2026-08-01 to 2026-08-31 for one shop"));
   assert.ok(markup.includes('value="2026-08-01"'));
   assert.ok(markup.includes('value="2026-08-31"'));
-  assert.ok(!markup.includes("Contributing sales"));
+  assert.ok(markup.includes("dashboard-drilldown-trigger"));
+  assert.ok(markup.includes("dashboard-detail-link"));
   assert.ok(!markup.includes("Sales and Receipts"));
   assert.ok(!markup.includes("transaction records"));
+});
+
+test("drill-down renders totals, rows, pagination, empty, loading, and errors", () => {
+  const request = { title: "Net Sales contributing sales", metric: "net_sales" as const };
+  const data = {
+    total: 1, limit: 25, offset: 0, metrics: summary.metrics,
+    rows: [{
+      id: "sale-1", receipt_number: "R-1", created_at: "2026-08-01T10:00:00Z",
+      shop_name: "Bulawayo", cashier_name: "Cashier", payment_method: "cash",
+      status: "completed", gross_sales: "150", refunds: "30", net_sales: "120",
+      gross_profit: "48", discounts: available("5"),
+    }],
+  };
+  const common = {
+    request, currencySymbol: "Z$", decimalPlaces: 2,
+    reportingTimezone: "Africa/Harare", onClose: () => undefined,
+    onPage: () => undefined, onExport: () => undefined,
+  };
+  const loaded = renderToStaticMarkup(<DashboardDrilldownDialog {...common} data={data} loading={false} error="" />);
+  assert.match(loaded, /1 contributing transaction/);
+  assert.match(loaded, /Z\$120\.00/);
+  assert.match(loaded, /R-1/);
+  assert.match(loaded, /1–1 of 1/);
+  assert.match(renderToStaticMarkup(<DashboardDrilldownDialog {...common} data={null} loading error="" />), /Loading contributing sales/);
+  assert.match(renderToStaticMarkup(<DashboardDrilldownDialog {...common} data={null} loading={false} error="Permission denied" />), /Permission denied/);
+  assert.match(renderToStaticMarkup(<DashboardDrilldownDialog {...common} data={{ ...data, total: 0, rows: [] }} loading={false} error="" />), /No contributing sales match/);
 });
 
 test("unknown metrics never format as zero", () => {

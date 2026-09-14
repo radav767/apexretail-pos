@@ -1,10 +1,13 @@
 import csv
 import io
 
+from fastapi import HTTPException
+
 from app.dashboard.repository import DashboardRepository
 
 
 class DashboardService:
+    DRILLDOWN_EXPORT_LIMIT = 10_000
     def __init__(self, repo: DashboardRepository):
         self.repo = repo
 
@@ -83,8 +86,20 @@ class DashboardService:
 
     async def export_drilldown(self, company_id, **filters):
         drilldown = await self.get_drilldown(
-            company_id, **filters, limit=10000, offset=0
+            company_id,
+            **filters,
+            limit=self.DRILLDOWN_EXPORT_LIMIT,
+            offset=0,
         )
+        if drilldown["total"] > self.DRILLDOWN_EXPORT_LIMIT:
+            raise HTTPException(
+                422,
+                (
+                    f"This export contains {drilldown['total']:,} rows; the "
+                    f"maximum is {self.DRILLDOWN_EXPORT_LIMIT:,}. Narrow the "
+                    "date, shop, metric, or detail filter and try again."
+                ),
+            )
         output = io.StringIO(newline="")
         writer = csv.writer(output, lineterminator="\n")
         writer.writerow([
@@ -103,4 +118,12 @@ class DashboardService:
                 row.get("cost_of_sales"), row.get("gross_profit"),
                 row["discounts"]["value"], row["discounts"]["available"],
             ])
+        totals = drilldown["metrics"]
+        writer.writerow([
+            "TOTAL", "", "", "", "", "", "",
+            totals["gross_sales"]["value"], totals["refunds"]["value"],
+            totals["net_sales"]["value"], totals["cost_of_sales"]["value"],
+            totals["gross_profit"]["value"], totals["discounts"]["value"],
+            totals["discounts"]["available"],
+        ])
         return output.getvalue()

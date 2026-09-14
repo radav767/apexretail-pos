@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
+from fastapi import HTTPException
 
 from app.auth.dependencies import AuthActor, get_auth_actor
 from app.dashboard.accounting import (
@@ -63,6 +64,47 @@ class DashboardPhase3ExportTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn("'=unsafe", content)
         repository.get_phase3_summary.assert_awaited_once()
 
+    async def test_drilldown_export_refuses_to_silently_truncate(self):
+        repository = SimpleNamespace(get_drilldown=AsyncMock(return_value={
+            "total": DashboardService.DRILLDOWN_EXPORT_LIMIT + 1,
+            "limit": DashboardService.DRILLDOWN_EXPORT_LIMIT,
+            "offset": 0,
+            "metrics": {},
+            "rows": [],
+        }))
+        with self.assertRaises(HTTPException) as caught:
+            await DashboardService(repository).export_drilldown(
+                uuid4(), range_key="custom", date_from=date(2026, 8, 1),
+                date_to=date(2026, 8, 31), metric="net_sales",
+            )
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertIn("10,001 rows", caught.exception.detail)
+        self.assertIn("Narrow", caught.exception.detail)
+
+    async def test_drilldown_export_uses_centralized_totals(self):
+        metrics = {key: metric(value) for key, value in {
+            "gross_sales": "10.00", "refunds": "2.00",
+            "net_sales": "8.00", "cost_of_sales": "3.00",
+            "gross_profit": "5.00", "discounts": "1.00",
+        }.items()}
+        row = {
+            "id": uuid4(), "receipt_number": "=unsafe", "created_at": "2026-08-01",
+            "shop_name": "Shop", "cashier_name": "Cashier",
+            "payment_method": "cash", "status": "completed",
+            "gross_sales": "10.00", "refunds": "2.00", "net_sales": "8.00",
+            "cost_of_sales": "3.00", "gross_profit": "5.00",
+            "discounts": metric("1.00"),
+        }
+        repository = SimpleNamespace(get_drilldown=AsyncMock(return_value={
+            "total": 1, "limit": 10_000, "offset": 0,
+            "metrics": metrics, "rows": [row],
+        }))
+        content = await DashboardService(repository).export_drilldown(
+            uuid4(), range_key="today", metric="net_sales",
+        )
+        self.assertIn("'=unsafe", content)
+        self.assertIn("TOTAL,,,,,,,10.00,2.00,8.00,3.00,5.00,1.00,True", content)
+
 
 def metric(value="0.00", available=True):
     return {
@@ -99,20 +141,29 @@ class DashboardPhase3ApiSecurityTest(unittest.IsolatedAsyncioTestCase):
                 "low_stock_products": 0, "stock_value": "0",
             }),
             get_phase3_summary=AsyncMock(return_value=phase3_response(self.company_id)),
-            get_drilldown=AsyncMock(return_value={"total": 0, "limit": 50, "offset": 0, "rows": []}),
+            get_drilldown=AsyncMock(return_value={
+                "total": 0, "limit": 50, "offset": 0,
+                "metrics": phase3_response(self.company_id)["metrics"], "rows": [],
+            }),
             export_phase3=AsyncMock(return_value="period_start,period_end\n"),
             export_drilldown=AsyncMock(return_value="id,receipt_number\n"),
         )
-        app.dependency_overrides[get_dashboard_service] = lambda: self.service
+        async def override_service():
+            return self.service
+
+        app.dependency_overrides[get_dashboard_service] = override_service
 
     def tearDown(self):
         app.dependency_overrides.clear()
 
     def set_actor(self, company_id=None, reports=True):
-        app.dependency_overrides[get_auth_actor] = lambda: AuthActor(
-            actor_type="employee", company_id=company_id or self.company_id,
-            role="manager", permissions={"reports": reports},
-        )
+        async def override_actor():
+            return AuthActor(
+                actor_type="employee", company_id=company_id or self.company_id,
+                role="manager", permissions={"reports": reports},
+            )
+
+        app.dependency_overrides[get_auth_actor] = override_actor
 
     async def request(self, path, **kwargs):
         async with httpx.AsyncClient(
@@ -125,6 +176,24 @@ class DashboardPhase3ApiSecurityTest(unittest.IsolatedAsyncioTestCase):
         for suffix in ("", "/sales", "/sales.csv", "/export.csv"):
             response = await self.request(f"/api/dashboard/analytics-v3/{self.company_id}{suffix}")
             self.assertEqual(response.status_code, 200, response.text)
+
+    async def test_drilldown_forwards_paginated_dimension_filters(self):
+        self.set_actor()
+        response = await self.request(
+            f"/api/dashboard/analytics-v3/{self.company_id}/sales",
+            params={
+                "range_key": "custom", "date_from": "2026-08-01",
+                "date_to": "2026-08-31", "metric": "gross_profit",
+                "dimension": "payment", "dimension_key": "cash",
+                "limit": 25, "offset": 50,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        kwargs = self.service.get_drilldown.await_args.kwargs
+        self.assertEqual(kwargs["dimension"], "payment")
+        self.assertEqual(kwargs["dimension_key"], "cash")
+        self.assertEqual(kwargs["limit"], 25)
+        self.assertEqual(kwargs["offset"], 50)
 
     async def test_all_dashboard_generations_reject_cross_company(self):
         self.set_actor(company_id=uuid4())
