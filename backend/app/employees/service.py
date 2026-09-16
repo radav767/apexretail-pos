@@ -19,7 +19,19 @@ from app.employees.schema import (
     EmployeeUpdate,
     PinLoginRequest,
 )
-from app.models import Employee, Device, PosSession, AuditEvent, EmployeeShopAccess, Shop
+from app.models import (
+    AuditEvent,
+    Device,
+    Employee,
+    EmployeeShopAccess,
+    PosSession,
+    Shop,
+)
+from app.devices.authority import (
+    TERMINAL_IDENTITY_REVOKED,
+    hash_device_identity,
+    terminal_authority_error,
+)
 from sqlalchemy import select, text
 
 
@@ -33,6 +45,7 @@ PERMISSION_KEYS = {
     "inventory_valuation",
     "employees",
     "settings",
+    "manage_devices",
 }
 
 
@@ -42,6 +55,7 @@ ROLE_PERMISSIONS = {
         "manage_inventory": True, "manage_products": True,
         "reports": True, "employees": True, "settings": True,
         "inventory_valuation": True,
+        "manage_devices": True,
     },
     "cashier": {
         "sales": True,
@@ -53,6 +67,7 @@ ROLE_PERMISSIONS = {
         "inventory_valuation": False,
         "employees": False,
         "settings": False,
+        "manage_devices": False,
     },
     "manager": {
         "sales": True,
@@ -64,6 +79,7 @@ ROLE_PERMISSIONS = {
         "inventory_valuation": True,
         "employees": True,
         "settings": False,
+        "manage_devices": False,
     },
     "owner": {
         "sales": True,
@@ -75,6 +91,7 @@ ROLE_PERMISSIONS = {
         "inventory_valuation": True,
         "employees": True,
         "settings": True,
+        "manage_devices": True,
     },
 }
 
@@ -377,6 +394,28 @@ class EmployeeService:
         self,
         data: PinLoginRequest,
     ):
+        deleted_identity_checker = getattr(
+            self.repo,
+            "is_deleted_device_identity",
+            None,
+        )
+        if deleted_identity_checker is not None:
+            deleted_identity = await deleted_identity_checker(
+                data.company_id,
+                device_id=data.device_id,
+                device_key_hash=(
+                    hash_device_identity(data.device_key.strip())
+                    if data.device_key
+                    else None
+                ),
+            )
+            if deleted_identity:
+                raise terminal_authority_error(
+                    403,
+                    TERMINAL_IDENTITY_REVOKED,
+                    "This terminal identity was permanently deleted",
+                )
+
         employees = await self.repo.active_pin_candidates(data.company_id, data.branch_id)
 
         for employee in employees:
@@ -489,6 +528,7 @@ class EmployeeService:
                         "access_token": token,
                         "device_id": device.id,
                         "device_key": device.device_key,
+                        "assignment_revision": getattr(device, "assignment_revision", 1),
                     }
                     await self.repo.db.commit()
                     return response
@@ -591,6 +631,7 @@ class EmployeeService:
                     "access_token": token,
                     "device_id": device.id,
                     "device_key": device.device_key,
+                    "assignment_revision": getattr(device, "assignment_revision", 1),
                 }
                 try:
                     await self.repo.db.commit()

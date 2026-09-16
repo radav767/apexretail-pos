@@ -22,6 +22,7 @@ class SaleCreate(BaseModel):
     employee_id: UUID | None = None
     device_id: UUID | None = None
     device_key: str | None = Field(default=None, max_length=255)
+    assignment_revision: int | None = Field(default=None, ge=1)
     payment_method: str = "cash"
     amount_received: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     discount_amount: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)

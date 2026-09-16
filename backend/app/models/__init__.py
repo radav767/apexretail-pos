@@ -4,6 +4,7 @@ from app.models.branch import Branch
 from app.models.user import User
 from app.models.employee import Employee
 from app.models.device import Device
+from app.models.device_tombstone import DeviceTombstone
 from app.models.category import Category
 from app.models.product import Product
 from app.models.sale import Sale

@@ -50,7 +50,7 @@ async def create_inventory_branch(
         require_billable_body_company
     ),
 ):
-    return await service.create_branch(data)
+    return await service.create_branch(data, actor=_actor)
 
 
 @router.get(

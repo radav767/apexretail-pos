@@ -10,7 +10,8 @@ type PermissionKey =
   | "manage_products"
   | "reports"
   | "employees"
-  | "settings";
+  | "settings"
+  | "manage_devices";
 
 type Employee = {
   id: string;
@@ -43,6 +44,7 @@ const permissionLabels: Record<PermissionKey, string> = {
   reports: "View reports",
   employees: "Manage employees",
   settings: "Change settings",
+  manage_devices: "Manage POS devices",
 };
 
 const rolePermissions: Record<
@@ -58,6 +60,7 @@ const rolePermissions: Record<
     reports: false,
     employees: false,
     settings: false,
+    manage_devices: false,
   },
   manager: {
     sales: true,
@@ -68,6 +71,7 @@ const rolePermissions: Record<
     reports: true,
     employees: true,
     settings: false,
+    manage_devices: false,
   },
   owner: {
     sales: true,
@@ -78,6 +82,7 @@ const rolePermissions: Record<
     reports: true,
     employees: true,
     settings: true,
+    manage_devices: true,
   },
 };
 

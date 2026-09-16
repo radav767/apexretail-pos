@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Branch, Employee, Shop
+from app.models import Branch, DeviceTombstone, Employee, Shop
 
 
 class EmployeeRepository:
@@ -35,6 +35,28 @@ class EmployeeRepository:
                 Branch.id == Employee.branch_id,
             )
         )
+
+    async def is_deleted_device_identity(
+        self,
+        company_id: UUID,
+        *,
+        device_id: UUID | None,
+        device_key_hash: str | None,
+    ) -> bool:
+        predicates = []
+        if device_id is not None:
+            predicates.append(DeviceTombstone.id == device_id)
+        if device_key_hash is not None:
+            predicates.append(DeviceTombstone.device_key_hash == device_key_hash)
+        if not predicates:
+            return False
+        result = await self.db.execute(
+            select(DeviceTombstone.id).where(
+                DeviceTombstone.company_id == company_id,
+                or_(*predicates),
+            )
+        )
+        return result.scalar_one_or_none() is not None
 
     async def list_employees(
         self,

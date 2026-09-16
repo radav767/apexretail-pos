@@ -55,6 +55,13 @@ export async function registerCurrentDevice(companyId: string) {
     localStorage.setItem("shop_name", String(result.shop_name));
   }
 
+  if (result?.assignment_revision != null) {
+    localStorage.setItem(
+      "device_assignment_revision",
+      String(result.assignment_revision),
+    );
+  }
+
   if (result?.friendly_name || result?.name) {
     localStorage.setItem(
       "pos_name",

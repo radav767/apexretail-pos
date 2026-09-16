@@ -8,6 +8,7 @@ from app.models.branch import Branch
 from app.models.inventory_balance import InventoryBalance
 from app.models.product import Product
 from app.models.shop import Shop
+from app.models.audit_event import AuditEvent
 
 
 class BranchInventoryRepository:
@@ -80,6 +81,8 @@ class BranchInventoryRepository:
         company_id: UUID,
         shop: Shop,
         name: str,
+        *,
+        actor=None,
     ):
         try:
             branch = Branch(
@@ -120,6 +123,18 @@ class BranchInventoryRepository:
             ]
 
             self.db.add_all(balances)
+            if actor is not None:
+                self.db.add(AuditEvent(
+                    company_id=company_id,
+                    actor_user_id=actor.user.id if actor.actor_type == "user" else None,
+                    actor_employee_id=actor.employee.id if actor.actor_type == "employee" else None,
+                    action="terminal_branch_create",
+                    details={
+                        "branch_id": str(branch.id),
+                        "shop_id": str(shop.id),
+                        "branch_name": branch.name,
+                    },
+                ))
             await self.db.commit()
             await self.db.refresh(branch)
 

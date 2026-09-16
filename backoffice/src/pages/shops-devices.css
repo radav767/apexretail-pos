@@ -300,6 +300,64 @@
   color: #b91c1c;
 }
 
+.permission-denied,
+.dependency-blocked {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.destructive-panel {
+  display: grid;
+  gap: 14px;
+  border-color: #ef4444;
+}
+
+.destructive-panel h2,
+.destructive-panel p,
+.destructive-panel ul {
+  margin: 0;
+}
+
+.destructive-panel label {
+  display: grid;
+  gap: 7px;
+  font-weight: 700;
+}
+
+.destructive-panel input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border: 1px solid #d6dce6;
+  border-radius: 10px;
+}
+
+.device-safety-check {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 9px;
+  font-weight: 600 !important;
+}
+
+.device-safety-check input {
+  width: auto;
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.dependency-blocked {
+  padding: 12px;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 @media (max-width: 1100px) {
   .shops-devices-summary,
   .device-card-list {
@@ -319,5 +377,10 @@
   .device-card-footer,
   .shops-devices-header {
     flex-direction: column;
+  }
+
+  .device-actions-row,
+  .device-actions-row button {
+    width: 100%;
   }
 }

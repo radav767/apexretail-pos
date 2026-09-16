@@ -19,7 +19,7 @@ class BranchInventoryService:
     async def branches(self, company_id: UUID):
         return await self.repo.list_branches(company_id)
 
-    async def create_branch(self, data: BranchCreate):
+    async def create_branch(self, data: BranchCreate, actor=None):
         name = data.name.strip()
 
         if not name:
@@ -55,6 +55,7 @@ class BranchInventoryService:
             data.company_id,
             shop,
             name,
+            actor=actor,
         )
 
     async def overview(

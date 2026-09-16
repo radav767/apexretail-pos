@@ -86,7 +86,7 @@ class SalesRepository:
         query = select(Device).where(
             Device.company_id == company_id,
             Device.deleted == False,
-        )
+        ).with_for_update()
 
         if device_id is not None:
             query = query.where(Device.id == device_id)

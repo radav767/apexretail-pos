@@ -13,6 +13,12 @@ from app.models.sale_item import SaleItem
 from app.models.audit_event import AuditEvent
 from app.sales.repository import SalesRepository
 from app.sales.schema import RefundCreate, SaleCreate
+from app.devices.authority import (
+    TERMINAL_ASSIGNMENT_CHANGED,
+    TERMINAL_DECOMMISSIONED,
+    TERMINAL_IDENTITY_REVOKED,
+    terminal_authority_error,
+)
 
 
 VALID_WEIGHT_ENTRY_UNITS = {"kg", "litre"}
@@ -61,17 +67,6 @@ class SalesService:
         # An Android device may submit the same queued sale more than
         # once when connectivity returns. Return the existing sale
         # instead of deducting stock again.
-        existing_client_sale = (
-            await self.repo.get_by_client_sale_id(
-                data.company_id,
-                data.client_sale_id,
-            )
-            if data.client_sale_id
-            else None
-        )
-
-        if existing_client_sale:
-            return existing_client_sale
         if not data.items:
             raise HTTPException(
                 400,
@@ -108,9 +103,26 @@ class SalesService:
             )
 
             if device is None:
-                raise HTTPException(
+                raise terminal_authority_error(
                     403,
+                    TERMINAL_IDENTITY_REVOKED,
                     "Device not found or inactive",
+                )
+
+            if hasattr(device, "branch_id") and branch.id != device.branch_id:
+                raise terminal_authority_error(
+                    409,
+                    TERMINAL_ASSIGNMENT_CHANGED,
+                    "The terminal assignment changed. Review and resubmit the sale for its current branch.",
+                )
+            if (
+                data.assignment_revision is not None
+                and data.assignment_revision != getattr(device, "assignment_revision", 1)
+            ):
+                raise terminal_authority_error(
+                    409,
+                    TERMINAL_ASSIGNMENT_CHANGED,
+                    "The terminal assignment revision is stale",
                 )
 
             blocked_at = device.removed_at or device.deactivated_at
@@ -121,10 +133,21 @@ class SalesService:
                     or data.client_created_at > blocked_at
                 )
             ):
-                raise HTTPException(
+                raise terminal_authority_error(
                     403,
+                    TERMINAL_DECOMMISSIONED,
                     "Device access has been disabled",
                 )
+
+        # Idempotent retries remain safe, but only after the current terminal
+        # identity and assignment have been authorized.
+        existing_client_sale = (
+            await self.repo.get_by_client_sale_id(data.company_id, data.client_sale_id)
+            if data.client_sale_id
+            else None
+        )
+        if existing_client_sale:
+            return existing_client_sale
 
         sale_id = uuid.uuid4()
 

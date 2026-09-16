@@ -22,12 +22,15 @@ import {
 import {
   createClientSaleId,
   archiveReceiptSnapshot,
+  exportQuarantinedOfflineSales,
   getArchivedReceiptSnapshot,
+  getQuarantinedOfflineSales,
   isAndroidNativeApp,
   isNetworkFailure,
   queueOfflineSale,
   startAutomaticOfflineSaleSync,
   type OfflineSalePayload,
+  type QuarantinedOfflineSale,
 } from "./offline/offlineSales";
 import {
   formatCents,
@@ -259,6 +262,8 @@ const [loggedIn, setLoggedIn] = useState(
   const [search, setSearch] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [message, setMessage] = useState("");
+  const [quarantinedSales, setQuarantinedSales] =
+    useState<QuarantinedOfflineSale[]>([]);
   const [processing, setProcessing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [activePosModule, setActivePosModule] = useState<PosModuleName>(initialPosModule);
@@ -526,6 +531,12 @@ const [loggedIn, setLoggedIn] = useState(
                   companyId,
                   branchId || undefined,
                 );
+              } else if (result.quarantined > 0) {
+                setMessage(
+                  `${result.quarantined} offline sale${
+                    result.quarantined === 1 ? " is" : "s are"
+                  } quarantined and will not retry automatically`,
+                );
               } else if (result.pending > 0) {
                 setMessage(
                   `${result.pending} offline sale${
@@ -533,6 +544,12 @@ const [loggedIn, setLoggedIn] = useState(
                   } waiting to sync`,
                 );
               }
+              void getQuarantinedOfflineSales()
+                .then(setQuarantinedSales)
+                .catch((error) => console.error(
+                  "Failed to load quarantined offline sales",
+                  error,
+                ));
             },
           );
       } catch (error) {
@@ -551,6 +568,23 @@ const [loggedIn, setLoggedIn] = useState(
       }
     };
   }, [loggedIn, companyId, branchId]);
+
+  async function exportOfflineQuarantine() {
+    try {
+      const contents = await exportQuarantinedOfflineSales();
+      const blob = new Blob([contents], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `apexretail-offline-quarantine-${new Date()
+        .toISOString().replace(/[:.]/g, "-")}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setMessage("Quarantined offline sales exported. The original queue remains unchanged.");
+    } catch (error) {
+      setMessage(getApiErrorMessage(error, "Failed to export quarantined offline sales"));
+    }
+  }
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -1382,6 +1416,14 @@ const [loggedIn, setLoggedIn] = useState(
 
     if (nextBranchId) {
       localStorage.setItem("branch_id", nextBranchId);
+      const assignmentRevision =
+        data?.assignment_revision ?? data?.device?.assignment_revision;
+      if (assignmentRevision != null) {
+        localStorage.setItem(
+          "device_assignment_revision",
+          String(assignmentRevision),
+        );
+      }
     }
 
     if (branchName) {
@@ -1938,6 +1980,9 @@ const [loggedIn, setLoggedIn] = useState(
         localStorage.getItem("device_id") || null,
       device_key:
         localStorage.getItem("device_key") || null,
+      assignment_revision: Number(
+        localStorage.getItem("device_assignment_revision") || "1",
+      ),
       payment_method: paymentMethod,
       discount_amount: discounted.discount_amount,
       sale_discount_amount: discounted.sale_discount_amount,
@@ -3070,6 +3115,43 @@ const [loggedIn, setLoggedIn] = useState(
             Logout
           </button>
         </div>
+
+        {quarantinedSales.length > 0 && (
+          <section
+            role="alert"
+            aria-label="Quarantined offline sales"
+            style={{
+              border: "2px solid #b42318",
+              background: "#fff1f0",
+              borderRadius: 12,
+              padding: 16,
+              marginBottom: 18,
+            }}
+          >
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>
+              Offline sales need operator recovery
+            </h2>
+            <p style={{ margin: "0 0 10px" }}>
+              {quarantinedSales.length} unsynchronized sale{quarantinedSales.length === 1 ? "" : "s"}{" "}
+              were rejected because this terminal was deleted, decommissioned, or reassigned.
+              They are preserved on this device and will not retry automatically.
+            </p>
+            <ul>
+              {quarantinedSales.map((sale) => (
+                <li key={sale.client_sale_id}>
+                  <code>{sale.client_sale_id}</code>: {sale.last_error}
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              style={secondaryButton}
+              onClick={() => void exportOfflineQuarantine()}
+            >
+              Export recovery file
+            </button>
+          </section>
+        )}
 
         <input
           className="pos-sales-search"

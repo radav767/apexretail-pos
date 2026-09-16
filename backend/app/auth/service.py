@@ -12,6 +12,11 @@ from app.auth.security import (
 from app.core.config import get_settings
 from app.employees.service import EmployeeService
 from app.subscriptions.service import SubscriptionService
+from app.devices.authority import (
+    TERMINAL_IDENTITY_REVOKED,
+    hash_device_identity,
+    terminal_authority_error,
+)
 
 
 class AuthService:
@@ -91,6 +96,12 @@ class AuthService:
         registration_device_key = requested_device_key or str(uuid.uuid4())
 
         if requested_device_key:
+            if await self.repo.is_deleted_device_key(hash_device_identity(requested_device_key)):
+                raise terminal_authority_error(
+                    403,
+                    TERMINAL_IDENTITY_REVOKED,
+                    "This terminal identity was permanently deleted",
+                )
             existing_device = await self.repo.get_device_by_key(
                 requested_device_key
             )

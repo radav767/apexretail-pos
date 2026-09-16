@@ -21,6 +21,7 @@ export type OfflineSalePayload = {
   employee_id?: string | null;
   device_id?: string | null;
   device_key?: string | null;
+  assignment_revision?: number | null;
   payment_method: string;
   amount_received?: string;
   discount_amount?: string | null;
@@ -41,6 +42,9 @@ type OfflineSaleRow = {
   status: string;
   attempts: number;
   last_error?: string | null;
+  error_code?: string | null;
+  error_evidence_json?: string | null;
+  quarantined_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -49,7 +53,25 @@ export type OfflineSyncResult = {
   synced: number;
   failed: number;
   pending: number;
+  quarantined: number;
 };
+
+export type QuarantinedOfflineSale = {
+  client_sale_id: string;
+  payload: OfflineSalePayload;
+  attempts: number;
+  error_code: string;
+  last_error: string;
+  error_evidence: unknown;
+  created_at: string;
+  quarantined_at: string;
+};
+
+const TERMINAL_AUTHORITY_CODES = new Set([
+  "terminal_identity_revoked",
+  "terminal_assignment_changed",
+  "terminal_decommissioned",
+]);
 
 type StoredReceiptRow = {
   sale_id: string;
@@ -91,10 +113,6 @@ export function createClientSaleId(): string {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message.slice(0, 500);
-  }
-
   const candidate = error as {
     response?: {
       data?: {
@@ -108,6 +126,10 @@ function errorMessage(error: unknown): string {
 
   if (typeof detail === "string") {
     return detail.slice(0, 500);
+  }
+
+  if (error instanceof Error) {
+    return error.message.slice(0, 500);
   }
 
   if (candidate?.message) {
@@ -133,6 +155,29 @@ export function isNetworkFailure(error: unknown): boolean {
     candidate.code === "ECONNABORTED" ||
     candidate.message === "Network Error"
   );
+}
+
+export function isTerminalAuthorityFailure(error: unknown): boolean {
+  const candidate = error as {
+    response?: { data?: { code?: unknown } };
+  };
+  const code = candidate?.response?.data?.code;
+  return typeof code === "string" && TERMINAL_AUTHORITY_CODES.has(code);
+}
+
+function synchronizationErrorEvidence(error: unknown) {
+  const candidate = error as {
+    code?: unknown;
+    message?: unknown;
+    response?: { status?: unknown; data?: unknown };
+  };
+  return {
+    recorded_at: new Date().toISOString(),
+    transport_code: candidate?.code ?? null,
+    message: errorMessage(error),
+    http_status: candidate?.response?.status ?? null,
+    response: candidate?.response?.data ?? null,
+  };
 }
 
 async function openDatabase(): Promise<SQLiteDBConnection | null> {
@@ -190,6 +235,24 @@ async function openDatabase(): Promise<SQLiteDBConnection | null> {
         updated_at TEXT NOT NULL
       );
     `);
+
+    const offlineColumns = await connection.query(
+      "PRAGMA table_info(offline_sales)",
+    );
+    const columnNames = new Set(
+      (offlineColumns.values || []).map((column) => String(column.name)),
+    );
+    for (const [name, definition] of [
+      ["error_code", "TEXT"],
+      ["error_evidence_json", "TEXT"],
+      ["quarantined_at", "TEXT"],
+    ]) {
+      if (!columnNames.has(name)) {
+        await connection.execute(
+          `ALTER TABLE offline_sales ADD COLUMN ${name} ${definition}`,
+        );
+      }
+    }
 
     await connection.execute(`
       CREATE INDEX IF NOT EXISTS
@@ -286,12 +349,51 @@ export async function getPendingOfflineSaleCount(): Promise<number> {
   const result = await database.query(`
     SELECT COUNT(*) AS total
     FROM offline_sales
-    WHERE status IN ('pending', 'failed', 'syncing')
+    WHERE status IN ('pending', 'failed', 'syncing', 'quarantined')
   `);
 
   const total = result.values?.[0]?.total;
 
   return Number(total || 0);
+}
+
+export async function getQuarantinedOfflineSales(): Promise<QuarantinedOfflineSale[]> {
+  const database = await openDatabase();
+  if (!database) return [];
+
+  const result = await database.query(`
+    SELECT client_sale_id, payload_json, attempts, last_error, error_code,
+           error_evidence_json, created_at, quarantined_at
+    FROM offline_sales
+    WHERE status = 'quarantined'
+    ORDER BY created_at ASC
+  `);
+
+  return ((result.values || []) as OfflineSaleRow[]).map((row) => ({
+    client_sale_id: row.client_sale_id,
+    payload: JSON.parse(row.payload_json) as OfflineSalePayload,
+    attempts: Number(row.attempts || 0),
+    error_code: row.error_code || "terminal_authority_unknown",
+    last_error: row.last_error || "Terminal authority was rejected",
+    error_evidence: row.error_evidence_json
+      ? JSON.parse(row.error_evidence_json)
+      : null,
+    created_at: row.created_at,
+    quarantined_at: row.quarantined_at || row.updated_at,
+  }));
+}
+
+export async function exportQuarantinedOfflineSales(): Promise<string> {
+  const sales = await getQuarantinedOfflineSales();
+  return JSON.stringify(
+    {
+      format: "apexretail-offline-sale-quarantine-v1",
+      exported_at: new Date().toISOString(),
+      sales,
+    },
+    null,
+    2,
+  );
 }
 
 function loadBrowserReceiptArchive(): ReceiptSnapshot[] {
@@ -417,6 +519,7 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
       synced: 0,
       failed: 0,
       pending: 0,
+      quarantined: 0,
     };
   }
 
@@ -432,6 +535,7 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
       synced: 0,
       failed: 0,
       pending: await getPendingOfflineSaleCount(),
+      quarantined: (await getQuarantinedOfflineSales()).length,
     };
   }
 
@@ -443,6 +547,9 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
         status,
         attempts,
         last_error,
+        error_code,
+        error_evidence_json,
+        quarantined_at,
         created_at,
         updated_at
       FROM offline_sales
@@ -499,17 +606,32 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
     } catch (error) {
       failed += 1;
 
+      const quarantined = isTerminalAuthorityFailure(error);
+      const evidence = synchronizationErrorEvidence(error);
+      const authorityCode = quarantined
+        ? String((error as { response?: { data?: { code?: unknown } } })
+            ?.response?.data?.code || "")
+        : null;
+      const timestamp = new Date().toISOString();
+
       await database.run(
         `
           UPDATE offline_sales
-          SET status = 'failed',
+          SET status = ?,
               last_error = ?,
+              error_code = ?,
+              error_evidence_json = ?,
+              quarantined_at = ?,
               updated_at = ?
           WHERE client_sale_id = ?
         `,
         [
+          quarantined ? "quarantined" : "failed",
           errorMessage(error),
-          new Date().toISOString(),
+          authorityCode,
+          JSON.stringify(evidence),
+          quarantined ? timestamp : null,
+          timestamp,
           row.client_sale_id,
         ],
       );
@@ -521,6 +643,9 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
       if (isNetworkFailure(error)) {
         break;
       }
+      if (quarantined) {
+        break;
+      }
     }
   }
 
@@ -528,6 +653,7 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
     synced,
     failed,
     pending: await getPendingOfflineSaleCount(),
+    quarantined: (await getQuarantinedOfflineSales()).length,
   };
 }
 
@@ -538,6 +664,7 @@ Promise<OfflineSyncResult> {
       synced: 0,
       failed: 0,
       pending: 0,
+      quarantined: 0,
     };
   }
 
@@ -576,6 +703,7 @@ export async function startAutomaticOfflineSaleSync(
           failed: 0,
           pending:
             await getPendingOfflineSaleCount(),
+          quarantined: (await getQuarantinedOfflineSales()).length,
         });
 
         return;

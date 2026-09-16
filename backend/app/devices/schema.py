@@ -52,10 +52,61 @@ class DeviceHeartbeat(BaseModel):
 class DeviceUpdate(BaseModel):
     friendly_name: str | None = Field(default=None, max_length=120)
     pos_number: int | None = Field(default=None, ge=1, le=999999)
-    shop_id: UUID | None = None
-    branch_id: UUID | None = None
     status: Literal["active", "deactivated", "removed"] | None = None
     deactivation_reason: str | None = Field(default=None, max_length=500)
+
+
+class DeviceAssignmentRequest(BaseModel):
+    shop_id: UUID
+    branch_id: UUID
+    pos_number: int | None = Field(default=None, ge=1, le=999999)
+    reason: str = Field(min_length=1, max_length=500)
+    expected_assignment_revision: int = Field(ge=1)
+    offline_queue_resolved: bool
+    active_checkout_closed: bool
+
+
+class DeviceDecommissionRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+    offline_queue_resolved: bool
+    active_checkout_closed: bool
+
+
+class DeviceDeleteRequest(BaseModel):
+    confirmation_name: str = Field(min_length=1, max_length=120)
+    reauthentication_secret: str = Field(min_length=4, max_length=255)
+    reason: str | None = Field(default=None, max_length=500)
+    offline_queue_resolved: bool = False
+    active_checkout_closed: bool = False
+
+
+class DeviceDependencyOut(BaseModel):
+    active_sessions: int
+    pending_activation_credential: bool
+    pending_offline_transactions: Literal["client_only_unknown"] = "client_only_unknown"
+    active_checkout_state: Literal["client_only_unknown"] = "client_only_unknown"
+
+
+class DeviceDeletionImpactOut(BaseModel):
+    device_id: UUID
+    terminal_name: str
+    can_delete: bool
+    dependencies: DeviceDependencyOut
+    historical_sales: int
+    policy: str
+
+
+class DeviceDeleteOut(BaseModel):
+    device_id: UUID
+    deleted: bool
+    already_deleted: bool
+    deleted_at: datetime
+
+
+class DeviceBranchCreate(BaseModel):
+    company_id: UUID
+    shop_id: UUID
+    name: str = Field(min_length=1, max_length=120)
 
 
 class DeviceOut(BaseModel):
@@ -93,6 +144,7 @@ class DeviceOut(BaseModel):
     pending_shop_id: UUID | None = None
     pending_branch_id: UUID | None = None
     active: bool
+    assignment_revision: int
 
 
 DeviceActivationRequestOut.model_rebuild()

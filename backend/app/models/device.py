@@ -57,3 +57,6 @@ class Device(Base, BaseModel):
         ForeignKey("branches.id"),
         nullable=True,
     )
+    assignment_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )

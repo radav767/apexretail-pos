@@ -32,6 +32,7 @@ type Device = {
   deactivation_reason: string | null;
   removed_at: string | null;
   active: boolean;
+  assignment_revision: number;
 };
 
 type Branch = {
@@ -48,6 +49,8 @@ type DeviceFormState = Record<
     pos_number: string;
     branch_id: string;
     deactivation_reason: string;
+    offline_queue_resolved: boolean;
+    active_checkout_closed: boolean;
   }
 >;
 
@@ -55,6 +58,20 @@ type ActivationResult = {
   device: Device;
   activation_code: string;
   activation_code_expires_at: string;
+};
+
+type DeletionImpact = {
+  device_id: string;
+  terminal_name: string;
+  can_delete: boolean;
+  dependencies: {
+    active_sessions: number;
+    pending_activation_credential: boolean;
+    pending_offline_transactions: "client_only_unknown";
+    active_checkout_state: "client_only_unknown";
+  };
+  historical_sales: number;
+  policy: string;
 };
 
 function requestErrorMessage(error: any, fallback: string) {
@@ -140,10 +157,22 @@ export default function ShopsDevicesPage({
   const [loading, setLoading] = useState(false);
   const [busyDeviceId, setBusyDeviceId] = useState("");
   const [creating, setCreating] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [activationResult, setActivationResult] =
     useState<ActivationResult | null>(null);
+  const [branchForm, setBranchForm] = useState({ shop_id: "", name: "" });
+  const [creatingBranch, setCreatingBranch] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{
+    device: Device;
+    impact: DeletionImpact;
+    confirmation: string;
+    secret: string;
+    reason: string;
+    offlineQueueResolved: boolean;
+    activeCheckoutClosed: boolean;
+  } | null>(null);
   const [createForm, setCreateForm] = useState({
     friendly_name: "",
     pos_number: "",
@@ -185,12 +214,13 @@ export default function ShopsDevicesPage({
     try {
       setLoading(true);
       setError("");
+      setPermissionDenied(false);
 
       const [deviceResponse, branchResponse] =
         await Promise.all([
           api.get<Device[]>(`/devices/${companyId}`),
           api.get<Branch[]>(
-            `/inventory/branches/${companyId}`,
+            `/devices/branches/${companyId}`,
           ),
         ]);
 
@@ -199,6 +229,9 @@ export default function ShopsDevicesPage({
 
       setDevices(loadedDevices);
       setBranches(loadedBranches);
+      if (!branchForm.shop_id && loadedBranches[0]?.shop_id) {
+        setBranchForm((current) => ({ ...current, shop_id: loadedBranches[0].shop_id }));
+      }
       setForms(
         Object.fromEntries(
           loadedDevices.map((device) => [
@@ -215,6 +248,8 @@ export default function ShopsDevicesPage({
               branch_id: device.branch_id || "",
               deactivation_reason:
                 device.deactivation_reason || "",
+              offline_queue_resolved: false,
+              active_checkout_closed: false,
             },
           ]),
         ),
@@ -227,6 +262,7 @@ export default function ShopsDevicesPage({
         }));
       }
     } catch (requestError: any) {
+      setPermissionDenied(requestError?.response?.status === 403);
       setError(
         requestErrorMessage(
           requestError,
@@ -238,6 +274,89 @@ export default function ShopsDevicesPage({
     }
   }
 
+  async function createBranch() {
+    if (!branchForm.shop_id || !branchForm.name.trim()) {
+      setError("Choose a shop and enter a branch name.");
+      return;
+    }
+    try {
+      setCreatingBranch(true);
+      setError("");
+      const response = await api.post<Branch>("/devices/branches", {
+        company_id: companyId,
+        shop_id: branchForm.shop_id,
+        name: branchForm.name.trim(),
+      });
+      setBranchForm((current) => ({ ...current, name: "" }));
+      setMessage("Branch created and ready for POS assignment.");
+      await loadData();
+      setCreateForm((current) => ({ ...current, branch_id: response.data.id }));
+    } catch (requestError: any) {
+      setError(requestErrorMessage(requestError, "Failed to create branch"));
+    } finally {
+      setCreatingBranch(false);
+    }
+  }
+
+  async function openDelete(device: Device) {
+    try {
+      setBusyDeviceId(device.id);
+      setError("");
+      const response = await api.get<DeletionImpact>(
+        `/devices/${companyId}/${device.id}/deletion-impact`,
+      );
+      setDeleteDialog({ device, impact: response.data, confirmation: "", secret: "", reason: "", offlineQueueResolved: false, activeCheckoutClosed: false });
+    } catch (requestError: any) {
+      setError(requestErrorMessage(requestError, "Failed to inspect deletion dependencies"));
+    } finally {
+      setBusyDeviceId("");
+    }
+  }
+
+  async function deletePermanently() {
+    if (!deleteDialog) return;
+    try {
+      setBusyDeviceId(deleteDialog.device.id);
+      setError("");
+      await api.delete(`/devices/${companyId}/${deleteDialog.device.id}`, {
+        data: {
+          confirmation_name: deleteDialog.confirmation,
+          reauthentication_secret: deleteDialog.secret,
+          reason: deleteDialog.reason.trim() || null,
+          offline_queue_resolved: deleteDialog.offlineQueueResolved,
+          active_checkout_closed: deleteDialog.activeCheckoutClosed,
+        },
+      });
+      setDeleteDialog(null);
+      setMessage("POS permanently deleted. Its credentials and sessions were revoked; historical records were preserved.");
+      await loadData();
+    } catch (requestError: any) {
+      setError(requestErrorMessage(requestError, "Failed to delete POS"));
+    } finally {
+      setBusyDeviceId("");
+    }
+  }
+
+  async function decommissionBlockedDevice() {
+    if (!deleteDialog) return;
+    try {
+      setBusyDeviceId(deleteDialog.device.id);
+      setError("");
+      await api.post(`/devices/${companyId}/${deleteDialog.device.id}/decommission`, {
+        reason: deleteDialog.reason.trim(),
+        offline_queue_resolved: deleteDialog.offlineQueueResolved,
+        active_checkout_closed: deleteDialog.activeCheckoutClosed,
+      });
+      setDeleteDialog(null);
+      setMessage("POS decommissioned. Active sessions and activation credentials were revoked; permanent deletion remains a separate action.");
+      await loadData();
+    } catch (requestError: any) {
+      setError(requestErrorMessage(requestError, "Failed to decommission POS"));
+    } finally {
+      setBusyDeviceId("");
+    }
+  }
+
   useEffect(() => {
     void loadData();
   }, [companyId]);
@@ -245,7 +364,7 @@ export default function ShopsDevicesPage({
   function updateForm(
     deviceId: string,
     field: keyof DeviceFormState[string],
-    value: string,
+    value: string | boolean,
   ) {
     setForms((current) => ({
       ...current,
@@ -272,18 +391,26 @@ export default function ShopsDevicesPage({
       setError("");
       setMessage("");
 
-      await api.patch(
-        `/devices/${companyId}/${device.id}`,
-        {
-          friendly_name: form.friendly_name.trim(),
-          pos_number:
-            form.pos_number.trim() === ""
-              ? null
-              : Number(form.pos_number),
+      const posNumber = form.pos_number.trim() === "" ? null : Number(form.pos_number);
+      if (branch.id !== device.branch_id) {
+        if (!form.deactivation_reason.trim()) {
+          throw new Error("Enter a reassignment reason for the audit trail.");
+        }
+        await api.post(`/devices/${companyId}/${device.id}/reassign`, {
           shop_id: branch.shop_id,
           branch_id: branch.id,
-        },
-      );
+          pos_number: posNumber,
+          reason: form.deactivation_reason.trim(),
+          expected_assignment_revision: device.assignment_revision,
+          offline_queue_resolved: form.offline_queue_resolved,
+          active_checkout_closed: form.active_checkout_closed,
+        });
+      } else {
+        await api.patch(`/devices/${companyId}/${device.id}`, {
+          friendly_name: form.friendly_name.trim(),
+          pos_number: posNumber,
+        });
+      }
 
       setMessage("POS details saved.");
       await loadData();
@@ -299,34 +426,22 @@ export default function ShopsDevicesPage({
     }
   }
 
-  async function updateStatus(
-    device: Device,
-    status: "active" | "deactivated" | "removed",
-  ) {
+  async function decommissionDevice(device: Device) {
     const form = forms[device.id];
     try {
       setBusyDeviceId(device.id);
       setError("");
       setMessage("");
 
-      await api.patch(
-        `/devices/${companyId}/${device.id}`,
-        {
-          status,
-          deactivation_reason:
-            status === "deactivated"
-              ? form.deactivation_reason.trim() || null
-              : null,
-        },
-      );
-
-      setMessage(
-        status === "active"
-          ? "POS access restored."
-          : status === "deactivated"
-            ? "POS deactivated."
-            : "POS access removed.",
-      );
+      if (!form.deactivation_reason.trim()) {
+        throw new Error("Enter a decommission reason for the audit trail.");
+      }
+      await api.post(`/devices/${companyId}/${device.id}/decommission`, {
+        reason: form.deactivation_reason.trim(),
+        offline_queue_resolved: form.offline_queue_resolved,
+        active_checkout_closed: form.active_checkout_closed,
+      });
+      setMessage("POS decommissioned. Sessions and activation credentials were revoked.");
       await loadData();
     } catch (requestError: any) {
       setError(
@@ -504,6 +619,66 @@ export default function ShopsDevicesPage({
           {message}
         </p>
       ) : null}
+
+      {permissionDenied ? (
+        <section className="shops-devices-panel permission-denied" role="alert">
+          <h2>Device-management permission required</h2>
+          <p>An owner or administrator can grant the elevated Manage POS devices permission.</p>
+        </section>
+      ) : null}
+
+      {deleteDialog ? (
+        <section className="shops-devices-panel destructive-panel" role="dialog" aria-modal="true" aria-label="Delete POS permanently">
+          <h2>Delete POS permanently</h2>
+          <p><strong>This cannot be undone.</strong> The terminal will never authenticate, refresh a session or synchronize again.</p>
+          <ul>
+            <li>Active sessions: {deleteDialog.impact.dependencies.active_sessions}</li>
+            <li>Pending activation credential: {deleteDialog.impact.dependencies.pending_activation_credential ? "will be revoked" : "none"}</li>
+            <li>Historical sales preserved: {deleteDialog.impact.historical_sales}</li>
+            <li>Offline queue: only the POS can know about unsynchronized transactions</li>
+          </ul>
+          <p>{deleteDialog.impact.policy}</p>
+          {!deleteDialog.impact.can_delete ? (
+            <div className="dependency-blocked" role="alert">
+              Deletion is blocked by {deleteDialog.impact.dependencies.active_sessions} active session(s). Decommission first to revoke them.
+            </div>
+          ) : null}
+          <label>Type <strong>{deleteDialog.impact.terminal_name}</strong> exactly
+            <input value={deleteDialog.confirmation} onChange={(event) => setDeleteDialog({ ...deleteDialog, confirmation: event.target.value })} />
+          </label>
+          <label>Re-enter your password or employee PIN
+            <input type="password" autoComplete="current-password" value={deleteDialog.secret} onChange={(event) => setDeleteDialog({ ...deleteDialog, secret: event.target.value })} />
+          </label>
+          <label>Reason (optional)
+            <input value={deleteDialog.reason} onChange={(event) => setDeleteDialog({ ...deleteDialog, reason: event.target.value })} />
+          </label>
+          <label className="device-safety-check"><input type="checkbox" checked={deleteDialog.offlineQueueResolved} onChange={(event) => setDeleteDialog({ ...deleteDialog, offlineQueueResolved: event.target.checked })} /> I confirmed the terminal's offline queue is empty or safely resolved.</label>
+          <label className="device-safety-check"><input type="checkbox" checked={deleteDialog.activeCheckoutClosed} onChange={(event) => setDeleteDialog({ ...deleteDialog, activeCheckoutClosed: event.target.checked })} /> I confirmed there is no active checkout on the terminal.</label>
+          <div className="device-actions-row">
+            {!deleteDialog.impact.can_delete ? (
+              <button
+                type="button"
+                disabled={!deleteDialog.reason.trim() || !deleteDialog.offlineQueueResolved || !deleteDialog.activeCheckoutClosed || busyDeviceId === deleteDialog.device.id}
+                onClick={() => void decommissionBlockedDevice()}
+              >
+                Decommission terminal
+              </button>
+            ) : (
+              <button className="device-danger-action" type="button" disabled={deleteDialog.confirmation !== deleteDialog.impact.terminal_name || !deleteDialog.secret || !deleteDialog.offlineQueueResolved || !deleteDialog.activeCheckoutClosed || busyDeviceId === deleteDialog.device.id} onClick={() => void deletePermanently()}>Delete POS permanently</button>
+            )}
+            <button type="button" onClick={() => setDeleteDialog(null)}>Cancel</button>
+          </div>
+        </section>
+      ) : null}
+
+      <section className="shops-devices-panel">
+        <div className="shops-devices-header"><div><h2>Add branch</h2><p>Create a company-owned branch without leaving POS setup.</p></div></div>
+        <div className="device-editor-grid">
+          <label>Shop<select value={branchForm.shop_id} onChange={(event) => setBranchForm({ ...branchForm, shop_id: event.target.value })}><option value="">Select shop</option>{shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}</select></label>
+          <label>Branch name<input value={branchForm.name} onChange={(event) => setBranchForm({ ...branchForm, name: event.target.value })} placeholder="Downtown" /></label>
+        </div>
+        <div className="device-actions-row"><button className="device-primary-action" disabled={creatingBranch} type="button" onClick={() => void createBranch()}>{creatingBranch ? "Creating..." : "Create branch"}</button></div>
+      </section>
 
       <section className="shops-devices-panel">
         <div className="shops-devices-header">
@@ -744,7 +919,7 @@ export default function ShopsDevicesPage({
                     </label>
 
                     <label className="device-editor-wide">
-                      Deactivation reason
+                      Lifecycle reason
                       <input
                         value={
                           form?.deactivation_reason || ""
@@ -756,8 +931,16 @@ export default function ShopsDevicesPage({
                             event.target.value,
                           )
                         }
-                        placeholder="Optional reason shown in the audit trail"
+                        placeholder="Required for reassignment or decommission"
                       />
+                    </label>
+                    <label className="device-safety-check device-editor-wide">
+                      <input type="checkbox" checked={form?.offline_queue_resolved || false} onChange={(event) => updateForm(device.id, "offline_queue_resolved", event.target.checked)} />
+                      Offline queue is empty or safely resolved
+                    </label>
+                    <label className="device-safety-check device-editor-wide">
+                      <input type="checkbox" checked={form?.active_checkout_closed || false} onChange={(event) => updateForm(device.id, "active_checkout_closed", event.target.checked)} />
+                      Active checkout is closed
                     </label>
                   </div>
 
@@ -810,43 +993,21 @@ export default function ShopsDevicesPage({
                       >
                         Regenerate code
                       </button>
-                      {displayStatus.label === "Deactivated" ||
-                      displayStatus.label === "Removed" ? (
+                      {displayStatus.label !== "Deactivated" && displayStatus.label !== "Removed" ? (
                         <button
-                          onClick={() =>
-                            void updateStatus(
-                              device,
-                              "active",
-                            )
-                          }
+                          onClick={() => void decommissionDevice(device)}
                           type="button"
                         >
-                          Reactivate
+                          Decommission terminal
                         </button>
-                      ) : (
-                        <button
-                          onClick={() =>
-                            void updateStatus(
-                              device,
-                              "deactivated",
-                            )
-                          }
-                          type="button"
-                        >
-                          Archive terminal
-                        </button>
-                      )}
+                      ) : null}
                       <button
                         className="device-danger-action"
-                        onClick={() =>
-                          void updateStatus(
-                            device,
-                            "removed",
-                          )
-                        }
+                        disabled={busyDeviceId === device.id}
+                        onClick={() => void openDelete(device)}
                         type="button"
                       >
-                        Remove access
+                        Delete POS
                       </button>
                     </div>
                   </div>

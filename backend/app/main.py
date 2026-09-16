@@ -43,6 +43,7 @@ def error_payload(
     detail: str,
     *,
     field_errors: list[dict[str, str]] | None = None,
+    code: str | None = None,
 ):
     payload = {
         "detail": detail,
@@ -51,6 +52,9 @@ def error_payload(
 
     if field_errors:
         payload["field_errors"] = field_errors
+
+    if code:
+        payload["code"] = code
 
     return payload
 
@@ -115,15 +119,17 @@ async def handle_http_exception(
     _request: Request,
     exc: HTTPException,
 ):
-    detail = (
-        exc.detail
-        if isinstance(exc.detail, str)
-        else "Request failed"
-    )
+    if isinstance(exc.detail, dict):
+        detail = str(exc.detail.get("message") or "Request failed")
+        code = exc.detail.get("code")
+        code = str(code) if code else None
+    else:
+        detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
+        code = None
 
     return JSONResponse(
         status_code=exc.status_code,
-        content=error_payload(detail),
+        content=error_payload(detail, code=code),
         headers=exc.headers,
     )
 

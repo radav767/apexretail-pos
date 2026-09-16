@@ -323,6 +323,15 @@ class FakeAsyncSession:
     def begin(self):
         return FakeTransaction(self.repo)
 
+    def in_transaction(self):
+        return True
+
+    async def commit(self):
+        self.repo._release_pending_lock()
+
+    async def rollback(self):
+        self.repo._release_pending_lock()
+
 
 class DeviceServicePhase1Test(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):

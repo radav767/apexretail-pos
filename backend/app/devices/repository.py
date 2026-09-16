@@ -1,12 +1,15 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.branch import Branch
 from app.models.device import Device
+from app.models.device_tombstone import DeviceTombstone
+from app.models.pos_session import PosSession
+from app.models.sale import Sale
 from app.models.device_activation_attempt import (
     DeviceActivationAttempt,
 )
@@ -50,6 +53,7 @@ class DeviceRepository:
                 Device.pending_shop_id,
                 Device.pending_branch_id,
                 Device.active,
+                Device.assignment_revision,
             )
             .outerjoin(Shop, Shop.id == Device.shop_id)
             .outerjoin(Branch, Branch.id == Device.branch_id)
@@ -91,16 +95,61 @@ class DeviceRepository:
         self,
         company_id: UUID,
         device_id: UUID,
+        *,
+        for_update: bool = False,
     ):
-        result = await self.db.execute(
-            select(Device).where(
+        statement = select(Device).where(
                 Device.id == device_id,
                 Device.company_id == company_id,
                 Device.deleted == False,
             )
-        )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.db.execute(statement)
 
         return result.scalar_one_or_none()
+
+    async def get_tombstone(self, company_id: UUID, device_id: UUID):
+        result = await self.db.execute(
+            select(DeviceTombstone).where(
+                DeviceTombstone.id == device_id,
+                DeviceTombstone.company_id == company_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def identity_is_tombstoned(
+        self, device_key_hash: str, fingerprint_hash: str | None = None
+    ) -> bool:
+        predicates = [DeviceTombstone.device_key_hash == device_key_hash]
+        if fingerprint_hash:
+            predicates.append(DeviceTombstone.fingerprint_hash == fingerprint_hash)
+        from sqlalchemy import or_
+        result = await self.db.execute(select(DeviceTombstone.id).where(or_(*predicates)))
+        return result.scalar_one_or_none() is not None
+
+    async def deletion_dependencies(self, device_id: UUID):
+        active_sessions = await self.db.scalar(
+            select(func.count(PosSession.id)).where(
+                PosSession.device_id == device_id,
+                PosSession.revoked_at.is_(None),
+                PosSession.expires_at > func.now(),
+            )
+        )
+        historical_sales = await self.db.scalar(
+            select(func.count(Sale.id)).where(Sale.device_id == device_id)
+        )
+        return int(active_sessions or 0), int(historical_sales or 0)
+
+    async def revoke_sessions(self, device_id: UUID, now: datetime, reason: str):
+        await self.db.execute(
+            update(PosSession)
+            .where(PosSession.device_id == device_id, PosSession.revoked_at.is_(None))
+            .values(revoked_at=now, revoke_reason=reason)
+        )
+
+    async def delete_device_row(self, device_id: UUID):
+        await self.db.execute(delete(Device).where(Device.id == device_id))
 
     async def get_by_fingerprint(
         self,

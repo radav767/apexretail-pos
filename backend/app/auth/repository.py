@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Company, Shop, Branch, User, Employee, Device
+from app.models import Company, Shop, Branch, User, Employee, Device, DeviceTombstone
 
 
 class AuthRepository:
@@ -19,6 +19,12 @@ class AuthRepository:
             select(Device).where(Device.device_key == device_key)
         )
         return result.scalar_one_or_none()
+
+    async def is_deleted_device_key(self, device_key_hash: str) -> bool:
+        result = await self.db.execute(
+            select(DeviceTombstone.id).where(DeviceTombstone.device_key_hash == device_key_hash)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def create_registration_bundle(self, company, shop, branch, user, employee, device):
         self.db.add(company)
