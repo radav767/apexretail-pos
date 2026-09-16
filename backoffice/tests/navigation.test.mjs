@@ -9,7 +9,7 @@ test("Dashboard and Sales History remain separate destinations", () => {
   assert.match(app, />\s*Dashboard\s*</);
   assert.match(app, />\s*Sales History\s*</);
   assert.match(app, /page === "dashboard" && \(\s*<DashboardPanel/);
-  assert.match(app, /page === "sales" && \(\s*<section/);
+  assert.match(app, /page === "sales" && \(\s*<SalesHistoryPage/);
 });
 
 test("login survives reload and logout clears persisted identity", () => {

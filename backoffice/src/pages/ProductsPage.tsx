@@ -17,8 +17,8 @@ type Product = {
   sku: string | null;
   barcode: string | null;
   unit: string;
-  cost_price: string;
-  selling_price: string;
+  cost_price: string | null;
+  selling_price: string | null;
   stock_qty: string;
   reorder_level: string;
   active: boolean;
@@ -53,8 +53,8 @@ const emptyForm: ProductForm = {
   sku: "",
   barcode: "",
   unit: "each",
-  cost_price: "0.00",
-  selling_price: "0.00",
+  cost_price: "",
+  selling_price: "",
   stock_qty: "0",
   reorder_level: "0",
 };
@@ -164,8 +164,8 @@ export default function ProductsPage({
       sku: product.sku || "",
       barcode: product.barcode || "",
       unit: product.unit,
-      cost_price: product.cost_price,
-      selling_price: product.selling_price,
+      cost_price: product.cost_price ?? "",
+      selling_price: product.selling_price ?? "",
       stock_qty: product.stock_qty,
       reorder_level: product.reorder_level,
     });
@@ -197,8 +197,8 @@ export default function ProductsPage({
         sku: form.sku.trim() || null,
         barcode: form.barcode.trim() || null,
         unit: form.unit,
-        cost_price: form.cost_price || "0",
-        selling_price: form.selling_price || "0",
+        cost_price: form.cost_price || null,
+        selling_price: form.selling_price || null,
         reorder_level: form.reorder_level || "0",
       };
 
@@ -718,11 +718,15 @@ export default function ProductsPage({
                     <td>{product.unit}</td>
 
                     <td>
-                      ${Number(product.cost_price).toFixed(2)}
+                      {product.cost_price == null
+                        ? "Unavailable"
+                        : `$${Number(product.cost_price).toFixed(2)}`}
                     </td>
 
                     <td>
-                      ${Number(product.selling_price).toFixed(2)}
+                      {product.selling_price == null
+                        ? "Unavailable"
+                        : `$${Number(product.selling_price).toFixed(2)}`}
                     </td>
 
                     <td>{Number(product.stock_qty)}</td>

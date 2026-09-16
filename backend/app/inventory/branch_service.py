@@ -74,7 +74,11 @@ class BranchInventoryService:
             reorder_level = Decimal(
                 row["reorder_level"] or 0
             )
-            cost_price = Decimal(row["cost_price"] or 0)
+            cost_price = (
+                Decimal(row["cost_price"])
+                if row["cost_price"] is not None
+                else None
+            )
 
             response.append(
                 {
@@ -82,7 +86,7 @@ class BranchInventoryService:
                     "quantity": quantity,
                     "reorder_level": reorder_level,
                     "cost_price": cost_price,
-                    "stock_value": quantity * cost_price,
+                    "stock_value": quantity * cost_price if cost_price is not None else None,
                     "low_stock": quantity <= reorder_level,
                 }
             )

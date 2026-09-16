@@ -93,16 +93,16 @@ class InventoryProductOut(BaseModel):
     name: str
     sku: str | None
     unit: str
-    cost_price: Decimal
-    selling_price: Decimal
+    cost_price: Decimal | None
+    selling_price: Decimal | None
     stock_qty: Decimal
     reorder_level: Decimal
-    stock_value: Decimal
+    stock_value: Decimal | None
     low_stock: bool
 
 
 class InventoryValuationOut(BaseModel):
     total_products: int
     total_quantity: Decimal
-    total_cost_value: Decimal
+    total_cost_value: Decimal | None
     low_stock_products: int

@@ -7,6 +7,7 @@ from app.auth.dependencies import (
     AuthActor,
     require_billable_body_company,
     require_body_permission,
+    require_path_permission,
 )
 from app.db.session import get_db
 from app.inventory.repository import InventoryRepository
@@ -51,6 +52,7 @@ async def inventory_overview(
 async def inventory_valuation(
     company_id: UUID,
     service: InventoryService = Depends(get_service),
+    _actor: AuthActor = Depends(require_path_permission("inventory_valuation")),
 ):
     return await service.valuation(company_id)
 

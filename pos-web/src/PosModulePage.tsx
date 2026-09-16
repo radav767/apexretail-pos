@@ -80,8 +80,8 @@ type Product = {
   sku?: string | null;
   barcode?: string | null;
   unit?: string;
-  selling_price?: string | number;
-  cost_price?: string | number;
+  selling_price?: string | number | null;
+  cost_price?: string | number | null;
   stock_qty?: string | number;
   reorder_level?: string | number;
   active?: boolean;
@@ -125,7 +125,6 @@ type DashboardSummary = {
   today_transactions?: number;
   total_products?: number;
   low_stock_products?: number;
-  stock_value?: string | number;
 };
 
 type BusinessSettings = {
@@ -230,8 +229,8 @@ const emptyProductForm: ProductForm = {
   sku: "",
   barcode: "",
   unit: "each",
-  cost_price: "0.00",
-  selling_price: "0.00",
+  cost_price: "",
+  selling_price: "",
   stock_qty: "0",
   reorder_level: "0",
 };
@@ -750,8 +749,8 @@ export default function PosModulePage({
       sku: product.sku || "",
       barcode: product.barcode || "",
       unit: product.unit || "each",
-      cost_price: String(product.cost_price || "0"),
-      selling_price: String(product.selling_price || "0"),
+      cost_price: product.cost_price == null ? "" : String(product.cost_price),
+      selling_price: product.selling_price == null ? "" : String(product.selling_price),
       stock_qty: String(product.stock_qty || "0"),
       reorder_level: String(product.reorder_level || "0"),
     }));
@@ -969,8 +968,8 @@ export default function PosModulePage({
         sku: productForm.sku.trim() || null,
         barcode: productForm.barcode.trim() || null,
         unit: productForm.unit,
-        cost_price: productForm.cost_price || "0",
-        selling_price: productForm.selling_price || "0",
+        cost_price: productForm.cost_price || null,
+        selling_price: productForm.selling_price || null,
         reorder_level: productForm.reorder_level || "0",
       };
 
@@ -1695,7 +1694,9 @@ export default function PosModulePage({
                           <td>{product.sku || "—"}</td>
                           <td>{product.barcode || "—"}</td>
                           <td className="number">
-                            {money(product.selling_price)}
+                            {product.selling_price == null
+                              ? "Unavailable"
+                              : money(product.selling_price)}
                           </td>
                           <td className="number">
                             {Number(
@@ -2033,7 +2034,6 @@ export default function PosModulePage({
                       <th>SKU</th>
                       <th className="number">Current Stock</th>
                       <th className="number">Reorder Level</th>
-                      <th className="number">Cost Value</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -2055,11 +2055,6 @@ export default function PosModulePage({
                           <td className="number">{stock.toFixed(3)}</td>
                           <td className="number">
                             {reorderLevel.toFixed(3)}
-                          </td>
-                          <td className="number">
-                            {money(
-                              stock * Number(product.cost_price || 0),
-                            )}
                           </td>
                           <td>
                             <span
@@ -2175,11 +2170,6 @@ export default function PosModulePage({
                 value={String(summary?.low_stock_products || 0)}
                 detail="Products requiring attention"
                 warning
-              />
-              <ReportCard
-                title="Stock Value"
-                value={money(summary?.stock_value)}
-                detail="Current inventory cost value"
               />
             </div>
           </>

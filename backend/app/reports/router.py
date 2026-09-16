@@ -5,10 +5,15 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.auth.dependencies import AuthActor, require_path_permission
+from app.reports.repository import ReportsRepository
+from app.reports.schema import SalesHistoryQuery, SalesHistoryResponse, InventoryValuationResponse
+from app.reports.service import ReportsService
 
 
 router = APIRouter(
@@ -17,6 +22,51 @@ router = APIRouter(
 )
 
 HARARE_TZ = ZoneInfo("Africa/Harare")
+
+
+def get_reports_service(db: AsyncSession = Depends(get_db)):
+    return ReportsService(ReportsRepository(db))
+
+
+@router.get("/sales-history/{company_id}", response_model=SalesHistoryResponse)
+async def sales_history_v4(
+    company_id: UUID,
+    query: SalesHistoryQuery = Depends(),
+    service: ReportsService = Depends(get_reports_service),
+    _actor: AuthActor = Depends(require_path_permission("reports")),
+):
+    return await service.sales_history(company_id, query)
+
+
+@router.get("/sales-history/{company_id}/export.csv")
+async def sales_history_v4_csv(
+    company_id: UUID,
+    query: SalesHistoryQuery = Depends(),
+    service: ReportsService = Depends(get_reports_service),
+    _actor: AuthActor = Depends(require_path_permission("reports")),
+):
+    content = await service.sales_history_csv(company_id, query)
+    return Response(content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=sales-history.csv"})
+
+
+@router.get("/inventory-valuation/{company_id}", response_model=InventoryValuationResponse)
+async def inventory_valuation_v4(
+    company_id: UUID, branch_id: UUID | None = None, category_id: UUID | None = None,
+    product_id: UUID | None = None, limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+    service: ReportsService = Depends(get_reports_service),
+    _actor: AuthActor = Depends(require_path_permission("inventory_valuation")),
+):
+    return await service.inventory_valuation(company_id, branch_id=branch_id, category_id=category_id, product_id=product_id, limit=limit, offset=offset)
+
+
+@router.get("/inventory-valuation/{company_id}/export.csv")
+async def inventory_valuation_v4_csv(
+    company_id: UUID, branch_id: UUID | None = None, category_id: UUID | None = None, product_id: UUID | None = None,
+    service: ReportsService = Depends(get_reports_service),
+    _actor: AuthActor = Depends(require_path_permission("inventory_valuation")),
+):
+    content = await service.inventory_csv(company_id, branch_id=branch_id, category_id=category_id, product_id=product_id, limit=100, offset=0)
+    return Response(content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=inventory-valuation.csv"})
 
 
 def money(value: Any) -> float:
@@ -38,6 +88,7 @@ async def sales_report(
     date_to: date | None = Query(default=None),
     branch_id: UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    _actor: AuthActor = Depends(require_path_permission("reports")),
 ):
     today = datetime.now(HARARE_TZ).date()
 

@@ -125,11 +125,12 @@ class InventoryRepository:
                     func.sum(Product.stock_qty),
                     0,
                 ),
-                func.coalesce(
-                    func.sum(
-                        Product.stock_qty * Product.cost_price
+                case(
+                    (
+                        func.count(Product.id).filter(Product.cost_price.is_(None)) > 0,
+                        None,
                     ),
-                    0,
+                    else_=func.coalesce(func.sum(Product.stock_qty * Product.cost_price), 0),
                 ),
                 func.coalesce(
                     func.sum(

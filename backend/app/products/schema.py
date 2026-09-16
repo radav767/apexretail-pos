@@ -38,8 +38,8 @@ class ProductCreate(BaseModel):
     sku: str | None = Field(default=None, max_length=80)
     barcode: str | None = Field(default=None, max_length=80)
     unit: Literal["each", "kg", "g", "litre", "ml"] = "each"
-    cost_price: Decimal = Field(default=Decimal("0"), ge=0)
-    selling_price: Decimal = Field(default=Decimal("0"), ge=0)
+    cost_price: Decimal | None = Field(default=None, ge=0)
+    selling_price: Decimal | None = Field(default=None, ge=0)
     stock_qty: Decimal = Field(default=Decimal("0"), ge=0)
     reorder_level: Decimal = Field(default=Decimal("0"), ge=0)
 
@@ -65,8 +65,8 @@ class ProductOut(BaseModel):
     sku: str | None
     barcode: str | None
     unit: str
-    cost_price: Decimal
-    selling_price: Decimal
+    cost_price: Decimal | None
+    selling_price: Decimal | None
     stock_qty: Decimal
     reorder_level: Decimal
     active: bool

@@ -60,6 +60,7 @@ app.add_middleware(
         "https://pos.apexpos.cloud",
         "https://backoffice.apexpos.cloud",
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://localhost",
         "https://localhost",
         "capacitor://localhost",

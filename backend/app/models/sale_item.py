@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Numeric, ForeignKey
+from sqlalchemy import Boolean, Column, String, Numeric, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
@@ -15,6 +15,8 @@ class SaleItem(Base):
         nullable=True,
     )
     product_name = Column(String(160), nullable=False)
+    category_id_snapshot = Column(UUID(as_uuid=True), nullable=True)
+    category_name_snapshot = Column(String(120), nullable=True)
     quantity = Column(Numeric(12, 3), default=1)
     selling_unit = Column(String(20), nullable=False, default="each")
     unit_price = Column(Numeric(12, 2), default=0)
@@ -25,3 +27,6 @@ class SaleItem(Base):
 
     unit_cost = Column(Numeric(12, 2), default=0)
     line_cost = Column(Numeric(12, 2), default=0)
+    # NULL means the historical row predates explicit cost-availability
+    # persistence. False means the cost was known to be unavailable.
+    cost_snapshot_available = Column(Boolean, nullable=True)

@@ -243,7 +243,12 @@ class SalesService:
             if selling_price <= 0:
                 raise HTTPException(400, "Unit price must be greater than zero")
 
-            unit_cost = Decimal(product.cost_price or 0)
+            cost_snapshot_available = product.cost_price is not None
+            unit_cost = (
+                Decimal(product.cost_price)
+                if cost_snapshot_available
+                else Decimal("0")
+            )
 
             line_cost = (
                 unit_cost * item.quantity
@@ -306,6 +311,14 @@ class SalesService:
                     sale_id=sale_id,
                     product_id=product.id,
                     product_name=product.name,
+                    category_id_snapshot=getattr(product, "category_id", None),
+                    category_name_snapshot=(
+                        await self.repo.get_category_name(
+                            data.company_id, getattr(product, "category_id", None)
+                        )
+                        if getattr(product, "category_id", None) is not None
+                        else None
+                    ),
                     quantity=item.quantity,
                     selling_unit=selling_unit,
                     unit_price=selling_price,
@@ -313,6 +326,7 @@ class SalesService:
                     line_discount_amount=line_discount_amount,
                     unit_cost=unit_cost,
                     line_cost=line_cost,
+                    cost_snapshot_available=cost_snapshot_available,
                 )
             )
 
@@ -672,12 +686,17 @@ class SalesService:
                     product_id=original_item.product_id,
                     original_sale_item_id=original_item.id,
                     product_name=original_item.product_name,
+                    category_id_snapshot=original_item.category_id_snapshot,
+                    category_name_snapshot=original_item.category_name_snapshot,
                     quantity=refund_item.quantity,
                     selling_unit=original_item.selling_unit,
                     unit_price=original_item.unit_price,
                     line_total=-line_total,
                     unit_cost=original_item.unit_cost,
                     line_cost=-line_cost,
+                    cost_snapshot_available=(
+                        original_item.cost_snapshot_available is True
+                    ),
                 )
             )
             inventory_movements.append(

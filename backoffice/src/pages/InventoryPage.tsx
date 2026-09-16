@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import BranchTransferPanel from "./BranchTransferPanel";
 import "./inventory.css";
@@ -20,8 +20,14 @@ type InventoryProduct = {
 type Valuation = {
   total_products: number;
   total_quantity: string;
-  total_cost_value: string;
   low_stock_products: number;
+};
+
+type FinancialMetric = { available: boolean; value: string | null; reason?: string | null };
+type ProjectedValuation = {
+  basis: string; currency_symbol: string; decimal_places: number; total: number;
+  summary: { quantity: string; selling_value: FinancialMetric; cost_value: FinancialMetric; projected_gross_profit: FinancialMetric; margin_percentage: FinancialMetric };
+  rows: Array<{ product_id: string; product_name: string; sku: string | null; branch_id: string; branch_name: string; shop_name: string; quantity: string; selling_value: FinancialMetric; cost_value: FinancialMetric; projected_gross_profit: FinancialMetric; margin_percentage: FinancialMetric }>;
 };
 
 type Movement = {
@@ -60,7 +66,6 @@ type InventoryTab =
 const emptyValuation: Valuation = {
   total_products: 0,
   total_quantity: "0",
-  total_cost_value: "0",
   low_stock_products: 0,
 };
 
@@ -83,6 +88,9 @@ export default function InventoryPage({
   const [history, setHistory] = useState<Movement[]>([]);
   const [valuation, setValuation] =
     useState<Valuation>(emptyValuation);
+  const [projectedValuation, setProjectedValuation] = useState<ProjectedValuation | null>(null);
+  const [valuationMessage, setValuationMessage] = useState("");
+  const [valuationLoading, setValuationLoading] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -141,10 +149,9 @@ export default function InventoryPage({
     try {
       setLoading(true);
 
-      const [overviewResponse, valuationResponse, historyResponse] =
+      const [overviewResponse, historyResponse] =
         await Promise.all([
           api.get(`/inventory/overview/${companyId}`),
-          api.get(`/inventory/valuation/${companyId}`),
           api.get(`/inventory/history/${companyId}?limit=200`),
         ]);
 
@@ -152,7 +159,13 @@ export default function InventoryPage({
         overviewResponse.data;
 
       setProducts(loadedProducts);
-      setValuation(valuationResponse.data);
+      setValuation({
+        total_products: loadedProducts.length,
+        total_quantity: loadedProducts
+          .reduce((total, product) => total + Number(product.stock_qty), 0)
+          .toString(),
+        low_stock_products: loadedProducts.filter((product) => product.low_stock).length,
+      });
       setHistory(historyResponse.data);
 
       const firstProductId = loadedProducts[0]?.product_id || "";
@@ -174,6 +187,29 @@ export default function InventoryPage({
     } finally {
       setLoading(false);
     }
+  }
+
+  const loadProjectedValuation = useCallback(async () => {
+    if (!companyId) return;
+    try {
+      setValuationLoading(true);
+      setValuationMessage("");
+      const response = await api.get(`/reports/inventory-valuation/${companyId}`, { params: { branch_id: selectedBranchId || undefined, limit: 100 } });
+      setProjectedValuation(response.data);
+    } catch (error: any) {
+      setProjectedValuation(null);
+      setValuationMessage(error.response?.status === 403 ? "You do not have permission to view inventory cost, profit or margin." : error.response?.data?.detail || "Failed to load inventory valuation");
+    } finally {
+      setValuationLoading(false);
+    }
+  }, [companyId, selectedBranchId]);
+
+  async function exportProjectedValuation() {
+    try {
+      const response = await api.get(`/reports/inventory-valuation/${companyId}/export.csv`, { params: { branch_id: selectedBranchId || undefined }, responseType: "blob" });
+      const url = URL.createObjectURL(response.data); const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = "inventory-valuation.csv"; anchor.click(); URL.revokeObjectURL(url);
+    } catch (error: any) { setValuationMessage(error.response?.data?.detail || "Failed to export inventory valuation"); }
   }
 
   async function saveGrn() {
@@ -303,6 +339,8 @@ export default function InventoryPage({
     void loadInventory();
   }, [companyId]);
 
+  useEffect(() => { void loadProjectedValuation(); }, [loadProjectedValuation]);
+
   return (
     <div className="inventory-page">
 
@@ -380,14 +418,6 @@ export default function InventoryPage({
                 valuation.total_quantity,
               ).toLocaleString()}
               detail="Units currently available"
-            />
-
-            <InventoryCard
-              title="Stock Value"
-              value={`$${Number(
-                valuation.total_cost_value,
-              ).toFixed(2)}`}
-              detail="Based on cost price"
             />
 
             <InventoryCard
@@ -694,42 +724,37 @@ export default function InventoryPage({
           <div className="inventory-panel-header">
             <div>
               <h2>Inventory Valuation</h2>
-              <p>Stock quantity multiplied by cost price.</p>
+              <p>{projectedValuation?.basis || "Valuation uses current prices, not historical realized profit."}</p>
             </div>
+            <button className="inventory-refresh" onClick={() => void exportProjectedValuation()}>Export CSV</button>
           </div>
 
-          <section className="inventory-summary">
+          {valuationMessage && <p className="inventory-message" role="alert">{valuationMessage}</p>}
+          {valuationLoading && <div className="inventory-empty">Loading current-price valuation…</div>}
+          {projectedValuation && <><section className="inventory-summary">
             <InventoryCard
-              title="Total Products"
-              value={String(valuation.total_products)}
-              detail="Included in valuation"
+              title="Quantity on hand"
+              value={Number(projectedValuation.summary.quantity).toLocaleString()}
+              detail="Authoritative branch balances"
             />
-
             <InventoryCard
-              title="Total Quantity"
-              value={Number(
-                valuation.total_quantity,
-              ).toLocaleString()}
-              detail="Available units"
+              title="Stock selling value"
+              value={formatFinancial(projectedValuation.summary.selling_value, projectedValuation)}
+              detail="Quantity × current selling price"
             />
-
             <InventoryCard
-              title="Total Cost Value"
-              value={`$${Number(
-                valuation.total_cost_value,
-              ).toFixed(2)}`}
-              detail="Current inventory asset value"
+              title="Stock cost value"
+              value={formatFinancial(projectedValuation.summary.cost_value, projectedValuation)}
+              detail="Quantity × recorded unit cost"
             />
-
             <InventoryCard
-              title="Low Stock"
-              value={String(valuation.low_stock_products)}
-              detail="Products at reorder level"
-              warning={valuation.low_stock_products > 0}
+              title="Projected gross profit"
+              value={formatFinancial(projectedValuation.summary.projected_gross_profit, projectedValuation)}
+              detail="Selling value less cost value"
             />
+            <InventoryCard title="Margin" value={formatFinancial(projectedValuation.summary.margin_percentage, projectedValuation, true)} detail="Projected profit ÷ selling value" />
           </section>
-
-          <InventoryTable products={products} />
+          <div className="inventory-table-wrapper"><table><thead><tr><th>Shop / branch</th><th>Product</th><th>Quantity</th><th>Selling value</th><th>Cost value</th><th>Projected profit</th><th>Margin</th></tr></thead><tbody>{projectedValuation.rows.length ? projectedValuation.rows.map(row => <tr key={`${row.branch_id}-${row.product_id}`}><td>{row.shop_name} — {row.branch_name}</td><td><strong>{row.product_name}</strong><br/><small>{row.sku || "No SKU"}</small></td><td>{Number(row.quantity).toLocaleString()}</td><td>{formatFinancial(row.selling_value, projectedValuation)}</td><td>{formatFinancial(row.cost_value, projectedValuation)}</td><td>{formatFinancial(row.projected_gross_profit, projectedValuation)}</td><td>{formatFinancial(row.margin_percentage, projectedValuation, true)}</td></tr>) : <tr><td colSpan={7} className="inventory-empty">No inventory balances match this branch.</td></tr>}</tbody></table></div></>}
         </section>
       )}
 
@@ -810,6 +835,11 @@ export default function InventoryPage({
   );
 }
 
+function formatFinancial(metric: FinancialMetric, valuation: ProjectedValuation, percent = false) {
+  if (!metric.available) return "Unavailable";
+  return percent ? `${Number(metric.value).toFixed(2)}%` : `${valuation.currency_symbol}${Number(metric.value).toFixed(valuation.decimal_places)}`;
+}
+
 function InventoryCard({
   title,
   value,
@@ -853,11 +883,8 @@ function InventoryTable({
             <th>Product</th>
             <th>SKU</th>
             <th>Unit</th>
-            <th>Cost</th>
-            <th>Selling</th>
             <th>Stock</th>
             <th>Reorder</th>
-            <th>Value</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -872,20 +899,8 @@ function InventoryTable({
               <td>{product.sku || "—"}</td>
               <td>{product.unit}</td>
 
-              <td>
-                ${Number(product.cost_price).toFixed(2)}
-              </td>
-
-              <td>
-                ${Number(product.selling_price).toFixed(2)}
-              </td>
-
               <td>{Number(product.stock_qty)}</td>
               <td>{Number(product.reorder_level)}</td>
-
-              <td>
-                ${Number(product.stock_value).toFixed(2)}
-              </td>
 
               <td>
                 <span

@@ -1,7 +1,41 @@
 # Phase 4 — Operations and Financial Management roadmap
 
-Status: approved requirements translated into a read-only implementation plan.
-No Phase 4 implementation is authorized by this document.
+Status: Section 4A implementation in local review; Sections 4B–4D remain unstarted.
+
+The Phase 4 branch is based exactly on deployed Phase 3 commit
+`e69fb01aae30450453e802d400ab4fbb49cf5a0f`. No production, deployment,
+publication, merge, tag, push, or commit action is authorized as part of this
+work.
+
+## Section 4A acceptance gate
+
+Manual visual acceptance was confirmed on 2026-09-16 for the isolated Phase 4A
+preview at desktop, 390×844, and 320×568 viewports. The confirmed flow covered
+Backoffice login, Sales History, and Inventory Valuation; all checks passed.
+
+Section 4A is reviewable only when all of the following are evidenced:
+
+- Sales History offers every required view without moving management reporting
+  onto the Dashboard; changing a view retains the normalized filter state.
+- Dates use half-open Africa/Harare boundaries; all selected dimension IDs are
+  checked against the authenticated company before query execution.
+- Sale-level totals are aggregated before item joins; refunds use the Phase 3
+  signs; cancellations contribute no revenue or cost.
+- Result paging is deterministic and bounded, sorting is allow-listed, and CSV
+  export uses the same population with spreadsheet-formula protection.
+- Missing historical discount/category/cost evidence is presented as
+  unavailable and is never replaced by a synthetic zero.
+- Inventory quantity and all four valuation metrics are calculated server-side
+  from authoritative branch balances, current selling prices, and recorded
+  current unit costs, with currency rounding and a current-price disclaimer.
+- Reports and valuation enforce company isolation plus `reports` and
+  `inventory_valuation` permissions respectively.
+- Cashier-facing POS report and inventory views contain no monetary stock
+  valuation.
+- Backend accounting/security, PostgreSQL query behavior, migration
+  upgrade/downgrade/re-upgrade, Backoffice responsive states, and POS
+  regressions pass in isolated environments. No index is added without measured
+  representative `EXPLAIN (ANALYZE, BUFFERS)` evidence.
 
 ## Scope boundary
 

@@ -14,18 +14,24 @@ import InventoryPage from "./pages/InventoryPage";
 import ShopsDevicesPage from "./pages/ShopsDevicesPage";
 import EmployeesPage from "./pages/EmployeesPage";
 import ReportsPage from "./pages/ReportsPage";
+import SalesHistoryPage from "./pages/SalesHistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 
-type Sale = {
-  id: string;
-  receipt_number: string;
-  total_amount: string;
-  amount_received: string;
-  change_due: string;
-  payment_method: string;
-  status: string;
-  created_at: string;
-};
+type BackofficePage =
+  | "dashboard"
+  | "sales"
+  | "products"
+  | "inventory"
+  | "devices"
+  | "employees"
+  | "reports"
+  | "settings";
+
+function initialBackofficePage(): BackofficePage {
+  const requested = new URLSearchParams(window.location.search).get("page");
+  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "settings"] as BackofficePage[])
+    .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
+}
 
 function localDateValue(date: Date): string {
   const adjusted = new Date(
@@ -47,19 +53,9 @@ function App() {
   );
   const [dashboardSummary, setDashboardSummary] =
     useState<DashboardPhase3Summary | null>(null);
-  const [sales, setSales] = useState<Sale[]>([]);
   const [dashboardShops, setDashboardShops] = useState<DashboardPhase3Summary["shops"]>([]);
   const [granularity, setGranularity] = useState<"day" | "week" | "month">("day");
-  const [page, setPage] = useState<
-    | "dashboard"
-    | "sales"
-    | "products"
-    | "inventory"
-    | "devices"
-    | "employees"
-    | "reports"
-    | "settings"
-  >("dashboard");
+  const [page, setPage] = useState<BackofficePage>(initialBackofficePage);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -112,15 +108,6 @@ function App() {
       setLoading(false);
     }
   }
-
-  const loadRecentSales = useCallback(async (id: string) => {
-    if (!id) {
-      return;
-    }
-
-    const salesResponse = await api.get(`/sales/${id}?limit=100`);
-    setSales(salesResponse.data);
-  }, []);
 
   const loadDashboardSummary = useCallback(
     async (id: string) => {
@@ -310,7 +297,6 @@ function App() {
         setMessage("");
 
         await Promise.all([
-          loadRecentSales(id),
           loadDashboardSummary(id),
         ]);
       } catch (error: any) {
@@ -322,7 +308,7 @@ function App() {
         setLoading(false);
       }
     },
-    [loadDashboardSummary, loadRecentSales],
+    [loadDashboardSummary],
   );
 
   function logout() {
@@ -337,23 +323,17 @@ function App() {
     setLoggedIn(false);
     setCompanyId("");
     setDashboardSummary(null);
-    setSales([]);
     closeDashboardDrilldown();
   }
 
   function navigateTo(nextPage: typeof page) {
     setPage(nextPage);
+    const url = new URL(window.location.href);
+    url.searchParams.set("page", nextPage);
+    window.history.replaceState(null, "", url);
     setMobileMenuOpen(false);
     closeDashboardDrilldown();
   }
-
-  useEffect(() => {
-    if (loggedIn && companyId) {
-      void loadRecentSales(companyId).catch(() => {
-        setMessage("Failed to load recent sales");
-      });
-    }
-  }, [loggedIn, companyId, loadRecentSales]);
 
   useEffect(() => {
     if (loggedIn && companyId) {
@@ -564,16 +544,7 @@ function App() {
         )}
 
         {page === "sales" && (
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <h2>Sales and Receipts</h2>
-                <p>{sales.length} transaction records loaded</p>
-              </div>
-            </div>
-
-            <SalesTable sales={sales} />
-          </section>
+          <SalesHistoryPage companyId={companyId} />
         )}
 
         {page === "products" && (
@@ -615,58 +586,6 @@ function App() {
               : "")}
         </p>
       </main>
-    </div>
-  );
-}
-
-function SalesTable({ sales }: { sales: Sale[] }) {
-  if (!sales.length) {
-    return <div className="empty-state">No sales found yet.</div>;
-  }
-
-  return (
-    <div className="table-wrapper">
-      <table>
-        <thead>
-          <tr>
-            <th>Receipt</th>
-            <th>Date</th>
-            <th>Payment</th>
-            <th>Total</th>
-            <th>Received</th>
-            <th>Change</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {sales.map((sale) => (
-            <tr key={sale.id}>
-              <td className="receipt-number">
-                {sale.receipt_number}
-              </td>
-
-              <td>{new Date(sale.created_at).toLocaleString()}</td>
-
-              <td>
-                <span className="payment-badge">
-                  {sale.payment_method.toUpperCase()}
-                </span>
-              </td>
-
-              <td>${Number(sale.total_amount).toFixed(2)}</td>
-
-              <td>${Number(sale.amount_received).toFixed(2)}</td>
-
-              <td>${Number(sale.change_due).toFixed(2)}</td>
-
-              <td>
-                <span className="status-badge">{sale.status}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

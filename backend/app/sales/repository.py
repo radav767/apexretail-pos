@@ -8,6 +8,7 @@ from app.models.employee import Employee
 from app.models.sale_item import SaleItem
 from app.models.shop import Shop
 from app.models.inventory_movement import InventoryMovement
+from app.models.category import Category
 
 
 class SalesRepository:
@@ -34,6 +35,15 @@ class SalesRepository:
             company_id,
             product_id,
         )
+
+    async def get_category_name(self, company_id, category_id):
+        result = await self.db.execute(
+            select(Category.name).where(
+                Category.company_id == company_id,
+                Category.id == category_id,
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def get_balance(
         self,

@@ -229,8 +229,8 @@ class InventoryService:
                 "stock_qty": product.stock_qty,
                 "reorder_level": product.reorder_level,
                 "stock_value": (
-                    Decimal(product.stock_qty or 0)
-                    * Decimal(product.cost_price or 0)
+                    Decimal(product.stock_qty or 0) * Decimal(product.cost_price)
+                    if product.cost_price is not None else None
                 ),
                 "low_stock": (
                     Decimal(product.stock_qty or 0)

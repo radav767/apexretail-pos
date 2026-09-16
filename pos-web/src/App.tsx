@@ -218,6 +218,12 @@ function roundMoneyValue(value: string | number): number {
   return Number(formatCents(parseMoneyToCents(value)));
 }
 
+function initialPosModule(): PosModuleName {
+  const requested = new URLSearchParams(window.location.search).get("module");
+  return (["Sales", "Sales Management", "Products", "Inventory", "Reports", "Settings"] as PosModuleName[])
+    .includes(requested as PosModuleName) ? requested as PosModuleName : "Sales";
+}
+
 function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -255,7 +261,7 @@ const [loggedIn, setLoggedIn] = useState(
   const [message, setMessage] = useState("");
   const [processing, setProcessing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activePosModule, setActivePosModule] = useState<PosModuleName>("Sales");
+  const [activePosModule, setActivePosModule] = useState<PosModuleName>(initialPosModule);
 
   const [showTender, setShowTender] = useState(false);
   const [amountReceived, setAmountReceived] = useState("");
@@ -2172,6 +2178,9 @@ const [loggedIn, setLoggedIn] = useState(
     moduleName: PosModuleName,
   ) {
     setActivePosModule(moduleName);
+    const url = new URL(window.location.href);
+    url.searchParams.set("module", moduleName);
+    window.history.replaceState(null, "", url);
     setMenuOpen(false);
     setMessage("");
   }

@@ -50,6 +50,19 @@
   background: #ffffff;
 }
 
+.reports-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.reports-filter-grid label { display: grid; gap: 6px; color: #475569; font-size: 13px; font-weight: 700; }
+.reports-filter-grid input, .reports-filter-grid select { min-height: 44px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 10px; background: white; min-width: 0; }
+.reports-pagination { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.reports-pagination button { min-height: 40px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 15px; background: #f8fafc; }
+.reports-pagination button:disabled { opacity: .5; }
+.reports-unavailable { color: #9f1239; font-size: 13px; font-weight: 800; }
+
 .reports-date-fields input:focus {
   outline: 2px solid #94a3b8;
   outline-offset: 1px;

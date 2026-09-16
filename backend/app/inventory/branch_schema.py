@@ -30,6 +30,6 @@ class BranchInventoryOut(BaseModel):
 
     quantity: Decimal
     reorder_level: Decimal
-    cost_price: Decimal
-    stock_value: Decimal
+    cost_price: Decimal | None
+    stock_value: Decimal | None
     low_stock: bool
