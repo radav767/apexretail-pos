@@ -17,6 +17,7 @@ import ReportsPage from "./pages/ReportsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 import CustomersPage from "./pages/CustomersPage";
+import CreditSettlementsPage from "./pages/CreditSettlementsPage";
 
 type BackofficePage =
   | "dashboard"
@@ -27,11 +28,12 @@ type BackofficePage =
   | "employees"
   | "reports"
   | "customers"
+  | "credit-settlements"
   | "settings";
 
 function initialBackofficePage(): BackofficePage {
   const requested = new URLSearchParams(window.location.search).get("page");
-  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "settings"] as BackofficePage[])
+  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "settings"] as BackofficePage[])
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
@@ -471,6 +473,12 @@ function App() {
             Customers
           </button>
           <button
+            className={`${page === "credit-settlements" ? "active" : ""} credit-settlements-nav-button`.trim()}
+            onClick={() => navigateTo("credit-settlements")}
+          >
+            Credit Settlements
+          </button>
+          <button
             className="logout-nav-button"
             type="button"
             onClick={logout}
@@ -502,6 +510,8 @@ function App() {
                           ? "Sales Reports"
                           : page === "customers"
                             ? "Customers & Credit"
+                            : page === "credit-settlements"
+                              ? "Credit Settlements"
                           : page === "settings"
                             ? "Business Settings"
                             : "Shops & Devices"}
@@ -580,6 +590,10 @@ function App() {
 
         {page === "customers" && (
           <CustomersPage companyId={companyId} />
+        )}
+
+        {page === "credit-settlements" && (
+          <CreditSettlementsPage companyId={companyId} />
         )}
 
         {page === "settings" && (

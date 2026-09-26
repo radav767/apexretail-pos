@@ -1,0 +1,69 @@
+.sidebar nav .credit-settlements-nav-button::before { content: "$"; }
+.credit-settlements-page { display: grid; gap: 22px; }
+.credit-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
+.credit-summary-grid article { display: flex; min-width: 0; min-height: 128px; flex-direction: column; padding: 20px; border: 1px solid var(--bo-border, #dbe3ee); border-radius: 17px; background: white; }
+.credit-summary-grid span { color: #667085; font-weight: 700; }
+.credit-summary-grid strong { margin: 11px 0 7px; overflow-wrap: anywhere; font-size: 26px; }
+.credit-summary-grid small { margin-top: auto; color: #8490a3; }
+.credit-filter-panel, .credit-receivables-panel, .credit-history-panel { min-width: 0; padding: 24px; border: 1px solid var(--bo-border, #dbe3ee); border-radius: 18px; background: white; box-shadow: var(--bo-shadow-sm, 0 8px 25px rgba(15, 23, 42, 0.05)); }
+.credit-section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+.credit-section-header h2, .credit-section-header h3, .credit-section-header p { margin: 0; }
+.credit-section-header p { margin-top: 5px; color: #687386; }
+.credit-filters { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 13px; }
+.credit-filters label, .credit-settlement-form label { display: grid; gap: 7px; }
+.credit-message { min-height: 24px; margin: 14px 0 0; color: #344054; font-weight: 750; }
+.credit-online-badge { display: inline-block; padding: 7px 10px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 850; white-space: nowrap; }
+.credit-table-wrapper { overflow-x: auto; }
+.credit-responsive-table td strong, .credit-responsive-table td small { display: block; }
+.credit-responsive-table td small { margin-top: 4px; color: #667085; }
+.credit-status, .credit-method { display: inline-block; width: fit-content; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 850; white-space: nowrap; }
+.credit-status-open { background: #eff6ff; color: #1d4ed8; }
+.credit-status-partially_paid { background: #fff7ed; color: #b45309; }
+.credit-status-paid { background: #dcfce7; color: #166534; }
+.credit-status-overdue { background: #fee2e2; color: #b91c1c; }
+.credit-method-cash { background: #dcfce7; color: #166534; }
+.credit-method-card { background: #eef2ff; color: #4338ca; }
+.credit-method-mobile { background: #ecfeff; color: #0e7490; }
+.credit-empty { padding: 38px !important; color: #687386; text-align: center; }
+.credit-dialog-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 24px; overflow-y: auto; background: rgba(15, 23, 42, 0.6); }
+.credit-dialog { width: min(780px, 100%); max-height: calc(100vh - 48px); padding: 25px; overflow-y: auto; border-radius: 20px; background: white; box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3); }
+.credit-eyebrow { display: block; margin-bottom: 5px; color: #2563eb; font-size: 12px; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+.credit-balance-preview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+.credit-balance-preview > div { padding: 15px; border: 1px solid #dbe3ee; border-radius: 13px; background: #f8fafc; }
+.credit-balance-preview span, .credit-balance-preview strong { display: block; }
+.credit-balance-preview span { color: #64748b; font-size: 12px; font-weight: 750; }
+.credit-balance-preview strong { margin-top: 7px; font-size: 19px; }
+.credit-balance-preview > div:last-child { border-color: #bfdbfe; background: #eff6ff; }
+.credit-settlement-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.credit-note-field { grid-column: 1 / -1; }
+.credit-validation { margin: 12px 0 0; color: #b91c1c; font-weight: 750; }
+.credit-dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.credit-confirmation { padding: 18px; border: 1px solid #bfdbfe; border-radius: 14px; background: #f8fbff; }
+.credit-confirmation h3 { margin-top: 0; }
+.credit-cash-note { padding: 10px 12px; border-radius: 9px; background: #dcfce7; color: #166534; font-weight: 750; }
+
+@media (max-width: 1100px) {
+  .credit-summary-grid, .credit-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .credit-summary-grid, .credit-filters, .credit-settlement-form, .credit-balance-preview { grid-template-columns: 1fr; }
+  .credit-section-header { flex-direction: column; }
+  .credit-section-header > button { width: 100%; }
+  .credit-table-wrapper { overflow: visible; border: 0 !important; }
+  .credit-responsive-table, .credit-responsive-table tbody, .credit-responsive-table tr, .credit-responsive-table td { display: block; width: 100%; min-width: 0 !important; }
+  .credit-responsive-table thead { display: none; }
+  .credit-responsive-table tr { margin-bottom: 13px; padding: 13px; border: 1px solid #dbe3ee; border-radius: 14px; }
+  .credit-responsive-table td { display: grid; grid-template-columns: minmax(105px, 0.4fr) minmax(0, 1fr); gap: 12px; padding: 9px 3px !important; border-bottom: 1px solid #edf1f6 !important; overflow-wrap: anywhere; }
+  .credit-responsive-table td::before { content: attr(data-label); color: #64748b; font-size: 11px; font-weight: 850; letter-spacing: 0.04em; text-transform: uppercase; }
+  .credit-responsive-table td:last-child { border-bottom: 0 !important; }
+  .credit-dialog-backdrop { align-items: start; padding: 10px; }
+  .credit-dialog { max-height: calc(100vh - 20px); padding: 18px; }
+  .credit-dialog-actions { display: grid; grid-template-columns: 1fr; }
+  .credit-dialog-actions button { width: 100%; }
+}
+
+@media (max-width: 390px) {
+  .credit-summary-grid { grid-template-columns: 1fr; }
+  .credit-filter-panel, .credit-receivables-panel, .credit-history-panel { padding: 17px; }
+}
