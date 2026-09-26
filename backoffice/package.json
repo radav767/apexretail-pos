@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test:dashboard": "node scripts/run-dashboard-tests.mjs && node --test tests/navigation.test.mjs",
+    "test:customers": "node --test tests/customers.test.mjs tests/navigation.test.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

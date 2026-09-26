@@ -16,6 +16,7 @@ import EmployeesPage from "./pages/EmployeesPage";
 import ReportsPage from "./pages/ReportsPage";
 import SalesHistoryPage from "./pages/SalesHistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import CustomersPage from "./pages/CustomersPage";
 
 type BackofficePage =
   | "dashboard"
@@ -25,11 +26,12 @@ type BackofficePage =
   | "devices"
   | "employees"
   | "reports"
+  | "customers"
   | "settings";
 
 function initialBackofficePage(): BackofficePage {
   const requested = new URLSearchParams(window.location.search).get("page");
-  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "settings"] as BackofficePage[])
+  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "settings"] as BackofficePage[])
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
@@ -463,6 +465,12 @@ function App() {
             Settings
           </button>
           <button
+            className={`${page === "customers" ? "active" : ""} customers-nav-button`.trim()}
+            onClick={() => navigateTo("customers")}
+          >
+            Customers
+          </button>
+          <button
             className="logout-nav-button"
             type="button"
             onClick={logout}
@@ -492,6 +500,8 @@ function App() {
                         ? "Employees & Permissions"
                         : page === "reports"
                           ? "Sales Reports"
+                          : page === "customers"
+                            ? "Customers & Credit"
                           : page === "settings"
                             ? "Business Settings"
                             : "Shops & Devices"}
@@ -566,6 +576,10 @@ function App() {
 
         {page === "reports" && (
           <ReportsPage companyId={companyId} />
+        )}
+
+        {page === "customers" && (
+          <CustomersPage companyId={companyId} />
         )}
 
         {page === "settings" && (
