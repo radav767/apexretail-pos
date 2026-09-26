@@ -175,19 +175,6 @@
   overflow-wrap: anywhere;
 }
 
-.pos-item-discount-field {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(88px, 120px);
-  align-items: center;
-  gap: 10px;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.pos-item-discount-field input,
 .pos-whole-sale-discount-field input {
   width: 100%;
   max-width: 120px;
@@ -447,7 +434,6 @@
     gap: 8px 6px;
   }
 
-  .pos-item-discount-field,
   .pos-whole-sale-discount-field {
     grid-template-columns: minmax(0, 1fr) minmax(82px, 104px);
     gap: 8px;

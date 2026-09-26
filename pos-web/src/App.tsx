@@ -93,7 +93,6 @@ type Product = {
 };
 
 type CartItem = Product & {
-  line_discount?: string;
   line_discount_amount?: string;
   quantity: string;
   selling_unit: string;
@@ -3219,11 +3218,6 @@ const [loggedIn, setLoggedIn] = useState(
                 </p>
               </div>
 
-              {cashier?.permissions?.discounts && <label className="pos-item-discount-field"><span>Item discount</span>
-                <input aria-label={`Item discount for ${item.name}`} inputMode="decimal"
-                  value={item.line_discount || ""} disabled={processing}
-                  onChange={(event) => setCart((current) => current.map((line, index) => index === cartIndex ? { ...line, line_discount: event.target.value } : line))} />
-              </label>}
               <div style={quantityBox} className="pos-quantity-control" aria-label={`Quantity for ${item.name}`}>
                 <button
                   style={quantityButton}
@@ -3261,16 +3255,13 @@ const [loggedIn, setLoggedIn] = useState(
           ))}
         </div>
 
-        {cashier?.permissions?.discounts && <label className="pos-whole-sale-discount-field"><span>Whole-sale discount</span>
-          <input aria-label="Whole-sale discount" inputMode="decimal" value={saleDiscount} disabled={processing}
+        {cashier?.permissions?.discounts && <label className="pos-whole-sale-discount-field"><span>Sale discount</span>
+          <input aria-label="Sale discount" inputMode="decimal" value={saleDiscount} disabled={processing}
             onChange={(event) => setSaleDiscount(event.target.value)} />
         </label>}
         {discountError && <p role="alert">{discountError}</p>}
-        {Number(discounted.line_discount_total) > 0 && (
-          <p className="pos-discount-applied">Item discounts applied: −{formatMoney(discounted.line_discount_total)}</p>
-        )}
         {Number(discounted.sale_discount_amount) > 0 && (
-          <p className="pos-discount-applied">Whole-sale discount applied: −{formatMoney(discounted.sale_discount_amount)}</p>
+          <p className="pos-discount-applied">Sale discount applied: −{formatMoney(discounted.sale_discount_amount)}</p>
         )}
         <div data-tax-summary="true"
           style={{
