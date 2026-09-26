@@ -1,6 +1,6 @@
 from app.business_settings.service import BusinessSettingsService
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from fastapi import HTTPException
@@ -11,6 +11,8 @@ from app.models.inventory_movement import InventoryMovement
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.audit_event import AuditEvent
+from app.models.credit_receivable import CreditReceivable
+from zoneinfo import ZoneInfo
 from app.sales.repository import SalesRepository
 from app.sales.schema import RefundCreate, SaleCreate
 from app.devices.authority import (
@@ -37,6 +39,7 @@ class SalesService:
     ):
         device = None
         employee = None
+        customer = None
 
         if actor is not None:
             if actor.company_id != data.company_id:
@@ -90,6 +93,23 @@ class SalesService:
             data.company_id,
             data.branch_id,
         )
+
+        if payment_method == "credit":
+            if data.customer_id is None:
+                raise HTTPException(400, "A customer is required for a credit sale")
+            if data.client_created_at is not None:
+                raise HTTPException(409, "Credit sales are online-only")
+            if actor is None:
+                raise HTTPException(401, "Authentication is required for a credit sale")
+            if actor.actor_type == "employee" and not (actor.permissions or {}).get("credit_sales"):
+                raise HTTPException(403, "Credit sales permission denied")
+            customer = await self.repo.get_customer_for_update(data.company_id, data.customer_id)
+            if customer is None:
+                raise HTTPException(404, "Customer not found or inactive")
+            if not customer.credit_enabled:
+                raise HTTPException(409, "Credit is not enabled for this customer")
+        elif data.customer_id is not None:
+            raise HTTPException(400, "customer_id is only supported for credit sales")
 
         if data.device_id is not None or data.device_key:
             device = await self.repo.get_device(
@@ -498,9 +518,19 @@ class SalesService:
                 )
 
             change_due = amount_received - total
+        elif payment_method == "credit":
+            amount_received = Decimal("0.00")
+            change_due = Decimal("0.00")
         else:
             amount_received = total
             change_due = Decimal("0")
+
+        if customer is not None and not customer.unlimited_credit:
+            if customer.credit_limit is None:
+                raise HTTPException(409, "Customer credit policy has no monetary limit")
+            current_outstanding = Decimal(await self.repo.customer_outstanding(data.company_id, customer.id))
+            if current_outstanding + total > Decimal(customer.credit_limit):
+                raise HTTPException(409, "Credit limit exceeded")
 
 
 
@@ -556,6 +586,9 @@ class SalesService:
             branch_id=branch.id,
             device_id=device.id if device else None,
             employee_id=employee.id if employee else None,
+            customer_id=customer.id if customer else None,
+            customer_name_snapshot=customer.name if customer else None,
+            customer_code_snapshot=customer.customer_code if customer else None,
             cashier_name=employee.name if employee else None,
             shop_name_snapshot=shop.name if shop else None,
             shop_address_snapshot=shop_address_snapshot,
@@ -591,13 +624,37 @@ class SalesService:
             status="completed",
         )
 
-        return await self.repo.save_sale(
-            sale,
-            sale_items,
-            products,
-            balances,
-            inventory_movements,
-        )
+        if customer is not None:
+            receivable_id = uuid.uuid4()
+            receivable = CreditReceivable(
+                id=receivable_id,
+                company_id=data.company_id,
+                sale_id=sale.id,
+                customer_id=customer.id,
+                shop_id=branch.shop_id,
+                branch_id=branch.id,
+                cashier_employee_id=employee.id if employee else None,
+                device_id=device.id if device else None,
+                currency_code=await self.repo.get_currency_code(data.company_id),
+                original_amount=total,
+                amount_settled=Decimal("0.00"),
+                outstanding_balance=total,
+                due_date=datetime.now(ZoneInfo("Africa/Harare")).date() + timedelta(days=customer.credit_terms_days),
+                status="unpaid",
+            )
+            audit = AuditEvent(
+                company_id=data.company_id,
+                actor_employee_id=actor.employee.id if actor.actor_type == "employee" else None,
+                actor_user_id=actor.user.id if actor.actor_type == "user" else None,
+                device_id=device.id if device else None,
+                action="credit_sale_created",
+                details={"sale_id": str(sale.id), "customer_id": str(customer.id), "receivable_id": str(receivable_id), "amount": str(total)},
+            )
+            return await self.repo.save_credit_sale(
+                sale, sale_items, products, balances, inventory_movements, receivable, audit
+            )
+
+        return await self.repo.save_sale(sale, sale_items, products, balances, inventory_movements)
 
     async def create_refund(
         self,

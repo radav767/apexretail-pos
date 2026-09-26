@@ -20,6 +20,7 @@ class SaleCreate(BaseModel):
     company_id: UUID
     branch_id: UUID | None = None
     employee_id: UUID | None = None
+    customer_id: UUID | None = None
     device_id: UUID | None = None
     device_key: str | None = Field(default=None, max_length=255)
     assignment_revision: int | None = Field(default=None, ge=1)
@@ -45,6 +46,9 @@ class SaleOut(BaseModel):
     shop_id: UUID | None = None
     branch_id: UUID | None = None
     employee_id: UUID | None = None
+    customer_id: UUID | None = None
+    customer_name_snapshot: str | None = None
+    customer_code_snapshot: str | None = None
     device_id: UUID | None = None
     cashier_name: str | None = None
     shop_name_snapshot: str | None = None

@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.auth.dependencies import AuthActor, require_path_permission
 from app.reports.repository import ReportsRepository
-from app.reports.schema import SalesHistoryQuery, SalesHistoryResponse, InventoryValuationResponse
+from app.reports.schema import SalesHistoryQuery, SalesHistoryResponse, InventoryValuationResponse, FinancialSummaryResponse
 from app.reports.service import ReportsService
+from app.financial_access import enforce_actor_branch
 
 
 router = APIRouter(
@@ -26,6 +27,22 @@ HARARE_TZ = ZoneInfo("Africa/Harare")
 
 def get_reports_service(db: AsyncSession = Depends(get_db)):
     return ReportsService(ReportsRepository(db))
+
+
+@router.get("/financial-summary/{company_id}", response_model=FinancialSummaryResponse)
+async def financial_summary(
+    company_id: UUID,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    branch_id: UUID | None = None,
+    service: ReportsService = Depends(get_reports_service),
+    actor: AuthActor = Depends(require_path_permission("reports")),
+):
+    if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+        if branch_id is not None:
+            enforce_actor_branch(actor, branch_id)
+        branch_id = actor.employee.branch_id
+    return await service.financial_summary(company_id, date_from=date_from, date_to=date_to, branch_id=branch_id)
 
 
 @router.get("/sales-history/{company_id}", response_model=SalesHistoryResponse)

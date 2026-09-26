@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.stock_repository import BranchStockRepository
@@ -9,6 +9,9 @@ from app.models.sale_item import SaleItem
 from app.models.shop import Shop
 from app.models.inventory_movement import InventoryMovement
 from app.models.category import Category
+from app.models.customer import Customer
+from app.models.credit_receivable import CreditReceivable
+from app.models.company_settings import CompanySetting
 
 
 class SalesRepository:
@@ -112,6 +115,35 @@ class SalesRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_customer_for_update(self, company_id, customer_id):
+        result = await self.db.execute(
+            select(Customer).where(
+                Customer.company_id == company_id,
+                Customer.id == customer_id,
+                Customer.active.is_(True),
+                Customer.deleted.is_(False),
+            ).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
+    async def customer_outstanding(self, company_id, customer_id):
+        result = await self.db.execute(
+            select(func.coalesce(func.sum(CreditReceivable.outstanding_balance), 0)).where(
+                CreditReceivable.company_id == company_id,
+                CreditReceivable.customer_id == customer_id,
+            )
+        )
+        return result.scalar_one()
+
+    async def get_currency_code(self, company_id):
+        result = await self.db.execute(
+            select(CompanySetting.currency_code).where(
+                CompanySetting.company_id == company_id,
+                CompanySetting.deleted.is_(False),
+            )
+        )
+        return result.scalar_one_or_none() or "USD"
+
     async def save_sale(
         self,
         sale,
@@ -130,6 +162,34 @@ class SalesRepository:
             await self.db.commit()
             await self.db.refresh(sale)
 
+            return sale
+        except Exception:
+            await self.db.rollback()
+            raise
+
+    async def save_credit_sale(
+        self,
+        sale,
+        sale_items,
+        products,
+        balances,
+        inventory_movements,
+        receivable,
+        audit_event,
+    ):
+        try:
+            self.db.add(sale)
+            self.db.add_all(sale_items)
+            self.db.add_all(products)
+            self.db.add_all(balances)
+            self.db.add_all(inventory_movements)
+            # Establish the sale FK target before adding its receivable while
+            # keeping every write inside this same database transaction.
+            await self.db.flush()
+            self.db.add(receivable)
+            self.db.add(audit_event)
+            await self.db.commit()
+            await self.db.refresh(sale)
             return sale
         except Exception:
             await self.db.rollback()

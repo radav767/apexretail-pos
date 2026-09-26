@@ -67,6 +67,15 @@ class Sale(Base):
         index=True,
     )
 
+    customer_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    customer_name_snapshot = Column(String(160), nullable=True)
+    customer_code_snapshot = Column(String(40), nullable=True)
+
     cashier_name = Column(
         String(160),
         nullable=True,

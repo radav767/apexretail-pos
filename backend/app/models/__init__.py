@@ -21,3 +21,8 @@ from app.models.subscription_checkout_session import SubscriptionCheckoutSession
 from app.models.audit_event import AuditEvent
 from app.models.pos_session import PosSession
 from app.models.employee_shop_access import EmployeeShopAccess
+from app.models.customer import Customer
+from app.models.credit_receivable import CreditReceivable
+from app.models.credit_settlement import CreditSettlement
+from app.models.expense_category import ExpenseCategory
+from app.models.expense import Expense

@@ -76,3 +76,19 @@ class InventoryValuationResponse(BaseModel):
     offset: int
     summary: dict[str, Any]
     rows: list[InventoryValuationRow]
+
+
+class FinancialSummaryResponse(BaseModel):
+    net_sales: Decimal
+    cost_of_sales: Decimal
+    gross_profit: Decimal
+    operating_expenses: Decimal
+    net_profit: Decimal
+    cash_sales: Decimal
+    cash_settlements: Decimal
+    cash_expenses: Decimal
+    expected_cash_movement: Decimal
+    card_settlements: Decimal
+    mobile_settlements: Decimal
+    card_expenses: Decimal
+    mobile_expenses: Decimal

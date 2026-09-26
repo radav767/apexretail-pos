@@ -76,6 +76,18 @@ class ReportsService:
             writer.writerow([csv_cell(row.get("label")), row.get("transactions"), row.get("quantity"), row.get("amount"), row["cost"].get("value"), row["cost"].get("available"), row["gross_profit"].get("value"), row["discount"].get("value"), row["discount"].get("available"), csv_cell(row.get("status")), csv_cell(row.get("payment_method")), row.get("created_at")])
         return output.getvalue()
 
+    async def financial_summary(self, company_id, *, date_from, date_to, branch_id=None):
+        if date_to < date_from:
+            raise HTTPException(400, "End date cannot be before start date")
+        if (date_to - date_from).days >= 366:
+            raise HTTPException(400, "Report range cannot exceed 366 days")
+        invalid = await self.repo.validate_dimensions(company_id, {"branch_id": branch_id})
+        if invalid:
+            raise HTTPException(404, "Selected branch was not found for this company")
+        start_at, end_at = utc_bounds(date_from, date_to)
+        row = await self.repo.financial_summary(company_id, start_at, end_at, branch_id)
+        return {key: money(value) for key, value in row.items()}
+
     async def inventory_valuation(self, company_id, *, branch_id=None, category_id=None, product_id=None, limit=50, offset=0, export=False):
         invalid = await self.repo.validate_dimensions(company_id, {"branch_id": branch_id, "category_id": category_id, "product_id": product_id})
         if invalid:

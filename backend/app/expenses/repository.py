@@ -1,0 +1,55 @@
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Branch, CompanySetting, Expense, ExpenseCategory
+
+
+class ExpenseRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_branch(self, company_id, branch_id):
+        return (await self.db.execute(select(Branch).where(Branch.company_id == company_id, Branch.id == branch_id, Branch.active.is_(True), Branch.deleted.is_(False)))).scalar_one_or_none()
+
+    async def get_category(self, company_id, category_id, active_only=True):
+        query = select(ExpenseCategory).where(ExpenseCategory.company_id == company_id, ExpenseCategory.id == category_id, ExpenseCategory.deleted.is_(False))
+        if active_only:
+            query = query.where(ExpenseCategory.active.is_(True))
+        return (await self.db.execute(query)).scalar_one_or_none()
+
+    async def find_category_name(self, company_id, name):
+        return (await self.db.execute(select(ExpenseCategory.id).where(ExpenseCategory.company_id == company_id, ExpenseCategory.name == name, ExpenseCategory.deleted.is_(False)))).scalar_one_or_none()
+
+    async def currency_code(self, company_id):
+        value = (await self.db.execute(select(CompanySetting.currency_code).where(CompanySetting.company_id == company_id, CompanySetting.deleted.is_(False)))).scalar_one_or_none()
+        return value or "USD"
+
+    async def get_by_key(self, company_id, key):
+        return (await self.db.execute(select(Expense).where(Expense.company_id == company_id, Expense.idempotency_key == key))).scalar_one_or_none()
+
+    async def save(self, *objects):
+        self.db.add_all(objects)
+        try:
+            await self.db.commit()
+            await self.db.refresh(objects[0])
+            return objects[0]
+        except Exception:
+            await self.db.rollback()
+            raise
+
+    async def list_categories(self, company_id, active=None):
+        query = select(ExpenseCategory).where(ExpenseCategory.company_id == company_id, ExpenseCategory.deleted.is_(False))
+        if active is not None:
+            query = query.where(ExpenseCategory.active == active)
+        return list((await self.db.execute(query.order_by(ExpenseCategory.name))).scalars().all())
+
+    async def list_expenses(self, company_id, *, start_at=None, end_at=None, branch_id=None, category_id=None, payment_method=None, employee_id=None, limit=100, offset=0):
+        query = select(Expense, ExpenseCategory.name.label("category_name")).join(ExpenseCategory, (ExpenseCategory.id == Expense.category_id) & (ExpenseCategory.company_id == Expense.company_id)).where(Expense.company_id == company_id)
+        for value, column, operator in (
+            (start_at, Expense.occurred_at, "ge"), (end_at, Expense.occurred_at, "lt"),
+            (branch_id, Expense.branch_id, "eq"), (category_id, Expense.category_id, "eq"),
+            (payment_method, Expense.payment_method, "eq"), (employee_id, Expense.employee_id, "eq"),
+        ):
+            if value is not None:
+                query = query.where(getattr(column, f"__{operator}__")(value))
+        return (await self.db.execute(query.order_by(Expense.occurred_at.desc(), Expense.id).limit(limit).offset(offset))).all()
