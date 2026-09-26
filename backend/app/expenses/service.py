@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 
 from app.expenses.repository import ExpenseRepository
-from app.expenses.schema import ExpenseCategoryCreate, ExpenseCreate
+from app.expenses.schema import ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCreate
 from app.financial_access import enforce_actor_branch, enforce_actor_company
 from app.models import AuditEvent, Expense, ExpenseCategory
 
@@ -22,6 +22,34 @@ class ExpenseService:
     async def list_categories(self, company_id, actor, active=None):
         enforce_actor_company(actor, company_id)
         return await self.repo.list_categories(company_id, active)
+
+    async def update_category(self, company_id, category_id, data: ExpenseCategoryUpdate, actor):
+        enforce_actor_company(actor, company_id)
+        category = await self.repo.get_category(company_id, category_id, active_only=False)
+        if not category:
+            raise HTTPException(404, "Expense category not found")
+        values = data.model_dump(exclude_unset=True)
+        if "name" in values:
+            name = values["name"].strip()
+            if await self.repo.find_category_name(company_id, name, category.id):
+                raise HTTPException(409, "Expense category already exists")
+            values["name"] = name
+        if "description" in values:
+            values["description"] = (values["description"] or "").strip() or None
+        for key, value in values.items():
+            setattr(category, key, value)
+        audit = AuditEvent(company_id=company_id, actor_user_id=actor.user.id if actor.actor_type == "user" else None, actor_employee_id=actor.employee.id if actor.actor_type == "employee" else None, action="expense_category_updated", details={"category_id": str(category.id), "changes": sorted(values)})
+        return await self.repo.save(category, audit)
+
+    async def delete_category(self, company_id, category_id, actor):
+        enforce_actor_company(actor, company_id)
+        category = await self.repo.get_category(company_id, category_id, active_only=False)
+        if not category:
+            raise HTTPException(404, "Expense category not found")
+        if await self.repo.category_expense_count(company_id, category.id):
+            raise HTTPException(409, "Expense categories used by posted expenses cannot be deleted; deactivate the category instead")
+        audit = AuditEvent(company_id=company_id, actor_user_id=actor.user.id if actor.actor_type == "user" else None, actor_employee_id=actor.employee.id if actor.actor_type == "employee" else None, action="expense_category_deleted", details={"category_id": str(category.id), "name": category.name})
+        await self.repo.delete_category(category, audit)
 
     async def create_expense(self, data: ExpenseCreate, actor):
         enforce_actor_company(actor, data.company_id)

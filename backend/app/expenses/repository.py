@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Branch, CompanySetting, Expense, ExpenseCategory
@@ -17,8 +17,23 @@ class ExpenseRepository:
             query = query.where(ExpenseCategory.active.is_(True))
         return (await self.db.execute(query)).scalar_one_or_none()
 
-    async def find_category_name(self, company_id, name):
-        return (await self.db.execute(select(ExpenseCategory.id).where(ExpenseCategory.company_id == company_id, ExpenseCategory.name == name, ExpenseCategory.deleted.is_(False)))).scalar_one_or_none()
+    async def find_category_name(self, company_id, name, excluding_id=None):
+        query = select(ExpenseCategory.id).where(ExpenseCategory.company_id == company_id, ExpenseCategory.name == name, ExpenseCategory.deleted.is_(False))
+        if excluding_id is not None:
+            query = query.where(ExpenseCategory.id != excluding_id)
+        return (await self.db.execute(query)).scalar_one_or_none()
+
+    async def category_expense_count(self, company_id, category_id):
+        return (await self.db.execute(select(func.count(Expense.id)).where(Expense.company_id == company_id, Expense.category_id == category_id))).scalar_one()
+
+    async def delete_category(self, category, audit):
+        self.db.add(audit)
+        await self.db.delete(category)
+        try:
+            await self.db.commit()
+        except Exception:
+            await self.db.rollback()
+            raise
 
     async def currency_code(self, company_id):
         value = (await self.db.execute(select(CompanySetting.currency_code).where(CompanySetting.company_id == company_id, CompanySetting.deleted.is_(False)))).scalar_one_or_none()
@@ -43,13 +58,17 @@ class ExpenseRepository:
             query = query.where(ExpenseCategory.active == active)
         return list((await self.db.execute(query.order_by(ExpenseCategory.name))).scalars().all())
 
-    async def list_expenses(self, company_id, *, start_at=None, end_at=None, branch_id=None, category_id=None, payment_method=None, employee_id=None, limit=100, offset=0):
+    async def list_expenses(self, company_id, *, start_at=None, end_at=None, branch_id=None, category_id=None, payment_method=None, employee_id=None, actor_user_id=None, search=None, limit=100, offset=0):
         query = select(Expense, ExpenseCategory.name.label("category_name")).join(ExpenseCategory, (ExpenseCategory.id == Expense.category_id) & (ExpenseCategory.company_id == Expense.company_id)).where(Expense.company_id == company_id)
         for value, column, operator in (
             (start_at, Expense.occurred_at, "ge"), (end_at, Expense.occurred_at, "lt"),
             (branch_id, Expense.branch_id, "eq"), (category_id, Expense.category_id, "eq"),
             (payment_method, Expense.payment_method, "eq"), (employee_id, Expense.employee_id, "eq"),
+            (actor_user_id, Expense.actor_user_id, "eq"),
         ):
             if value is not None:
                 query = query.where(getattr(column, f"__{operator}__")(value))
+        if search:
+            value = f"%{search.strip()}%"
+            query = query.where(or_(Expense.reference.ilike(value), Expense.description.ilike(value)))
         return (await self.db.execute(query.order_by(Expense.occurred_at.desc(), Expense.id).limit(limit).offset(offset))).all()

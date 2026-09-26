@@ -9,6 +9,7 @@
     "test:dashboard": "node scripts/run-dashboard-tests.mjs && node --test tests/navigation.test.mjs",
     "test:customers": "node --test tests/customers.test.mjs tests/navigation.test.mjs",
     "test:credit-settlements": "node scripts/run-credit-settlement-tests.mjs && node --test tests/creditSettlementsUi.test.mjs tests/navigation.test.mjs",
+    "test:expenses": "node scripts/run-expense-tests.mjs && node --test tests/expensesUi.test.mjs tests/navigation.test.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

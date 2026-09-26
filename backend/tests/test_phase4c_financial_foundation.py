@@ -20,7 +20,7 @@ from app.customers.repository import CustomerRepository
 from app.customers.schema import CustomerCreate
 from app.customers.service import CustomerService
 from app.expenses.repository import ExpenseRepository
-from app.expenses.schema import ExpenseCategoryCreate, ExpenseCreate
+from app.expenses.schema import ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCreate
 from app.expenses.service import ExpenseService
 from app.models import CreditReceivable, Customer
 from app.reports.repository import ReportsRepository
@@ -232,6 +232,63 @@ class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):
         async with AsyncSession(self.engine) as session:
             receivable = await CreditRepository(session).get_receivable(COMPANY, receivable_id)
             self.assertEqual(receivable.outstanding_balance, Decimal("40.00"))
+
+    async def test_expense_category_lifecycle_and_history_filters(self):
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            expenses = ExpenseService(ExpenseRepository(session))
+            used = await expenses.create_category(
+                ExpenseCategoryCreate(company_id=COMPANY, name="Operations"), self.owner
+            )
+            unused = await expenses.create_category(
+                ExpenseCategoryCreate(company_id=COMPANY, name="Temporary"), self.owner
+            )
+            updated = await expenses.update_category(
+                COMPANY,
+                used.id,
+                ExpenseCategoryUpdate(name="Operating costs", description="Daily operations", active=False),
+                self.owner,
+            )
+            self.assertFalse(updated.active)
+            updated = await expenses.update_category(
+                COMPANY, used.id, ExpenseCategoryUpdate(active=True), self.owner
+            )
+            self.assertTrue(updated.active)
+
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            expenses = ExpenseService(ExpenseRepository(session))
+            posted = await expenses.create_expense(
+                ExpenseCreate(
+                    company_id=COMPANY,
+                    category_id=used.id,
+                    branch_id=BRANCH,
+                    amount="12.50",
+                    occurred_at=datetime.now(timezone.utc),
+                    payment_method="card",
+                    reference="POWER-REF-001",
+                    description="Power account",
+                    idempotency_key="expense-category-filter-001",
+                ),
+                self.owner,
+            )
+            rows = await expenses.list_expenses(
+                COMPANY,
+                self.owner,
+                actor_user_id=USER,
+                search="power-ref",
+                limit=100,
+                offset=0,
+            )
+            self.assertEqual([row["id"] for row in rows], [posted.id])
+            with self.assertRaisesRegex(HTTPException, "cannot be deleted"):
+                await expenses.delete_category(COMPANY, used.id, self.owner)
+            await expenses.delete_category(COMPANY, unused.id, self.owner)
+            categories = await expenses.list_categories(COMPANY, self.owner)
+            self.assertEqual([category.id for category in categories], [used.id])
+            with self.assertRaises(HTTPException) as isolated:
+                await expenses.update_category(
+                    OTHER_COMPANY, used.id, ExpenseCategoryUpdate(active=False), self.owner
+                )
+            self.assertEqual(isolated.exception.status_code, 403)
 
 
 if __name__ == "__main__":

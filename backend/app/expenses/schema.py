@@ -12,6 +12,12 @@ class ExpenseCategoryCreate(BaseModel):
     description: str | None = Field(default=None, max_length=1000)
 
 
+class ExpenseCategoryUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+    active: bool | None = None
+
+
 class ExpenseCategoryOut(BaseModel):
     id: UUID
     company_id: UUID

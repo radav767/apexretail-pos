@@ -18,6 +18,7 @@ import SalesHistoryPage from "./pages/SalesHistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 import CustomersPage from "./pages/CustomersPage";
 import CreditSettlementsPage from "./pages/CreditSettlementsPage";
+import ExpensesPage from "./pages/ExpensesPage";
 
 type BackofficePage =
   | "dashboard"
@@ -29,11 +30,12 @@ type BackofficePage =
   | "reports"
   | "customers"
   | "credit-settlements"
+  | "expenses"
   | "settings";
 
 function initialBackofficePage(): BackofficePage {
   const requested = new URLSearchParams(window.location.search).get("page");
-  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "settings"] as BackofficePage[])
+  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "settings"] as BackofficePage[])
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
@@ -479,6 +481,12 @@ function App() {
             Credit Settlements
           </button>
           <button
+            className={`${page === "expenses" ? "active" : ""} expenses-nav-button`.trim()}
+            onClick={() => navigateTo("expenses")}
+          >
+            Expenses
+          </button>
+          <button
             className="logout-nav-button"
             type="button"
             onClick={logout}
@@ -512,6 +520,8 @@ function App() {
                             ? "Customers & Credit"
                             : page === "credit-settlements"
                               ? "Credit Settlements"
+                              : page === "expenses"
+                                ? "Expenses"
                           : page === "settings"
                             ? "Business Settings"
                             : "Shops & Devices"}
@@ -594,6 +604,10 @@ function App() {
 
         {page === "credit-settlements" && (
           <CreditSettlementsPage companyId={companyId} />
+        )}
+
+        {page === "expenses" && (
+          <ExpensesPage companyId={companyId} />
         )}
 
         {page === "settings" && (
