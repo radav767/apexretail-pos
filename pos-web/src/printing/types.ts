@@ -71,6 +71,10 @@ export type ReceiptSnapshot = {
   reprint_at?: string;
   reprint_count?: number;
   cashier_name?: string | null;
+  customer_name?: string | null;
+  customer_code?: string | null;
+  credit_due_date?: string | null;
+  credit_outstanding_balance?: string | null;
   subtotal_amount?: string;
   discount_amount?: string | null;
   sale_discount_amount?: string | null;

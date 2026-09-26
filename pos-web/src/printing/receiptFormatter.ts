@@ -139,6 +139,19 @@ function buildEscPosLines(snapshot: ReceiptSnapshot, config: PrinterConfig) {
     lines.push(`Cashier: ${snapshot.cashier_name}`);
   }
 
+  if (snapshot.payment_method.toLowerCase() === "credit") {
+    if (snapshot.customer_name || snapshot.customer_code) {
+      lines.push(
+        `Customer: ${[snapshot.customer_name, snapshot.customer_code]
+          .filter(Boolean)
+          .join(" / ")}`,
+      );
+    }
+    if (snapshot.credit_due_date) {
+      lines.push(`Credit due: ${snapshot.credit_due_date}`);
+    }
+  }
+
   lines.push("-".repeat(width));
 
   for (const item of snapshot.items) {
@@ -385,6 +398,8 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
           <p class="meta">${escapeHtml(createdAt)}</p>
           ${snapshot.is_duplicate ? `<h2 style="font-size:24px;margin:10px 0">DUPLICATE</h2><p class="meta">Original receipt: ${escapeHtml(snapshot.original_receipt_number || snapshot.receipt_number)}</p><p class="meta">Original sale time: ${escapeHtml(new Date(snapshot.original_sale_time || snapshot.created_at).toLocaleString())}</p><p class="meta">Reprint date/time: ${escapeHtml(new Date(snapshot.reprint_at || Date.now()).toLocaleString())}</p><p class="meta">Reprint count: ${snapshot.reprint_count || 1}</p>` : ""}
           ${snapshot.cashier_name ? `<p class="meta">Cashier: ${escapeHtml(snapshot.cashier_name)}</p>` : ""}
+          ${snapshot.payment_method.toLowerCase() === "credit" && (snapshot.customer_name || snapshot.customer_code) ? `<p class="meta">Customer: ${escapeHtml([snapshot.customer_name, snapshot.customer_code].filter(Boolean).join(" / "))}</p>` : ""}
+          ${snapshot.payment_method.toLowerCase() === "credit" && snapshot.credit_due_date ? `<p class="meta">Credit due: ${escapeHtml(snapshot.credit_due_date)}</p>` : ""}
           <table>
             <thead>
               <tr>
@@ -423,6 +438,7 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
               <span>Change</span>
               <span>${money(snapshot.change_due)}</span>
             </div>
+            ${snapshot.payment_method.toLowerCase() === "credit" ? `<div class="summary-row"><span>Credit sale outstanding</span><span>${money(snapshot.credit_outstanding_balance || snapshot.total_amount)}</span></div>` : ""}
           </div>
           ${snapshot.receipt_footer ? `<p class="footer">${escapeHtml(snapshot.receipt_footer)}</p>` : ""}
         </div>

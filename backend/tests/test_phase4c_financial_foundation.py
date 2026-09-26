@@ -1,10 +1,11 @@
 import asyncio
 import os
 import unittest
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -136,20 +137,88 @@ class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):
             VALUES (:id,:company,'USD','$',2,'Tax',0,false,'80mm',false,'["cash","card","mobile","credit"]'::jsonb,true,false)
         """), {"id": uuid4(), "company": COMPANY})
 
-    async def create_customer(self, *, code="CUST", enabled=True, limit="100.00", unlimited=False):
+    async def create_customer(self, *, code="CUST", enabled=True, limit="100.00", unlimited=False, active=True):
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             return await CustomerService(CustomerRepository(session)).create(CustomerCreate(
                 company_id=COMPANY, customer_code=code, name=f"Customer {code}",
                 credit_enabled=enabled, unlimited_credit=unlimited,
-                credit_limit=None if unlimited else limit, credit_terms_days=30,
+                credit_limit=None if unlimited else limit, credit_terms_days=30, active=active,
             ), self.owner)
 
-    async def credit_sale(self, customer_id, amount="60.00"):
+    async def credit_sale(self, customer_id, amount="60.00", client_sale_id=None):
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             return await SalesService(SalesRepository(session)).create_sale(SaleCreate(
                 company_id=COMPANY, branch_id=BRANCH, customer_id=customer_id,
-                payment_method="credit", items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price=amount, line_total=amount)],
+                payment_method="credit", client_sale_id=client_sale_id,
+                items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price=amount, line_total=amount)],
             ), actor=self.owner)
+
+    async def test_pos_credit_customer_status_unlimited_and_customer_required(self):
+        async with AsyncSession(self.engine) as session:
+            with self.assertRaisesRegex(HTTPException, "customer is required"):
+                await SalesService(SalesRepository(session)).create_sale(SaleCreate(
+                    company_id=COMPANY, branch_id=BRANCH, payment_method="credit",
+                    items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="60.00", line_total="60.00")],
+                ), actor=self.owner)
+
+        inactive = await self.create_customer(code="INACTIVE", active=False)
+        with self.assertRaisesRegex(HTTPException, "not found or inactive"):
+            await self.credit_sale(inactive["id"])
+
+        unlimited = await self.create_customer(code="UNLIMITED", unlimited=True, limit=None)
+        sale = await self.credit_sale(unlimited["id"], "1000.00")
+        self.assertEqual(sale.customer_id, unlimited["id"])
+        async with AsyncSession(self.engine) as session:
+            receivable = (await session.execute(
+                select(CreditReceivable).where(CreditReceivable.sale_id == sale.id)
+            )).scalar_one()
+            self.assertEqual(receivable.original_amount, Decimal("1000.00"))
+            self.assertEqual(receivable.outstanding_balance, Decimal("1000.00"))
+            self.assertEqual(receivable.due_date, datetime.now(ZoneInfo("Africa/Harare")).date() + timedelta(days=30))
+
+    async def test_pos_credit_duplicate_retry_deducts_inventory_once(self):
+        customer = await self.create_customer(code="IDEMPOTENT", unlimited=True, limit=None)
+        client_sale_id = uuid4()
+        first = await self.credit_sale(customer["id"], "60.00", client_sale_id)
+        second = await self.credit_sale(customer["id"], "60.00", client_sale_id)
+        self.assertEqual(first.id, second.id)
+
+        async with AsyncSession(self.engine) as session:
+            receivable_count = (await session.execute(text(
+                "SELECT count(*) FROM credit_receivables WHERE sale_id=:sale_id"
+            ), {"sale_id": first.id})).scalar_one()
+            movement_count = (await session.execute(text(
+                "SELECT count(*) FROM inventory_movements WHERE reference=:reference"
+            ), {"reference": first.receipt_number})).scalar_one()
+            branch_quantity = (await session.execute(text(
+                "SELECT quantity FROM inventory_balances WHERE company_id=:company AND branch_id=:branch AND product_id=:product"
+            ), {"company": COMPANY, "branch": BRANCH, "product": PRODUCT})).scalar_one()
+            self.assertEqual(receivable_count, 1)
+            self.assertEqual(movement_count, 1)
+            self.assertEqual(branch_quantity, Decimal("19.000"))
+
+    async def test_cash_card_mobile_sales_remain_non_credit(self):
+        sale_ids = []
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = SalesService(SalesRepository(session))
+            for method in ("cash", "card", "mobile"):
+                sale = await service.create_sale(SaleCreate(
+                    company_id=COMPANY,
+                    branch_id=BRANCH,
+                    payment_method=method,
+                    amount_received="60.00" if method == "cash" else None,
+                    client_sale_id=uuid4(),
+                    items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="60.00", line_total="60.00")],
+                ), actor=self.owner)
+                self.assertEqual(sale.payment_method, method)
+                self.assertIsNone(sale.customer_id)
+                sale_ids.append(sale.id)
+
+        async with AsyncSession(self.engine) as session:
+            receivable_count = (await session.execute(text(
+                "SELECT count(*) FROM credit_receivables WHERE sale_id = ANY(:sale_ids)"
+            ), {"sale_ids": sale_ids})).scalar_one()
+            self.assertEqual(receivable_count, 0)
 
     async def test_company_isolation_credit_policy_and_limit(self):
         disabled = await self.create_customer(code="OFF", enabled=False, limit=None)

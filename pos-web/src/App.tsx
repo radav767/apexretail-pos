@@ -7,6 +7,10 @@ import {
 } from "./api/client";
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
 import {
+  projectCreditSale,
+  type CreditCustomer,
+} from "./creditSale";
+import {
   clearAuthenticationPreservingDeviceIdentity,
   getOrCreateDeviceKey,
   getPinLoginDeviceIdentity,
@@ -118,6 +122,11 @@ type Receipt = {
   pos_name_snapshot?: string | null;
   pos_number_snapshot?: string | null;
   receipt_footer_snapshot?: string | null;
+  customer_id?: string | null;
+  customer_name_snapshot?: string | null;
+  customer_code_snapshot?: string | null;
+  credit_due_date?: string | null;
+  credit_outstanding_balance?: string | null;
   subtotal_amount?: string;
   tax_name?: string | null;
   tax_rate?: string;
@@ -264,6 +273,13 @@ const [loggedIn, setLoggedIn] = useState(
   const [quarantinedSales, setQuarantinedSales] =
     useState<QuarantinedOfflineSale[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [showCreditSale, setShowCreditSale] = useState(false);
+  const [creditCustomerSearch, setCreditCustomerSearch] = useState("");
+  const [creditCustomers, setCreditCustomers] = useState<CreditCustomer[]>([]);
+  const [selectedCreditCustomer, setSelectedCreditCustomer] =
+    useState<CreditCustomer | null>(null);
+  const [creditCustomersLoading, setCreditCustomersLoading] = useState(false);
+  const [creditDialogMessage, setCreditDialogMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [activePosModule, setActivePosModule] = useState<PosModuleName>(initialPosModule);
 
@@ -317,6 +333,8 @@ const [loggedIn, setLoggedIn] = useState(
   } | null>(null);
   const latestDiscoveryRequestIdRef = useRef(0);
   const activeDiscoveryScopeRef = useRef<string | null>(null);
+  const saleSubmissionInFlightRef = useRef(false);
+  const creditClientSaleIdRef = useRef<string | null>(null);
 
   function validateRegistrationForm() {
     const trimmedOwnerName = ownerName.trim();
@@ -654,6 +672,10 @@ const [loggedIn, setLoggedIn] = useState(
 
   const numericAmountReceived = Number(amountReceived || 0);
   const previewChange = Math.max(0, numericAmountReceived - total);
+  const creditProjection = projectCreditSale(
+    selectedCreditCustomer,
+    total,
+  );
 
   async function loadBusinessSettings(
     selectedCompanyId: string,
@@ -838,6 +860,11 @@ const [loggedIn, setLoggedIn] = useState(
         null,
       created_at: sale.created_at,
       cashier_name: cashierName || cashier?.name || null,
+      customer_name: sale.customer_name_snapshot || null,
+      customer_code: sale.customer_code_snapshot || null,
+      credit_due_date: sale.credit_due_date || null,
+      credit_outstanding_balance:
+        sale.credit_outstanding_balance || null,
       subtotal_amount: sale.subtotal_amount,
       tax_name: sale.tax_name || null,
       tax_rate: sale.tax_rate,
@@ -1935,7 +1962,64 @@ const [loggedIn, setLoggedIn] = useState(
     );
   }
 
-  function startPayment() {
+  async function loadCreditCustomers(query = creditCustomerSearch) {
+    try {
+      setCreditCustomersLoading(true);
+      setCreditDialogMessage("");
+      const response = await api.get(`/customers/${companyId}`, {
+        params: {
+          active: true,
+          search: query.trim() || undefined,
+          limit: 100,
+        },
+      });
+      const customers = (Array.isArray(response.data) ? response.data : [])
+        .filter((customer: CreditCustomer) => customer.active);
+      setCreditCustomers(customers);
+      if (
+        selectedCreditCustomer &&
+        !customers.some((customer: CreditCustomer) =>
+          customer.id === selectedCreditCustomer.id)
+      ) {
+        setSelectedCreditCustomer(null);
+      }
+    } catch (error) {
+      setCreditCustomers([]);
+      setCreditDialogMessage(
+        getApiErrorMessage(error, "Unable to load customers"),
+      );
+    } finally {
+      setCreditCustomersLoading(false);
+    }
+  }
+
+  async function openCreditSaleDialog() {
+    if (!(await isDeviceOnline())) {
+      setMessage("Credit sales require an online connection. Reconnect and try again.");
+      return;
+    }
+    if (cashier?.permissions?.credit_sales === false) {
+      setMessage("This cashier does not have permission to create credit sales.");
+      return;
+    }
+
+    setCreditCustomerSearch("");
+    setSelectedCreditCustomer(null);
+    setCreditDialogMessage("");
+    creditClientSaleIdRef.current = createClientSaleId();
+    setShowCreditSale(true);
+    await loadCreditCustomers("");
+  }
+
+  function closeCreditSaleDialog() {
+    if (processing) return;
+    setShowCreditSale(false);
+    setSelectedCreditCustomer(null);
+    setCreditDialogMessage("");
+    creditClientSaleIdRef.current = null;
+  }
+
+  async function startPayment() {
     setMessage("");
     if (discountError) { setMessage(discountError); return; }
 
@@ -1950,12 +2034,20 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
+    if (paymentMethod === "credit") {
+      await openCreditSaleDialog();
+      return;
+    }
+
     void submitSale();
   }
 
-  async function submitSale(cashAmount?: number) {
+  async function submitSale(
+    cashAmount?: number,
+    creditCustomer?: CreditCustomer,
+  ) {
     if (discountError) { setMessage(discountError); return; }
-    if (!cart.length || processing) {
+    if (!cart.length || processing || saleSubmissionInFlightRef.current) {
       return;
     }
 
@@ -1964,17 +2056,44 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
+    if (paymentMethod === "credit") {
+      if (!(await isDeviceOnline())) {
+        setCreditDialogMessage(
+          "Credit sales require an online connection. Reconnect and try again.",
+        );
+        return;
+      }
+      const projection = projectCreditSale(creditCustomer || null, total);
+      if (projection.error) {
+        setCreditDialogMessage(projection.error);
+        return;
+      }
+    }
+
+    if (saleSubmissionInFlightRef.current) {
+      return;
+    }
+    saleSubmissionInFlightRef.current = true;
     setProcessing(true);
     setMessage("");
+    setCreditDialogMessage("");
 
     const completedItems = discounted.items;
-    const clientSaleId = createClientSaleId();
+    const clientSaleId = paymentMethod === "credit"
+      ? creditClientSaleIdRef.current || createClientSaleId()
+      : createClientSaleId();
 
-    const payload: OfflineSalePayload = {
+    if (paymentMethod === "credit") {
+      creditClientSaleIdRef.current = clientSaleId;
+    }
+
+    const payload: OfflineSalePayload & { customer_id?: string | null } = {
       client_sale_id: clientSaleId,
       company_id: companyId,
       branch_id: branchId || null,
       employee_id: cashier.id,
+      customer_id:
+        paymentMethod === "credit" ? creditCustomer?.id || null : null,
       device_id:
         localStorage.getItem("device_id") || null,
       device_key:
@@ -2024,6 +2143,9 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     const completeOfflineSale = async () => {
+      if (paymentMethod === "credit") {
+        throw new Error("Credit sales are online-only and cannot be queued.");
+      }
       if (!(await canCreateOfflineSale())) {
         setMessage(
           entitlementSnapshot?.message ||
@@ -2143,10 +2265,23 @@ const [loggedIn, setLoggedIn] = useState(
           await api.post("/sales", payload);
 
         const savedReceipt = response.data as Receipt;
+        const completedReceipt = paymentMethod === "credit" && creditCustomer
+          ? {
+              ...savedReceipt,
+              customer_id: savedReceipt.customer_id || creditCustomer.id,
+              customer_name_snapshot:
+                savedReceipt.customer_name_snapshot || creditCustomer.name,
+              customer_code_snapshot:
+                savedReceipt.customer_code_snapshot || creditCustomer.customer_code,
+              credit_due_date: creditProjection.dueDate,
+              credit_outstanding_balance: total.toFixed(2),
+            }
+          : savedReceipt;
 
-        setReceipt(savedReceipt);
+        setReceipt(completedReceipt);
         setReceiptItems(completedItems);
         setShowTender(false);
+        setShowCreditSale(false);
         setCart([]);
         setSaleDiscount("0");
         setAmountReceived("");
@@ -2156,7 +2291,7 @@ const [loggedIn, setLoggedIn] = useState(
 
         await archiveAndMaybePrintReceipt(
           buildReceiptSnapshot(
-            savedReceipt,
+            completedReceipt,
             completedItems.map((item) => ({
               product_id: item.id,
               name: item.name,
@@ -2173,6 +2308,7 @@ const [loggedIn, setLoggedIn] = useState(
           companyId,
           branchId || undefined,
         );
+        creditClientSaleIdRef.current = null;
       } catch (error: any) {
         /*
          * Only network failures are converted into
@@ -2182,6 +2318,7 @@ const [loggedIn, setLoggedIn] = useState(
          * queued, because they need to be corrected.
          */
         if (
+          paymentMethod !== "credit" &&
           isAndroidNativeApp() &&
           isNetworkFailure(error)
         ) {
@@ -2198,10 +2335,14 @@ const [loggedIn, setLoggedIn] = useState(
         throw error;
       }
     } catch (error: any) {
-      setMessage(
-        getApiErrorMessage(error, "Sale failed"),
-      );
+      const failureMessage = getApiErrorMessage(error, "Sale failed");
+      if (paymentMethod === "credit") {
+        setCreditDialogMessage(failureMessage);
+      } else {
+        setMessage(failureMessage);
+      }
     } finally {
+      saleSubmissionInFlightRef.current = false;
       setProcessing(false);
     }
   }
@@ -2214,6 +2355,10 @@ const [loggedIn, setLoggedIn] = useState(
     setReceipt(null);
     setReceiptItems([]);
     setPaymentMethod("cash");
+    setSelectedCreditCustomer(null);
+    setCreditCustomers([]);
+    setCreditDialogMessage("");
+    creditClientSaleIdRef.current = null;
     setMessage("");
     setSearch("");
   }
@@ -2256,6 +2401,11 @@ const [loggedIn, setLoggedIn] = useState(
     setCompanyId("");
     setMessage("");
     setShowTender(false);
+    setShowCreditSale(false);
+    setSelectedCreditCustomer(null);
+    setCreditCustomers([]);
+    setCreditDialogMessage("");
+    creditClientSaleIdRef.current = null;
     setAmountReceived("");
     setAuthMode("login");
   }
@@ -3329,7 +3479,7 @@ const [loggedIn, setLoggedIn] = useState(
 
         <button
           style={primaryButton}
-          onClick={startPayment}
+          onClick={() => void startPayment()}
           disabled={processing || !cart.length}
         >
           {processing ? "Processing..." : "Complete Sale"}
@@ -3345,6 +3495,91 @@ const [loggedIn, setLoggedIn] = useState(
 
         <p style={messageText}>{message}</p>
       </aside>
+
+      {showCreditSale && (
+        <div style={overlay} className="pos-credit-overlay">
+          <div style={modalCard} className="pos-credit-dialog" role="dialog" aria-modal="true" aria-labelledby="credit-sale-title">
+            <h2 id="credit-sale-title" style={{ marginTop: 0 }}>Credit Sale</h2>
+            <p className="pos-credit-online-notice">Online validation is required before this sale can be posted.</p>
+
+            <form
+              className="pos-credit-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void loadCreditCustomers();
+              }}
+            >
+              <label htmlFor="credit-customer-search">Search active customers</label>
+              <div>
+                <input
+                  id="credit-customer-search"
+                  value={creditCustomerSearch}
+                  placeholder="Name, phone or customer code"
+                  onChange={(event) => setCreditCustomerSearch(event.target.value)}
+                />
+                <button type="submit" style={secondaryButton} disabled={creditCustomersLoading}>
+                  {creditCustomersLoading ? "Searching..." : "Search"}
+                </button>
+              </div>
+            </form>
+
+            <div className="pos-credit-customer-list" aria-label="Active customers">
+              {!creditCustomersLoading && !creditCustomers.length && (
+                <p>No active customers found.</p>
+              )}
+              {creditCustomers.map((customer) => (
+                <button
+                  type="button"
+                  key={customer.id}
+                  className={selectedCreditCustomer?.id === customer.id ? "selected" : ""}
+                  onClick={() => {
+                    setSelectedCreditCustomer(customer);
+                    setCreditDialogMessage("");
+                  }}
+                >
+                  <strong>{customer.name}</strong>
+                  <span>{customer.customer_code}</span>
+                  <small>
+                    Balance {formatMoney(customer.outstanding_balance)} · {customer.credit_enabled ? "Credit enabled" : "Credit disabled"}
+                  </small>
+                </button>
+              ))}
+            </div>
+
+            <section className="pos-credit-summary" aria-label="Credit sale summary">
+              <div><span>Customer</span><strong>{selectedCreditCustomer ? `${selectedCreditCustomer.name} (${selectedCreditCustomer.customer_code})` : "Not selected"}</strong></div>
+              <div><span>Credit status</span><strong>{selectedCreditCustomer?.credit_enabled ? "Enabled" : "Disabled"}</strong></div>
+              <div><span>Current outstanding</span><strong>{formatMoney(creditProjection.outstandingBalance)}</strong></div>
+              <div><span>Credit limit</span><strong>{selectedCreditCustomer?.unlimited_credit ? "Explicit unlimited credit" : selectedCreditCustomer?.credit_limit != null ? formatMoney(selectedCreditCustomer.credit_limit) : "Not configured"}</strong></div>
+              <div><span>Available credit</span><strong>{selectedCreditCustomer?.unlimited_credit ? "Unlimited" : creditProjection.availableCredit == null ? "Not available" : formatMoney(creditProjection.availableCredit)}</strong></div>
+              <div><span>Sale total</span><strong>{formatMoney(total)}</strong></div>
+              <div><span>Projected balance</span><strong>{formatMoney(creditProjection.projectedBalance)}</strong></div>
+              <div><span>Credit terms</span><strong>{selectedCreditCustomer ? `${selectedCreditCustomer.credit_terms_days} days` : "—"}</strong></div>
+              <div><span>Due date</span><strong>{creditProjection.dueDate || "—"}</strong></div>
+            </section>
+
+            {(creditProjection.error || creditDialogMessage) && (
+              <p role="alert" className="pos-credit-error">
+                {creditDialogMessage || creditProjection.error}
+              </p>
+            )}
+
+            <div className="pos-credit-actions">
+              <button
+                type="button"
+                style={primaryButton}
+                disabled={processing || Boolean(creditProjection.error)}
+                onClick={() => void submitSale(undefined, selectedCreditCustomer || undefined)}
+              >
+                {processing ? "Posting credit sale..." : "Confirm Credit Sale"}
+              </button>
+              <button type="button" style={secondaryButton} disabled={processing} onClick={closeCreditSaleDialog}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showTender && (
         <div style={overlay}>
@@ -3582,6 +3817,25 @@ const [loggedIn, setLoggedIn] = useState(
                   {receipt.payment_method.toUpperCase()}
                 </strong>
               </div>
+              {receipt.payment_method === "credit" && (
+                <>
+                  <div>
+                    <span>Customer</span>
+                    <strong>
+                      {receipt.customer_name_snapshot || "Customer"}
+                      {receipt.customer_code_snapshot ? ` (${receipt.customer_code_snapshot})` : ""}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>This credit sale outstanding</span>
+                    <strong>{formatMoney(receipt.credit_outstanding_balance || receipt.total_amount)}</strong>
+                  </div>
+                  <div>
+                    <span>Due date</span>
+                    <strong>{receipt.credit_due_date || "See customer account"}</strong>
+                  </div>
+                </>
+              )}
             </div>
 
             <button style={primaryButton} onClick={printReceipt}>

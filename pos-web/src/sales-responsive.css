@@ -271,6 +271,114 @@
   font-weight: 800;
 }
 
+/* Credit sale dialog */
+.pos-credit-dialog {
+  width: min(760px, 100%) !important;
+}
+
+.pos-credit-online-notice {
+  margin: -4px 0 18px;
+  color: #475569;
+}
+
+.pos-credit-search label {
+  display: block;
+  margin-bottom: 7px;
+  color: #475569;
+  font-weight: 800;
+}
+
+.pos-credit-search > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.pos-credit-search input {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  font: inherit;
+}
+
+.pos-credit-search button,
+.pos-credit-actions button {
+  margin-top: 0 !important;
+}
+
+.pos-credit-customer-list {
+  max-height: 220px;
+  margin: 14px 0;
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.pos-credit-customer-list > button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  text-align: left;
+}
+
+.pos-credit-customer-list > button.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
+.pos-credit-customer-list small {
+  grid-column: 1 / -1;
+  color: #64748b;
+}
+
+.pos-credit-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #e2e8f0;
+}
+
+.pos-credit-summary > div {
+  min-width: 0;
+  padding: 11px 12px;
+  display: grid;
+  gap: 4px;
+  background: #f8fafc;
+}
+
+.pos-credit-summary span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pos-credit-summary strong {
+  overflow-wrap: anywhere;
+}
+
+.pos-credit-error {
+  margin: 12px 0 0;
+  color: #b42318;
+  font-weight: 800;
+}
+
+.pos-credit-actions {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.4fr);
+  gap: 10px;
+}
+
 /* Improve cart row usability */
 .pos-sales-cart [style*="border-bottom"] {
   transition: background 120ms ease;
@@ -344,6 +452,28 @@
 
 /* Narrow phones */
 @media (max-width: 560px) {
+  .pos-credit-overlay {
+    padding: 0 !important;
+    align-items: end !important;
+  }
+
+  .pos-credit-dialog {
+    width: 100% !important;
+    max-width: none !important;
+    max-height: 94dvh !important;
+    padding: 20px 14px !important;
+    border-radius: 20px 20px 0 0 !important;
+  }
+
+  .pos-credit-search > div,
+  .pos-credit-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .pos-credit-summary {
+    grid-template-columns: 1fr;
+  }
+
   .pos-sales-main {
     padding: 10px !important;
   }
