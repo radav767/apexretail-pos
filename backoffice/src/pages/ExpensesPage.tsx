@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api/client";
-import { categoryBreakdown, expenseAmountError, expenseSummary } from "./expenseLogic";
+import { categoryBreakdown, expenseSummary } from "./expenseLogic";
 import type { ExpenseLogicRow } from "./expenseLogic";
 import "./expenses.css";
 
@@ -19,10 +19,6 @@ const now = new Date();
 const today = now.toISOString().slice(0, 10);
 const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
 
-function localDateTimeValue(value = new Date()) {
-  return new Date(value.getTime() - value.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
 function nextDay(date: string) {
   const value = new Date(`${date}T00:00:00`);
   value.setDate(value.getDate() + 1);
@@ -36,11 +32,6 @@ function money(value: string | number, currency = "USD") {
 }
 
 function shortId(value: string | null) { return value ? value.slice(0, 8).toUpperCase() : "Unknown"; }
-function requestKey() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  return `expense-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 export default function ExpensesPage({ companyId }: { companyId: string }) {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
@@ -55,15 +46,6 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
   const [appliedSearch, setAppliedSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [expenseOpen, setExpenseOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [amountValue, setAmountValue] = useState("");
-  const [expenseCategoryId, setExpenseCategoryId] = useState("");
-  const [expenseBranchId, setExpenseBranchId] = useState("");
-  const [occurredAt, setOccurredAt] = useState(localDateTimeValue());
-  const [expenseMethod, setExpenseMethod] = useState<"cash" | "card" | "mobile">("cash");
-  const [reference, setReference] = useState("");
-  const [description, setDescription] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [categoryDescription, setCategoryDescription] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState("");
@@ -77,8 +59,6 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
     ]);
     setCategories(categoryResponse.data);
     setBranches(branchResponse.data);
-    setExpenseCategoryId((current) => current || categoryResponse.data.find((item: ExpenseCategory) => item.active)?.id || "");
-    setExpenseBranchId((current) => current || branchResponse.data[0]?.id || "");
   }, [companyId]);
 
   const loadExpenses = useCallback(async (preserveMessage = false) => {
@@ -123,47 +103,6 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
     });
     return [...options.entries()];
   }, [expenses]);
-
-  function openExpense() {
-    setAmountValue("");
-    setExpenseCategoryId(categories.find((item) => item.active)?.id || "");
-    setExpenseBranchId(branches[0]?.id || "");
-    setOccurredAt(localDateTimeValue());
-    setExpenseMethod("cash");
-    setReference("");
-    setDescription("");
-    setMessage("");
-    setExpenseOpen(true);
-  }
-
-  async function saveExpense(event: FormEvent) {
-    event.preventDefault();
-    const amountError = expenseAmountError(amountValue);
-    if (amountError) { setMessage(amountError); return; }
-    if (!expenseCategoryId) { setMessage("Select an active expense category."); return; }
-    if (!expenseBranchId) { setMessage("Select a permitted branch."); return; }
-    if (!description.trim()) { setMessage("Enter an expense description or note."); return; }
-    setSaving(true);
-    setMessage("");
-    try {
-      await api.post("/expenses", {
-        company_id: companyId,
-        category_id: expenseCategoryId,
-        branch_id: expenseBranchId,
-        amount: Number(amountValue),
-        occurred_at: new Date(occurredAt).toISOString(),
-        payment_method: expenseMethod,
-        reference: reference.trim() || null,
-        description: description.trim(),
-        idempotency_key: requestKey(),
-      });
-      setExpenseOpen(false);
-      setMessage(`Expense posted. ${expenseMethod === "cash" ? "Expected cash-on-hand and " : ""}Net profit have been updated.`);
-      await loadExpenses(true);
-    } catch (error: any) {
-      setMessage(!error.response ? "An online connection is required to post this expense." : error.response?.data?.detail || "Failed to post expense.");
-    } finally { setSaving(false); }
-  }
 
   function editCategory(category: ExpenseCategory) {
     setEditingCategoryId(category.id);
@@ -227,7 +166,7 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
     </section>
 
     <section className="expense-filter-panel">
-      <div className="expense-section-header"><div><h2>Expense history</h2><p>Posted expenses are immutable, reduce net profit, and never count as sales revenue.</p></div><button type="button" className="primary-button expense-add-button" onClick={openExpense}>Add Expense</button></div>
+      <div className="expense-section-header"><div><h2>Expense report</h2><p>Cashiers post expenses in POS. Posted expenses are immutable, reduce net profit, and never count as sales revenue.</p></div></div>
       <form className="expense-filters" onSubmit={(event) => { event.preventDefault(); const value = search.trim(); if (value === appliedSearch) void loadExpenses(); else setAppliedSearch(value); }}>
         <label>Date from<input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} /></label>
         <label>Date to<input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} /></label>
@@ -265,21 +204,5 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
       </article>
     </section>
 
-    {expenseOpen && <div className="expense-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setExpenseOpen(false); }}><section className="expense-dialog" role="dialog" aria-modal="true" aria-labelledby="expense-dialog-title">
-      <div className="expense-section-header"><div><h2 id="expense-dialog-title">Add Expense</h2><p>Posting creates an immutable financial transaction.</p></div><button type="button" onClick={() => setExpenseOpen(false)} disabled={saving}>Close</button></div>
-      <form onSubmit={(event) => void saveExpense(event)}><div className="expense-form-grid">
-        <label>Amount<input type="number" inputMode="decimal" min="0.01" step="0.01" value={amountValue} onChange={(event) => setAmountValue(event.target.value)} required /></label>
-        <label>Category<select value={expenseCategoryId} onChange={(event) => setExpenseCategoryId(event.target.value)} required><option value="">Select active category</option>{categories.filter((category) => category.active).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-        <label>Branch<select value={expenseBranchId} onChange={(event) => setExpenseBranchId(event.target.value)} required><option value="">Select permitted branch</option>{branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.shop_name} — {branch.name}</option>)}</select></label>
-        <label>Date and time<input type="datetime-local" value={occurredAt} onChange={(event) => setOccurredAt(event.target.value)} required /></label>
-        <label>Payment method<select value={expenseMethod} onChange={(event) => setExpenseMethod(event.target.value as typeof expenseMethod)}><option value="cash">Cash</option><option value="card">Card</option><option value="mobile">Mobile / Transfer</option></select></label>
-        <label>Reference<input maxLength={160} value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Optional receipt or transaction reference" /></label>
-        <label className="expense-description-field">Description / note<textarea maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} required /></label>
-      </div>
-      {expenseAmountError(amountValue) && amountValue !== "" && <p className="expense-validation" role="alert">{expenseAmountError(amountValue)}</p>}
-      <div className="expense-treatment-note"><strong>Financial treatment</strong><span>This expense reduces net profit by its gross amount and is not sales revenue.{expenseMethod === "cash" ? " Cash also reduces expected cash-on-hand." : ` It remains classified as ${expenseMethod === "mobile" ? "mobile / transfer" : expenseMethod}.`}</span></div>
-      <button type="submit" className="primary-button expense-save-button" disabled={saving || Boolean(expenseAmountError(amountValue))}>{saving ? "Posting…" : "Post Expense"}</button>
-      </form>
-    </section></div>}
   </div>;
 }

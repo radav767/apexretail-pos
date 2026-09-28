@@ -8,13 +8,13 @@ const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 
 test("Customers is a distinct Backoffice destination without changing logout behavior", () => {
   assert.match(app, /import CustomersPage/);
-  assert.match(app, />\s*Customers\s*</);
+  assert.match(app, />\s*Customer Accounts\s*</);
   assert.match(app, /page === "customers" && \(\s*<CustomersPage/);
   assert.match(app, /function navigateTo[\s\S]*setMobileMenuOpen\(false\)/);
   assert.match(app, /className="logout-nav-button"/);
 });
 
-test("customer list, editor and explicit credit policy use Phase 1 APIs", () => {
+test("customer report, statements and limited credit editor use Phase 1 APIs", () => {
   for (const endpoint of [
     "/customers/${companyId}",
     "/customers/${companyId}/${customerId}/transactions",
@@ -26,7 +26,8 @@ test("customer list, editor and explicit credit policy use Phase 1 APIs", () => 
     "credit_terms_days", "outstanding_balance", "available_credit",
   ]) assert.ok(page.includes(field));
   assert.match(page, /Name, phone or customer code/);
-  assert.match(page, /Credit remains disabled unless it is explicitly enabled/);
+  assert.match(page, /New customers are created at the POS/);
+  assert.doesNotMatch(page, /api\.post\("\/customers"/);
 });
 
 test("customer details expose history, receivables and settlements", () => {

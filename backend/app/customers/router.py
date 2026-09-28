@@ -18,7 +18,7 @@ def get_service(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=CustomerOut)
-async def create_customer(data: CustomerCreate, service: CustomerService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("customers_manage")), _entitlement: None = Depends(require_billable_body_company)):
+async def create_customer(data: CustomerCreate, service: CustomerService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("customers_view")), _entitlement: None = Depends(require_billable_body_company)):
     return await service.create(data, actor)
 
 
@@ -33,7 +33,7 @@ async def get_customer(company_id: UUID, customer_id: UUID, service: CustomerSer
 
 
 @router.patch("/{company_id}/{customer_id}", response_model=CustomerOut)
-async def update_customer(company_id: UUID, customer_id: UUID, data: CustomerUpdate, service: CustomerService = Depends(get_service), actor: AuthActor = Depends(require_path_permission("customers_manage"))):
+async def update_customer(company_id: UUID, customer_id: UUID, data: CustomerUpdate, service: CustomerService = Depends(get_service), actor: AuthActor = Depends(require_path_permission("customers_view"))):
     return await service.update(company_id, customer_id, data, actor)
 
 

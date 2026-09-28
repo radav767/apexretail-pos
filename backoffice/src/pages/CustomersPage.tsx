@@ -154,13 +154,6 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
     outstanding: customers.reduce((total, customer) => total + Number(customer.outstanding_balance || 0), 0),
   }), [customers]);
 
-  function openAdd() {
-    setEditingId("");
-    setForm(emptyForm);
-    setEditorOpen(true);
-    setMessage("");
-  }
-
   function openEdit(customer: Customer) {
     setEditingId(customer.id);
     setForm({
@@ -218,12 +211,8 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
     setSaving(true);
     setMessage("");
     try {
-      if (editingId) {
-        await api.patch(`/customers/${companyId}/${editingId}`, payload);
-      } else {
-        await api.post("/customers", { company_id: companyId, ...payload });
-      }
-      setMessage(editingId ? "Customer updated successfully." : "Customer added successfully.");
+      await api.patch(`/customers/${companyId}/${editingId}`, payload);
+      setMessage("Customer configuration updated successfully.");
       setEditorOpen(false);
       setEditingId("");
       setForm(emptyForm);
@@ -235,20 +224,6 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
         : error.response?.data?.detail || "Failed to save customer.");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function changeStatus(customer: Customer) {
-    setMessage("");
-    try {
-      await api.patch(`/customers/${companyId}/${customer.id}`, { active: !customer.active });
-      setMessage(`${customer.name} is now ${customer.active ? "inactive" : "active"}.`);
-      await loadCustomers(false);
-      if (selected?.id === customer.id) await openDetails(customer.id);
-    } catch (error: any) {
-      setMessage(error.response?.status === 403
-        ? "You do not have permission to manage customers."
-        : error.response?.data?.detail || "Failed to change customer status.");
     }
   }
 
@@ -289,8 +264,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
 
     <section className="customer-list-panel">
       <div className="customer-section-header">
-        <div><h2>Customers</h2><p>Manage customer records, credit policy and account activity.</p></div>
-        <button type="button" className="primary-button customer-add-button" onClick={openAdd}>Add Customer</button>
+        <div><h2>Customer report</h2><p>Review customer balances and statements. New customers are created at the POS.</p></div>
       </div>
 
       <form className="customer-filters" onSubmit={(event) => {
@@ -316,7 +290,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
               <td data-label="Credit">{customer.credit_enabled ? <><strong>{customer.unlimited_credit ? "Unlimited" : `Limit ${amount(customer.credit_limit)}`}</strong><small>{customer.credit_terms_days} day terms</small></> : <span className="customer-muted">Disabled</span>}</td>
               <td data-label="Outstanding"><strong>{amount(customer.outstanding_balance)}</strong></td>
               <td data-label="Status"><span className={customer.active ? "customer-active" : "customer-inactive"}>{customer.active ? "Active" : "Inactive"}</span></td>
-              <td data-label="Actions"><div className="customer-row-actions"><button type="button" onClick={() => void openDetails(customer.id)}>View</button><button type="button" onClick={() => openEdit(customer)}>Edit</button><button type="button" onClick={() => void changeStatus(customer)}>{customer.active ? "Deactivate" : "Activate"}</button></div></td>
+              <td data-label="Actions"><div className="customer-row-actions"><button type="button" onClick={() => void openDetails(customer.id)}>Statement</button><button type="button" onClick={() => openEdit(customer)}>Administrative edit</button></div></td>
             </tr>)}
           </tbody>
         </table>
@@ -353,7 +327,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
 
     {editorOpen && <div className="customer-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeEditor(); }}>
       <section className="customer-dialog" role="dialog" aria-modal="true" aria-labelledby="customer-dialog-title">
-        <div className="customer-section-header"><div><h2 id="customer-dialog-title">{editingId ? "Edit Customer" : "Add Customer"}</h2><p>Credit remains disabled unless it is explicitly enabled here.</p></div><button type="button" onClick={closeEditor}>Close</button></div>
+        <div className="customer-section-header"><div><h2 id="customer-dialog-title">Customer administrative edit</h2><p>Limited contact, status and credit configuration changes are audited.</p></div><button type="button" onClick={closeEditor}>Close</button></div>
         <form onSubmit={(event) => void saveCustomer(event)}>
           <div className="customer-form-grid">
             <label>Customer name<input required maxLength={160} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} /></label>
@@ -374,7 +348,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
           </fieldset>
 
           <label className="customer-toggle customer-active-toggle"><input type="checkbox" checked={form.active} onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))} /><span><strong>Active customer</strong><small>Inactive customers remain in history but cannot be used for new credit sales.</small></span></label>
-          <button className="primary-button customer-save-button" type="submit" disabled={saving}>{saving ? "Saving…" : editingId ? "Save Changes" : "Add Customer"}</button>
+          <button className="primary-button customer-save-button" type="submit" disabled={saving}>{saving ? "Saving…" : "Save Changes"}</button>
         </form>
       </section>
     </div>}

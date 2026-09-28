@@ -472,19 +472,19 @@ function App() {
             className={`${page === "customers" ? "active" : ""} customers-nav-button`.trim()}
             onClick={() => navigateTo("customers")}
           >
-            Customers
+            Customer Accounts
           </button>
           <button
             className={`${page === "credit-settlements" ? "active" : ""} credit-settlements-nav-button`.trim()}
             onClick={() => navigateTo("credit-settlements")}
           >
-            Credit Settlements
+            Credit Reports
           </button>
           <button
             className={`${page === "expenses" ? "active" : ""} expenses-nav-button`.trim()}
             onClick={() => navigateTo("expenses")}
           >
-            Expenses
+            Expense Reports
           </button>
           <button
             className="logout-nav-button"
@@ -517,11 +517,11 @@ function App() {
                         : page === "reports"
                           ? "Sales Reports"
                           : page === "customers"
-                            ? "Customers & Credit"
+                            ? "Customer Accounts & Statements"
                             : page === "credit-settlements"
-                              ? "Credit Settlements"
+                              ? "Outstanding Credit & Settlements"
                               : page === "expenses"
-                                ? "Expenses"
+                                ? "Expense Reports & Categories"
                           : page === "settings"
                             ? "Business Settings"
                             : "Shops & Devices"}

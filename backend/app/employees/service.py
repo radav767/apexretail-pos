@@ -51,6 +51,7 @@ PERMISSION_KEYS = {
     "credit_sales",
     "credit_settlements",
     "expenses_manage",
+    "expenses_create",
     "expense_reports",
 }
 
@@ -64,7 +65,7 @@ ROLE_PERMISSIONS = {
         "manage_devices": True,
         "customers_view": True, "customers_manage": True,
         "credit_sales": True, "credit_settlements": True,
-        "expenses_manage": True, "expense_reports": True,
+        "expenses_manage": True, "expenses_create": True, "expense_reports": True,
     },
     "cashier": {
         "sales": True,
@@ -79,7 +80,7 @@ ROLE_PERMISSIONS = {
         "manage_devices": False,
         "customers_view": True, "customers_manage": False,
         "credit_sales": False, "credit_settlements": False,
-        "expenses_manage": False, "expense_reports": False,
+        "expenses_manage": False, "expenses_create": True, "expense_reports": False,
     },
     "manager": {
         "sales": True,
@@ -94,7 +95,7 @@ ROLE_PERMISSIONS = {
         "manage_devices": False,
         "customers_view": True, "customers_manage": True,
         "credit_sales": True, "credit_settlements": True,
-        "expenses_manage": True, "expense_reports": True,
+        "expenses_manage": True, "expenses_create": True, "expense_reports": True,
     },
     "owner": {
         "sales": True,
@@ -109,7 +110,7 @@ ROLE_PERMISSIONS = {
         "manage_devices": True,
         "customers_view": True, "customers_manage": True,
         "credit_sales": True, "credit_settlements": True,
-        "expenses_manage": True, "expense_reports": True,
+        "expenses_manage": True, "expenses_create": True, "expense_reports": True,
     },
 }
 

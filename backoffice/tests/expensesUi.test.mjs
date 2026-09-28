@@ -7,19 +7,19 @@ const css = readFileSync(new URL("../src/pages/expenses.css", import.meta.url), 
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 
 test("Expenses navigation preserves hamburger and Logout behavior", () => {
-  assert.match(app, />\s*Expenses\s*</);
+  assert.match(app, />\s*Expense Reports\s*</);
   assert.match(app, /page === "expenses" && \(\s*<ExpensesPage/);
   assert.match(app, /function navigateTo[\s\S]*setMobileMenuOpen\(false\)/);
   assert.match(app, /className="logout-nav-button"/);
 });
 
-test("expense posting and category lifecycle use authoritative APIs", () => {
-  assert.match(page, /api\.post\("\/expenses"/);
+test("expense report omits cashier posting while retaining category administration", () => {
+  assert.doesNotMatch(page, /api\.post\("\/expenses"/);
   assert.match(page, /api\.post\("\/expenses\/categories"/);
   assert.match(page, /api\.patch\(`\/expenses\/categories\/\$\{companyId\}/);
   assert.match(page, /api\.delete\(`\/expenses\/categories\/\$\{companyId\}/);
   assert.match(page, /Categories referenced by posted expenses cannot be deleted/);
-  assert.match(page, /idempotency_key: requestKey\(\)/);
+  assert.match(page, /Cashiers post expenses in POS/);
 });
 
 test("expense filters and audit history expose required fields", () => {

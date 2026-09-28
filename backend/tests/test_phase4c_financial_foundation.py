@@ -18,8 +18,9 @@ from app.credit.repository import CreditRepository
 from app.credit.schema import SettlementCreate
 from app.credit.service import CreditService
 from app.customers.repository import CustomerRepository
-from app.customers.schema import CustomerCreate
+from app.customers.schema import CustomerCreate, CustomerUpdate
 from app.customers.service import CustomerService
+from app.employees.service import EmployeeService
 from app.expenses.repository import ExpenseRepository
 from app.expenses.schema import ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCreate
 from app.expenses.service import ExpenseService
@@ -69,6 +70,35 @@ class CreditPolicyValidationTest(unittest.TestCase):
                 SettlementCreate(company_id=uuid4(), receivable_id=uuid4(), branch_id=uuid4(), amount=amount, payment_method="cash", idempotency_key="valid-key")
             with self.subTest(kind="expense", amount=amount), self.assertRaises(ValidationError):
                 ExpenseCreate(company_id=uuid4(), category_id=uuid4(), branch_id=uuid4(), amount=amount, occurred_at=datetime.now(timezone.utc), payment_method="cash", description="Test", idempotency_key="valid-key")
+
+    def test_cashier_customer_edits_are_contact_only(self):
+        cashier = AuthActor("employee", COMPANY, "cashier", employee=SimpleNamespace(id=EMPLOYEE), permissions={"customers_view": True})
+        CustomerService.enforce_cashier_update_policy(
+            CustomerUpdate(name="New name", phone="123", email="a@example.test", address="Address").model_dump(exclude_unset=True),
+            cashier,
+        )
+        for protected in (
+            CustomerUpdate(active=False), CustomerUpdate(credit_enabled=True),
+            CustomerUpdate(credit_limit="10"), CustomerUpdate(unlimited_credit=True),
+            CustomerUpdate(credit_terms_days=30), CustomerUpdate(customer_code="NEW"),
+        ):
+            with self.subTest(fields=protected.model_fields_set), self.assertRaisesRegex(HTTPException, "Manager permission"):
+                CustomerService.enforce_cashier_update_policy(protected.model_dump(exclude_unset=True), cashier)
+
+    def test_cashier_creates_credit_disabled_and_manager_can_configure_credit(self):
+        cashier = AuthActor("employee", COMPANY, "cashier", employee=SimpleNamespace(id=EMPLOYEE), permissions={"customers_view": True})
+        manager = AuthActor("employee", COMPANY, "manager", employee=SimpleNamespace(id=EMPLOYEE), permissions={"customers_manage": True})
+        safe = CustomerCreate(company_id=COMPANY, customer_code="CASH", name="Cashier Customer")
+        CustomerService.enforce_cashier_create_policy(safe, cashier)
+        configured = CustomerCreate(company_id=COMPANY, customer_code="MGR", name="Manager Customer", credit_enabled=True, credit_limit="100", credit_terms_days=30)
+        with self.assertRaisesRegex(HTTPException, "Manager permission"):
+            CustomerService.enforce_cashier_create_policy(configured, cashier)
+        CustomerService.enforce_cashier_create_policy(configured, manager)
+
+    def test_cashier_can_post_expenses_but_not_manage_categories(self):
+        permissions = EmployeeService.build_permissions("cashier", None)
+        self.assertTrue(permissions["expenses_create"])
+        self.assertFalse(permissions["expenses_manage"])
 
 
 class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):

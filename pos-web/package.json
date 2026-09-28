@@ -10,6 +10,7 @@
     "test:sales-history": "node scripts/run-sales-history-tests.mjs",
     "test:device-identity": "node scripts/run-device-identity-tests.mjs && node --test tests/sessionUi.test.mjs",
     "test:credit-sale": "node scripts/run-credit-sale-tests.mjs && node --test tests/creditCheckoutUi.test.mjs",
+    "test:financial-modules": "node --test tests/financialModulesUi.test.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test:discounts": "node scripts/run-discount-tests.mjs && node scripts/run-receipt-discount-tests.mjs && node scripts/test-offline-discounts.mjs && node --test tests/checkoutUi.test.mjs",

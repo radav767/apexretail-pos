@@ -3,6 +3,9 @@ export type CreditCustomer = {
   company_id: string;
   customer_code: string;
   name: string;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
   active: boolean;
   credit_enabled: boolean;
   unlimited_credit: boolean;

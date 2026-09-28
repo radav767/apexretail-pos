@@ -10,6 +10,7 @@ import {
   projectCreditSale,
   type CreditCustomer,
 } from "./creditSale";
+import { searchCustomers } from "./customerApi";
 import {
   clearAuthenticationPreservingDeviceIdentity,
   getOrCreateDeviceKey,
@@ -231,7 +232,7 @@ function roundMoneyValue(value: string | number): number {
 
 function initialPosModule(): PosModuleName {
   const requested = new URLSearchParams(window.location.search).get("module");
-  return (["Sales", "Sales Management", "Products", "Inventory", "Reports", "Settings"] as PosModuleName[])
+  return (["Sales", "Sales Management", "Customers", "Credit Settlements", "Expenses", "Products", "Inventory", "Reports", "Settings"] as PosModuleName[])
     .includes(requested as PosModuleName) ? requested as PosModuleName : "Sales";
 }
 
@@ -1966,15 +1967,10 @@ const [loggedIn, setLoggedIn] = useState(
     try {
       setCreditCustomersLoading(true);
       setCreditDialogMessage("");
-      const response = await api.get(`/customers/${companyId}`, {
-        params: {
-          active: true,
-          search: query.trim() || undefined,
-          limit: 100,
-        },
+      const customers = await searchCustomers(companyId, query, {
+        activeOnly: true,
+        limit: 100,
       });
-      const customers = (Array.isArray(response.data) ? response.data : [])
-        .filter((customer: CreditCustomer) => customer.active);
       setCreditCustomers(customers);
       if (
         selectedCreditCustomer &&
@@ -3067,6 +3063,34 @@ const [loggedIn, setLoggedIn] = useState(
                           Sales Management
 
                         </button>
+
+                        <button
+                          type="button"
+                          style={posMenuButton}
+                          onClick={() => showPosModule("Customers")}
+                        >
+                          Customers
+                        </button>
+
+                        {(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.credit_settlements) && (
+                          <button
+                            type="button"
+                            style={posMenuButton}
+                            onClick={() => showPosModule("Credit Settlements")}
+                          >
+                            Credit Settlements
+                          </button>
+                        )}
+
+                        {(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.expenses_create) && (
+                          <button
+                            type="button"
+                            style={posMenuButton}
+                            onClick={() => showPosModule("Expenses")}
+                          >
+                            Expenses
+                          </button>
+                        )}
 
                         {canManageProducts && (
                           <button

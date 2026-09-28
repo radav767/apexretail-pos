@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, getApiErrorMessage } from "./api/client";
 import { isDeviceOnline } from "./offline/offlineAuth";
+import FinancialModules, { type FinancialModuleName } from "./FinancialModules";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -22,6 +23,7 @@ export type PosModuleName =
   | "Sales Management"
   | "Products"
   | "Inventory"
+  | FinancialModuleName
   | "Reports"
   | "Settings";
 
@@ -762,6 +764,25 @@ export default function PosModulePage({
 
   if (activeModule === "Sales") {
     return null;
+  }
+
+  if (
+    activeModule === "Customers" ||
+    activeModule === "Credit Settlements" ||
+    activeModule === "Expenses"
+  ) {
+    return (
+      <FinancialModules
+        activeModule={activeModule}
+        companyId={companyId}
+        branchId={branchId}
+        cashier={cashier}
+        currencySymbol={currencySymbol}
+        decimalPlaces={decimalPlaces}
+        printerConfig={printerConfig}
+        onBackToSales={onBackToSales}
+      />
+    );
   }
 
   async function ensureOnline() {

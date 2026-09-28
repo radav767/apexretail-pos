@@ -24,7 +24,7 @@ async def create_category(data: ExpenseCategoryCreate, service: ExpenseService =
 
 
 @router.get("/categories/{company_id}", response_model=list[ExpenseCategoryOut])
-async def list_categories(company_id: UUID, active: bool | None = None, service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_path_permission("expenses_manage"))):
+async def list_categories(company_id: UUID, active: bool | None = None, service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_path_permission("expenses_create"))):
     return await service.list_categories(company_id, actor, active)
 
 
@@ -40,10 +40,10 @@ async def delete_category(company_id: UUID, category_id: UUID, service: ExpenseS
 
 
 @router.post("", response_model=ExpenseOut)
-async def create_expense(data: ExpenseCreate, service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("expenses_manage")), _entitlement: None = Depends(require_billable_body_company)):
+async def create_expense(data: ExpenseCreate, service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("expenses_create")), _entitlement: None = Depends(require_billable_body_company)):
     return await service.create_expense(data, actor)
 
 
 @router.get("/{company_id}", response_model=list[ExpenseOut])
-async def list_expenses(company_id: UUID, start_at: datetime | None = None, end_at: datetime | None = None, branch_id: UUID | None = None, category_id: UUID | None = None, payment_method: str | None = Query(default=None, pattern="^(cash|card|mobile)$"), employee_id: UUID | None = None, actor_user_id: UUID | None = None, search: str | None = Query(default=None, max_length=160), limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_path_permission("expense_reports"))):
+async def list_expenses(company_id: UUID, start_at: datetime | None = None, end_at: datetime | None = None, branch_id: UUID | None = None, category_id: UUID | None = None, payment_method: str | None = Query(default=None, pattern="^(cash|card|mobile)$"), employee_id: UUID | None = None, actor_user_id: UUID | None = None, search: str | None = Query(default=None, max_length=160), limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_path_permission("expenses_create"))):
     return await service.list_expenses(company_id, actor, start_at=start_at, end_at=end_at, branch_id=branch_id, category_id=category_id, payment_method=payment_method, employee_id=employee_id, actor_user_id=actor_user_id, search=search, limit=limit, offset=offset)

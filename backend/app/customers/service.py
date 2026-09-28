@@ -16,6 +16,38 @@ class CustomerService:
         return value.strip() or None if isinstance(value, str) else value
 
     @staticmethod
+    def can_manage_credit(actor):
+        return (
+            actor.actor_type == "user"
+            or actor.role in {"owner", "administrator"}
+            or bool((actor.permissions or {}).get("customers_manage"))
+        )
+
+    @classmethod
+    def enforce_cashier_create_policy(cls, data, actor):
+        if cls.can_manage_credit(actor):
+            return
+        if (
+            not data.active
+            or data.credit_enabled
+            or data.unlimited_credit
+            or data.credit_limit is not None
+            or data.credit_terms_days != 0
+        ):
+            raise HTTPException(403, "Manager permission is required to configure customer credit or status")
+
+    @classmethod
+    def enforce_cashier_update_policy(cls, values, actor):
+        if cls.can_manage_credit(actor):
+            return
+        protected = {
+            "customer_code", "active", "credit_enabled", "unlimited_credit",
+            "credit_limit", "credit_terms_days",
+        }
+        if protected.intersection(values):
+            raise HTTPException(403, "Manager permission is required to change customer status or credit configuration")
+
+    @staticmethod
     def view(customer, balance):
         balance = Decimal(balance or 0).quantize(Decimal("0.01"))
         available = None
@@ -24,6 +56,7 @@ class CustomerService:
         return {column.name: getattr(customer, column.name) for column in customer.__table__.columns if column.name not in {"deleted", "created_at", "updated_at"}} | {"outstanding_balance": balance, "available_credit": available}
 
     async def create(self, data: CustomerCreate, actor):
+        self.enforce_cashier_create_policy(data, actor)
         code = data.customer_code.strip().upper()
         if await self.repo.code_exists(data.company_id, code):
             raise HTTPException(409, "Customer code already exists")
@@ -53,6 +86,7 @@ class CustomerService:
         if not customer:
             raise HTTPException(404, "Customer not found")
         values = data.model_dump(exclude_unset=True)
+        self.enforce_cashier_update_policy(values, actor)
         if "customer_code" in values:
             values["customer_code"] = values["customer_code"].strip().upper()
             if await self.repo.code_exists(company_id, values["customer_code"], customer.id):

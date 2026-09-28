@@ -5,10 +5,12 @@ import { readFileSync } from "node:fs";
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/sales-responsive.css", import.meta.url), "utf8");
 const receiptFormatter = readFileSync(new URL("../src/printing/receiptFormatter.ts", import.meta.url), "utf8");
+const customerApi = readFileSync(new URL("../src/customerApi.ts", import.meta.url), "utf8");
 
 test("credit checkout requires online customer selection and authoritative sale API", () => {
   assert.match(app, /Credit sales require an online connection/);
-  assert.match(app, /api\.get\(`\/customers\/\$\{companyId\}`/);
+  assert.match(app, /searchCustomers\(companyId, query/);
+  assert.match(customerApi, /api\.get\(`\/customers\/\$\{companyId\}`/);
   assert.match(app, /customer_id:\s*paymentMethod === "credit"/);
   assert.match(app, /await api\.post\("\/sales", payload\)/);
   assert.match(app, /Confirm Credit Sale/);

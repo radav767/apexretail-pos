@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import "./reports.css";
 
@@ -18,6 +18,20 @@ type SalesReport = {
 
 type ReportsPageProps = {
   companyId: string;
+};
+
+type FinancialSummary = {
+  net_sales: string | number;
+  cost_of_sales: string | number;
+  gross_profit: string | number;
+  operating_expenses: string | number;
+  net_profit: string | number;
+  cash_sales: string | number;
+  cash_settlements: string | number;
+  cash_expenses: string | number;
+  expected_cash_movement: string | number;
+  card_settlements: string | number;
+  mobile_settlements: string | number;
 };
 
 function localDateValue(date: Date): string {
@@ -78,10 +92,11 @@ export default function ReportsPage({
 
   const [dateTo, setDateTo] = useState(localDateValue(today));
   const [report, setReport] = useState<SalesReport | null>(null);
+  const [financial, setFinancial] = useState<FinancialSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
-  async function loadReport() {
+  const loadReport = useCallback(async () => {
     if (!companyId) {
       return;
     }
@@ -95,19 +110,16 @@ export default function ReportsPage({
       setLoading(true);
       setMessage("");
 
-      const response = await api.get(
-        `/reports/sales/${companyId}`,
-        {
-          params: {
-            date_from: dateFrom,
-            date_to: dateTo,
-          },
-        },
-      );
-
+      const params = { date_from: dateFrom, date_to: dateTo };
+      const [response, financialResponse] = await Promise.all([
+        api.get(`/reports/sales/${companyId}`, { params }),
+        api.get(`/reports/financial-summary/${companyId}`, { params }),
+      ]);
       setReport(response.data);
+      setFinancial(financialResponse.data);
     } catch (error: any) {
       setReport(null);
+      setFinancial(null);
       setMessage(
         error.response?.data?.detail ||
           "Failed to load the sales report",
@@ -115,27 +127,16 @@ export default function ReportsPage({
     } finally {
       setLoading(false);
     }
-  }
+  }, [companyId, dateFrom, dateTo]);
 
   useEffect(() => {
     void loadReport();
-  }, [companyId]);
+  }, [loadReport]);
 
-  const cashiers = Array.isArray(report?.cashiers)
-    ? report.cashiers
-    : [];
-
-  const products = Array.isArray(report?.products)
-    ? report.products
-    : [];
-
-  const paymentMethods = Array.isArray(report?.payment_methods)
-    ? report.payment_methods
-    : [];
-
-  const branches = Array.isArray(report?.branches)
-    ? report.branches
-    : [];
+  const cashiers = useMemo(() => Array.isArray(report?.cashiers) ? report.cashiers : [], [report]);
+  const products = useMemo(() => Array.isArray(report?.products) ? report.products : [], [report]);
+  const paymentMethods = useMemo(() => Array.isArray(report?.payment_methods) ? report.payment_methods : [], [report]);
+  const branches = useMemo(() => Array.isArray(report?.branches) ? report.branches : [], [report]);
 
   const calculated = useMemo(() => {
     const summary =
@@ -339,6 +340,14 @@ export default function ReportsPage({
           <small>Average transaction value</small>
         </article>
       </section>
+
+      {financial && <section className="reports-summary-grid" aria-label="Financial and profit summary">
+        <article><span>Operating Expenses</span><strong>{currency.format(Number(financial.operating_expenses))}</strong><small>Posted gross expenses; excluded from sales revenue</small></article>
+        <article><span>Net Profit</span><strong>{currency.format(Number(financial.net_profit))}</strong><small>Gross profit less operating expenses</small></article>
+        <article><span>Cash Settlements</span><strong>{currency.format(Number(financial.cash_settlements))}</strong><small>Customer credit cash received</small></article>
+        <article><span>Cash Expenses</span><strong>{currency.format(Number(financial.cash_expenses))}</strong><small>Cash paid out for expenses</small></article>
+        <article><span>Expected Cash Movement</span><strong>{currency.format(Number(financial.expected_cash_movement))}</strong><small>Cash sales plus settlements less cash expenses</small></article>
+      </section>}
 
       <section className="reports-panel">
         <div className="reports-panel-header">
