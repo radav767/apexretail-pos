@@ -19,6 +19,9 @@ test("customer workflow shares authoritative customer search with credit checkou
   assert.match(customerApi, /api\.get\(`\/customers\/\$\{companyId\}`/);
   assert.match(page, /Manager credit configuration/);
   assert.match(page, /Credit settings and active status require manager permission/);
+  assert.match(page, /cashier\?\.permissions\?\.customers_manage/);
+  assert.match(page, /canManageCredit \? policy/);
+  assert.match(page, /credit_enabled: false, unlimited_credit: false, credit_limit: null, credit_terms_days: 0/);
 });
 
 test("settlements are online, idempotent, validated and printable", () => {
@@ -39,4 +42,8 @@ test("expenses use session branch and server-derived cashier", () => {
 test("financial modules cover tablet, phone and narrow phone layouts", () => {
   assert.match(css, /@media\(max-width:720px\)/);
   assert.match(css, /@media\(max-width:390px\)/);
+  assert.match(css, /padding:calc\(76px \+ env\(safe-area-inset-top\)\)/);
+  assert.match(css, /\.financial-modal-backdrop\{[^}]*padding:calc\(82px \+ env\(safe-area-inset-top\)\)/);
+  assert.match(css, /\.financial-modal \.financial-form-scroll\{[^}]*overflow-y:auto/);
+  assert.match(css, /padding:12px 0 max\(4px,env\(safe-area-inset-bottom\)\)/);
 });
