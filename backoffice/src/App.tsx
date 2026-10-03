@@ -153,7 +153,22 @@ function App() {
         );
 
         if (requestId !== dashboardRequest.current) return;
-        setDashboardSummary(response.data);
+        const financialResponse = await api.get(
+          `/reports/financial-summary/${id}`,
+          {
+            params: {
+              date_from: response.data.date_from,
+              date_to: response.data.date_to,
+              shop_id: selectedShopId || undefined,
+            },
+          },
+        );
+
+        if (requestId !== dashboardRequest.current) return;
+        setDashboardSummary({
+          ...response.data,
+          financial_summary: financialResponse.data,
+        });
         setDashboardShops(response.data.shops);
       } catch (error: any) {
         if (requestId !== dashboardRequest.current) return;
@@ -555,6 +570,7 @@ function App() {
             onDateToChange={(value) => { closeDashboardDrilldown(); setCustomDateTo(value); }}
             onExport={(section) => void exportDashboard(section)}
             onOpenDrilldown={openDashboardDrilldown}
+            onNavigateFinancial={navigateTo}
           />
         )}
 

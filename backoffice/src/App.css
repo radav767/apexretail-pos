@@ -241,9 +241,15 @@ button {
 }
 
 .dashboard-drilldown-trigger:hover,
-.dashboard-drilldown-trigger:focus-visible {
+.dashboard-drilldown-trigger:focus-visible,
+.dashboard-financial-link:hover,
+.dashboard-financial-link:focus-visible {
   border-color: #93c5fd;
   box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12);
+}
+
+.summary-card-static {
+  cursor: default;
 }
 
 .dashboard-detail-link {

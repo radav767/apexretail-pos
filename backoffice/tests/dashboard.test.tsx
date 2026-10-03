@@ -43,6 +43,15 @@ const summary: DashboardPhase3Summary = {
       missing_persistence: "sales.discount_amount",
     },
   },
+  financial_summary: {
+    gross_sales: "150.00", net_sales: "120.00", cost_of_sales: "72.00",
+    gross_profit: "48.00", discounts: "5.00", operating_expenses: "18.00",
+    net_profit: "30.00", cash_sales: "40.00", card_sales: "35.00",
+    mobile_sales: "20.00", credit_sales: "25.00", credit_settlements: "12.00",
+    outstanding_receivables: "13.00", cash_settlements: "6.00",
+    card_settlements: "4.00", mobile_settlements: "2.00", cash_expenses: "8.00",
+    card_expenses: "6.00", mobile_expenses: "4.00", expected_cash_movement: "38.00",
+  },
   granularity: "day",
   comparison: {
     date_from: "2026-07-01",
@@ -75,6 +84,7 @@ const analyticsProps = {
   onGranularityChange: () => undefined,
   onExport: () => undefined,
   onOpenDrilldown: () => undefined,
+  onNavigateFinancial: () => undefined,
 };
 
 test("dashboard renders ranges, shop filter, and metrics", () => {
@@ -108,6 +118,15 @@ test("dashboard renders ranges, shop filter, and metrics", () => {
     "Gross Profit",
     "Refunds",
     "Discounts",
+    "Operating Expenses",
+    "Net Profit",
+    "Cash Sales",
+    "Card Sales",
+    "Mobile / Transfer Sales",
+    "Credit Sales",
+    "Credit Settlements",
+    "Outstanding Credit / Receivables",
+    "Expected Cash Movement",
     "Sales and gross-profit trend",
     "Top products",
     "Coffee",
@@ -128,6 +147,9 @@ test("dashboard renders ranges, shop filter, and metrics", () => {
   assert.ok(markup.includes('value="2026-08-31"'));
   assert.ok(markup.includes("dashboard-drilldown-trigger"));
   assert.ok(markup.includes("dashboard-detail-link"));
+  assert.ok(markup.includes("Gross profit minus operating expenses"));
+  assert.ok(markup.includes("Cash Z$6.00 · Card Z$4.00 · Mobile Z$2.00"));
+  assert.equal((markup.match(/dashboard-financial-link/g) || []).length, 3);
   assert.ok(!markup.includes("Sales and Receipts"));
   assert.ok(!markup.includes("transaction records"));
 });

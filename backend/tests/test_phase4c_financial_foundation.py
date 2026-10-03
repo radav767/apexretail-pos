@@ -332,6 +332,61 @@ class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):
             receivable = await CreditRepository(session).get_receivable(COMPANY, receivable_id)
             self.assertEqual(receivable.outstanding_balance, Decimal("40.00"))
 
+    async def test_dashboard_financial_summary_keeps_sales_settlements_and_expenses_separate(self):
+        async with self.engine.begin() as connection:
+            await connection.execute(
+                text("UPDATE products SET cost_price=1, selling_price=2 WHERE id=:id"),
+                {"id": PRODUCT},
+            )
+        customer = await self.create_customer(code="DASH", limit="10.00")
+        sale = await self.credit_sale(customer["id"], "2.00")
+        async with AsyncSession(self.engine) as session:
+            receivable_id = (await session.execute(
+                select(CreditReceivable.id).where(CreditReceivable.sale_id == sale.id)
+            )).scalar_one()
+            credit = CreditService(CreditRepository(session))
+            for suffix in ("one", "two"):
+                await credit.create_settlement(SettlementCreate(
+                    company_id=COMPANY, receivable_id=receivable_id,
+                    branch_id=BRANCH, amount="1.00", payment_method="cash",
+                    idempotency_key=f"dashboard-settlement-{suffix}",
+                ), self.owner)
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            expenses = ExpenseService(ExpenseRepository(session))
+            category = await expenses.create_category(
+                ExpenseCategoryCreate(company_id=COMPANY, name="Dashboard expense"),
+                self.owner,
+            )
+        async with AsyncSession(self.engine) as session:
+            await ExpenseService(ExpenseRepository(session)).create_expense(
+                ExpenseCreate(
+                    company_id=COMPANY, category_id=category.id, branch_id=BRANCH,
+                    amount="0.50", occurred_at=datetime.now(timezone.utc),
+                    payment_method="cash", description="Dashboard test",
+                    idempotency_key="dashboard-expense-001",
+                ),
+                self.owner,
+            )
+        async with AsyncSession(self.engine) as session:
+            today = datetime.now(timezone.utc).date()
+            summary = await ReportsService(ReportsRepository(session)).financial_summary(
+                COMPANY, date_from=today, date_to=today, shop_id=SHOP,
+            )
+            expected = {
+                "gross_sales": "2.00", "net_sales": "2.00",
+                "cost_of_sales": "1.00", "gross_profit": "1.00",
+                "operating_expenses": "0.50", "net_profit": "0.50",
+                "credit_sales": "2.00", "credit_settlements": "2.00",
+                "cash_settlements": "2.00", "outstanding_receivables": "0.00",
+                "expected_cash_movement": "1.50",
+            }
+            for key, value in expected.items():
+                with self.subTest(metric=key):
+                    self.assertEqual(summary[key], Decimal(value))
+            self.assertEqual(summary["cash_sales"], Decimal("0.00"))
+            self.assertEqual(summary["card_sales"], Decimal("0.00"))
+            self.assertEqual(summary["mobile_sales"], Decimal("0.00"))
+
     async def test_expense_category_lifecycle_and_history_filters(self):
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             expenses = ExpenseService(ExpenseRepository(session))

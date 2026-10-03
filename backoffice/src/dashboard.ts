@@ -31,6 +31,29 @@ export type DashboardPhase2Summary = {
   };
 };
 
+export type DashboardFinancialSummary = {
+  gross_sales: string | number;
+  net_sales: string | number;
+  cost_of_sales: string | number;
+  gross_profit: string | number;
+  discounts: string | number;
+  operating_expenses: string | number;
+  net_profit: string | number;
+  cash_sales: string | number;
+  card_sales: string | number;
+  mobile_sales: string | number;
+  credit_sales: string | number;
+  credit_settlements: string | number;
+  outstanding_receivables: string | number;
+  cash_settlements: string | number;
+  card_settlements: string | number;
+  mobile_settlements: string | number;
+  cash_expenses: string | number;
+  card_expenses: string | number;
+  mobile_expenses: string | number;
+  expected_cash_movement: string | number;
+};
+
 export type DashboardChange = {
   available: boolean;
   amount: string | null;
@@ -58,6 +81,7 @@ export type DashboardBreakdownRow = {
 };
 
 export type DashboardPhase3Summary = DashboardPhase2Summary & {
+  financial_summary: DashboardFinancialSummary;
   granularity: "day" | "week" | "month";
   comparison: {
     date_from: string;

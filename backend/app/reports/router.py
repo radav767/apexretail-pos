@@ -35,6 +35,7 @@ async def financial_summary(
     date_from: date = Query(...),
     date_to: date = Query(...),
     branch_id: UUID | None = None,
+    shop_id: UUID | None = None,
     service: ReportsService = Depends(get_reports_service),
     actor: AuthActor = Depends(require_path_permission("reports")),
 ):
@@ -42,7 +43,10 @@ async def financial_summary(
         if branch_id is not None:
             enforce_actor_branch(actor, branch_id)
         branch_id = actor.employee.branch_id
-    return await service.financial_summary(company_id, date_from=date_from, date_to=date_to, branch_id=branch_id)
+    return await service.financial_summary(
+        company_id, date_from=date_from, date_to=date_to,
+        branch_id=branch_id, shop_id=shop_id,
+    )
 
 
 @router.get("/sales-history/{company_id}", response_model=SalesHistoryResponse)

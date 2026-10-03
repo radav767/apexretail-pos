@@ -79,12 +79,19 @@ class InventoryValuationResponse(BaseModel):
 
 
 class FinancialSummaryResponse(BaseModel):
+    gross_sales: Decimal
     net_sales: Decimal
     cost_of_sales: Decimal
     gross_profit: Decimal
+    discounts: Decimal
     operating_expenses: Decimal
     net_profit: Decimal
     cash_sales: Decimal
+    card_sales: Decimal
+    mobile_sales: Decimal
+    credit_sales: Decimal
+    credit_settlements: Decimal
+    outstanding_receivables: Decimal
     cash_settlements: Decimal
     cash_expenses: Decimal
     expected_cash_movement: Decimal

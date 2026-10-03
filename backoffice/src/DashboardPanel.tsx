@@ -22,6 +22,7 @@ type Props = {
   onDateToChange: (value: string) => void;
   onExport: (section: ExportSection) => void;
   onOpenDrilldown: (request: DashboardDrilldownRequest) => void;
+  onNavigateFinancial: (page: "expenses" | "credit-settlements") => void;
 };
 
 const money = (value: string | number, summary: DashboardPhase3Summary) =>
@@ -50,7 +51,7 @@ function BreakdownTable({ title, rows, summary, section, metric = "net_sales", d
 }
 
 export function DashboardPanel(props: Props) {
-  const { summary, shops, rangeKey, granularity, selectedShopId, customDateFrom, customDateTo, onRangeChange, onGranularityChange, onShopChange, onDateFromChange, onDateToChange, onExport, onOpenDrilldown } = props;
+  const { summary, shops, rangeKey, granularity, selectedShopId, customDateFrom, customDateTo, onRangeChange, onGranularityChange, onShopChange, onDateFromChange, onDateToChange, onExport, onOpenDrilldown, onNavigateFinancial } = props;
   const cards = summary ? [
     ["Gross Sales", "gross_sales", summary.metrics.gross_sales],
     ["Net Sales", "net_sales", summary.metrics.net_sales],
@@ -59,6 +60,17 @@ export function DashboardPanel(props: Props) {
     ["Discounts", "discounts", summary.metrics.discounts],
     ["Refunds", "refunds", summary.metrics.refunds],
   ] as Array<[string, string, DashboardMetric]> : [];
+  const financialCards = summary ? [
+    { title: "Operating Expenses", value: summary.financial_summary.operating_expenses, detail: "Deducted from gross profit, not sales", page: "expenses" as const },
+    { title: "Net Profit", value: summary.financial_summary.net_profit, detail: "Gross profit minus operating expenses" },
+    { title: "Cash Sales", value: summary.financial_summary.cash_sales, detail: "Sales revenue paid in cash" },
+    { title: "Card Sales", value: summary.financial_summary.card_sales, detail: "Sales revenue paid by card" },
+    { title: "Mobile / Transfer Sales", value: summary.financial_summary.mobile_sales, detail: "Sales revenue paid by mobile / transfer" },
+    { title: "Credit Sales", value: summary.financial_summary.credit_sales, detail: "Recognized as revenue at sale time" },
+    { title: "Credit Settlements", value: summary.financial_summary.credit_settlements, detail: `Cash ${money(summary.financial_summary.cash_settlements, summary)} · Card ${money(summary.financial_summary.card_settlements, summary)} · Mobile ${money(summary.financial_summary.mobile_settlements, summary)}`, page: "credit-settlements" as const },
+    { title: "Outstanding Credit / Receivables", value: summary.financial_summary.outstanding_receivables, detail: "Current unsettled customer credit", page: "credit-settlements" as const },
+    { title: "Expected Cash Movement", value: summary.financial_summary.expected_cash_movement, detail: "Cash sales + cash settlements − cash expenses" },
+  ] : [];
 
   return <>
     <section className="dashboard-filters panel" aria-labelledby="dashboard-filters-title">
@@ -76,7 +88,11 @@ export function DashboardPanel(props: Props) {
       const change = summary?.comparison.metrics[key];
       const changeText = change && summary && change.available && change.amount !== null ? `${Number(change.amount) >= 0 ? "+" : ""}${money(change.amount, summary)} vs previous${change.percentage === null ? " (percentage unavailable)" : ` (${Number(change.percentage) >= 0 ? "+" : ""}${change.percentage}%)`}` : change?.reason || "Completed sales and recorded refunds";
       return <button type="button" className={`summary-card dashboard-drilldown-trigger ${metric.available ? "" : "muted"}`} key={title} onClick={() => onOpenDrilldown({ title: `${title} contributing sales`, metric: key as DashboardMetricKey })}><span>{title}</span><strong>{formatDashboardMoney(metric, summary?.currency_symbol || "$", summary?.decimal_places ?? 2)}</strong><small>{changeText}</small>{metric.reason ? <p>{metric.reason}</p> : null}</button>;
-    })}</section>
+    })}{financialCards.map((card) => card.page ? (
+      <button type="button" className="summary-card dashboard-financial-link" key={card.title} onClick={() => onNavigateFinancial(card.page!)}><span>{card.title}</span><strong>{summary ? money(card.value, summary) : ""}</strong><small>{card.detail}</small></button>
+    ) : (
+      <article className="summary-card summary-card-static" key={card.title}><span>{card.title}</span><strong>{summary ? money(card.value, summary) : ""}</strong><small>{card.detail}</small></article>
+    ))}</section>
 
     {summary && <>
       <section className="panel analytics-panel"><div className="panel-header"><div><h2>Sales and gross-profit trend</h2><p>Grouped by {granularity}</p></div><ExportButton section="trends" onExport={onExport} /></div><div className="analytics-table-wrap"><table className="analytics-table"><caption className="sr-only">Sales and gross-profit trend</caption><thead><tr><th>Period</th><th>Gross sales</th><th>Refunds</th><th>Net sales</th><th>Gross profit</th><th>Discounts</th></tr></thead><tbody>{summary.trends.length ? summary.trends.map((point) => <tr key={point.period_start}><th scope="row"><button type="button" className="dashboard-detail-link" onClick={() => onOpenDrilldown({ title: `Sales from ${point.period_start} to ${point.period_end}`, metric: "net_sales", dateFrom: point.period_start, dateTo: point.period_end })}>{point.period_start} – {point.period_end}</button></th><td>{formatDashboardMoney(point.metrics.gross_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.refunds, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.net_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.gross_profit, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.discounts, summary.currency_symbol, summary.decimal_places)}</td></tr>) : <tr><td colSpan={6}>No contributing sales</td></tr>}</tbody></table></div></section>

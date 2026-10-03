@@ -217,26 +217,36 @@ class ReportsRepository:
         row = result.mappings().first()
         return (row["currency_symbol"], int(row["decimal_places"])) if row else ("$", 2)
 
-    async def financial_summary(self, company_id, start_at, end_at, branch_id=None):
-        params = {"company_id": company_id, "start_at": start_at, "end_at": end_at, "branch_id": branch_id}
+    async def financial_summary(self, company_id, start_at, end_at, branch_id=None, shop_id=None):
+        params = {"company_id": company_id, "start_at": start_at, "end_at": end_at, "branch_id": branch_id, "shop_id": shop_id}
         branch_sale = "AND (CAST(:branch_id AS uuid) IS NULL OR s.branch_id=CAST(:branch_id AS uuid))"
         branch_expense = "AND (CAST(:branch_id AS uuid) IS NULL OR e.branch_id=CAST(:branch_id AS uuid))"
         branch_settlement = "AND (CAST(:branch_id AS uuid) IS NULL OR cs.branch_id=CAST(:branch_id AS uuid))"
+        branch_receivable = "AND (CAST(:branch_id AS uuid) IS NULL OR cr.branch_id=CAST(:branch_id AS uuid))"
+        shop_sale = "AND (CAST(:shop_id AS uuid) IS NULL OR s.shop_id=CAST(:shop_id AS uuid))"
+        shop_expense = "AND (CAST(:shop_id AS uuid) IS NULL OR e.shop_id=CAST(:shop_id AS uuid))"
+        shop_settlement = "AND (CAST(:shop_id AS uuid) IS NULL OR cs.shop_id=CAST(:shop_id AS uuid))"
+        shop_receivable = "AND (CAST(:shop_id AS uuid) IS NULL OR cr.shop_id=CAST(:shop_id AS uuid))"
         result = await self.db.execute(text(f"""
             WITH eligible_sales AS (
-                SELECT s.id,s.total_amount,s.payment_method
+                SELECT s.id,s.total_amount,s.payment_method,s.original_sale_id,s.discount_amount
                   FROM sales s
                  WHERE s.company_id=:company_id
                    AND s.created_at>=:start_at AND s.created_at<:end_at
-                   {branch_sale}
+                   {branch_sale} {shop_sale}
                    AND ((s.original_sale_id IS NULL AND lower(s.status) IN ('completed','partially_refunded','refunded'))
                      OR (s.original_sale_id IS NOT NULL AND lower(s.status)='refunded'))
             ), sale_costs AS (
                 SELECT COALESCE(SUM(si.line_cost),0) cost_of_sales
                   FROM sale_items si JOIN eligible_sales es ON es.id=si.sale_id
             ), sale_totals AS (
-                SELECT COALESCE(SUM(total_amount),0) net_sales,
-                       COALESCE(SUM(CASE WHEN lower(payment_method)='cash' THEN total_amount ELSE 0 END),0) cash_sales
+                SELECT COALESCE(SUM(CASE WHEN original_sale_id IS NULL THEN total_amount ELSE 0 END),0) gross_sales,
+                       COALESCE(SUM(total_amount),0) net_sales,
+                       COALESCE(SUM(CASE WHEN original_sale_id IS NULL THEN discount_amount ELSE 0 END),0) discounts,
+                       COALESCE(SUM(CASE WHEN lower(payment_method)='cash' THEN total_amount ELSE 0 END),0) cash_sales,
+                       COALESCE(SUM(CASE WHEN lower(payment_method)='card' THEN total_amount ELSE 0 END),0) card_sales,
+                       COALESCE(SUM(CASE WHEN lower(payment_method)='mobile' THEN total_amount ELSE 0 END),0) mobile_sales,
+                       COALESCE(SUM(CASE WHEN lower(payment_method)='credit' THEN total_amount ELSE 0 END),0) credit_sales
                   FROM eligible_sales
             ), expense_totals AS (
                 SELECT COALESCE(SUM(e.amount),0) operating_expenses,
@@ -244,23 +254,32 @@ class ReportsRepository:
                        COALESCE(SUM(CASE WHEN lower(e.payment_method)='card' THEN e.amount ELSE 0 END),0) card_expenses,
                        COALESCE(SUM(CASE WHEN lower(e.payment_method)='mobile' THEN e.amount ELSE 0 END),0) mobile_expenses
                   FROM expenses e WHERE e.company_id=:company_id
-                   AND e.occurred_at>=:start_at AND e.occurred_at<:end_at {branch_expense}
+                   AND e.occurred_at>=:start_at AND e.occurred_at<:end_at {branch_expense} {shop_expense}
             ), settlement_totals AS (
-                SELECT COALESCE(SUM(CASE WHEN lower(cs.payment_method)='cash' THEN cs.amount ELSE 0 END),0) cash_settlements,
+                SELECT COALESCE(SUM(cs.amount),0) credit_settlements,
+                       COALESCE(SUM(CASE WHEN lower(cs.payment_method)='cash' THEN cs.amount ELSE 0 END),0) cash_settlements,
                        COALESCE(SUM(CASE WHEN lower(cs.payment_method)='card' THEN cs.amount ELSE 0 END),0) card_settlements,
                        COALESCE(SUM(CASE WHEN lower(cs.payment_method)='mobile' THEN cs.amount ELSE 0 END),0) mobile_settlements
                   FROM credit_settlements cs WHERE cs.company_id=:company_id
-                   AND cs.received_at>=:start_at AND cs.received_at<:end_at {branch_settlement}
+                   AND cs.received_at>=:start_at AND cs.received_at<:end_at {branch_settlement} {shop_settlement}
+            ), receivable_totals AS (
+                SELECT COALESCE(SUM(cr.outstanding_balance),0) outstanding_receivables
+                  FROM credit_receivables cr WHERE cr.company_id=:company_id
+                   {branch_receivable} {shop_receivable}
             )
-            SELECT st.net_sales,sc.cost_of_sales,
+            SELECT st.gross_sales,st.net_sales,sc.cost_of_sales,
                    st.net_sales-sc.cost_of_sales gross_profit,
+                   st.discounts,
                    et.operating_expenses,
                    st.net_sales-sc.cost_of_sales-et.operating_expenses net_profit,
-                   st.cash_sales,sett.cash_settlements,et.cash_expenses,
+                   st.cash_sales,st.card_sales,st.mobile_sales,st.credit_sales,
+                   sett.credit_settlements,rt.outstanding_receivables,
+                   sett.cash_settlements,et.cash_expenses,
                    st.cash_sales+sett.cash_settlements-et.cash_expenses expected_cash_movement,
                    sett.card_settlements,sett.mobile_settlements,
                    et.card_expenses,et.mobile_expenses
               FROM sale_totals st CROSS JOIN sale_costs sc
               CROSS JOIN expense_totals et CROSS JOIN settlement_totals sett
+              CROSS JOIN receivable_totals rt
         """), params)
         return dict(result.mappings().one())
