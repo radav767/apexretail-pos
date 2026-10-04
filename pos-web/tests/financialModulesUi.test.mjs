@@ -39,11 +39,44 @@ test("expenses use session branch and server-derived cashier", () => {
   assert.match(page, /idempotency_key: expenseKey\.current/);
 });
 
-test("financial modules cover tablet, phone and narrow phone layouts", () => {
-  assert.match(css, /@media\(max-width:720px\)/);
-  assert.match(css, /@media\(max-width:390px\)/);
-  assert.match(css, /padding:calc\(76px \+ env\(safe-area-inset-top\)\)/);
-  assert.match(css, /\.financial-modal-backdrop\{[^}]*padding:calc\(82px \+ env\(safe-area-inset-top\)\)/);
-  assert.match(css, /\.financial-modal \.financial-form-scroll\{[^}]*overflow-y:auto/);
-  assert.match(css, /padding:12px 0 max\(4px,env\(safe-area-inset-bottom\)\)/);
+test("Customers list uses the shared mobile header clearance", () => {
+  assert.match(page, /activeModule === "Customers"/);
+  assert.match(page, /<h2>Customers<\/h2>/);
+  assert.match(page, /className="pos-module-overlay financial-module"/);
+  assert.match(css, /\.financial-module\.pos-module-overlay\s*\{[\s\S]*padding:\s*var\(--financial-mobile-header-clearance\)/);
+});
+
+test("Add and Edit Customer forms remain scrollable above the safe area", () => {
+  assert.match(page, /editingCustomer \? "Edit Customer" : "Add Customer"/);
+  assert.match(page, /className="financial-form-scroll"/);
+  assert.match(css, /\.financial-modal \.financial-form-scroll\s*\{[\s\S]*overflow-y:\s*auto/);
+  assert.match(css, /\.financial-modal \.financial-actions\s*\{[\s\S]*safe-area-inset-bottom/);
+});
+
+test("Customer detail starts below the same responsive module header", () => {
+  assert.match(page, /Select a customer to view the account/);
+  assert.match(page, /className="financial-title"/);
+  assert.match(page, /Transaction & credit history/);
+  assert.match(css, /\.financial-module \.pos-module-container\s*\{[\s\S]*padding:\s*0/);
+});
+
+test("Credit Settlements uses the shared responsive financial page", () => {
+  assert.match(page, /activeModule === "Credit Settlements"/);
+  assert.match(page, /<h3>Open receivables<\/h3>/);
+  assert.match(page, /<h3>Settlement history<\/h3>/);
+  assert.match(css, /@media \(max-width: 720px\)/);
+});
+
+test("Expenses uses the shared responsive financial page", () => {
+  assert.match(page, /activeModule === "Expenses"/);
+  assert.match(page, /<h2>Add Expense<\/h2>/);
+  assert.match(page, /<h2>Today’s expenses<\/h2>/);
+  assert.match(css, /@media \(max-width: 390px\)/);
+});
+
+test("financial pages reserve hamburger and safe-area space at 720px and 390px", () => {
+  assert.match(css, /--financial-mobile-header-clearance:\s*calc\(88px \+ env\(safe-area-inset-top\)\)/);
+  assert.match(css, /scroll-padding-block:\s*var\(--financial-mobile-header-clearance\)/);
+  assert.match(css, /\.financial-modal-backdrop\s*\{[\s\S]*padding:\s*var\(--financial-mobile-header-clearance\)/);
+  assert.match(css, /padding:\s*var\(--financial-mobile-header-clearance\) 12px calc\(24px \+ env\(safe-area-inset-bottom\)\)/);
 });
