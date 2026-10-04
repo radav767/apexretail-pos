@@ -35,6 +35,7 @@ test("customer details expose history, receivables and settlements", () => {
   assert.match(page, /Receivables \(\{receivables\.length\}\)/);
   assert.match(page, /Settlements \(\{settlements\.length\}\)/);
   assert.match(page, /You do not have permission to view settlement history/);
+  assert.match(page, /item\.actor_name \|\| item\.actor_id \|\| "Unknown"/);
 });
 
 test("Customers remains usable at desktop, tablet and phone widths", () => {

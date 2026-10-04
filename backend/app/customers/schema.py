@@ -74,3 +74,5 @@ class CustomerTransactionOut(BaseModel):
     occurred_at: datetime
     due_date: date | None = None
     reference: str | None = None
+    actor_id: UUID | None = None
+    actor_name: str = "Unknown"

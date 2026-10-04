@@ -51,16 +51,27 @@ class CustomerRepository:
             SELECT 'credit_sale' transaction_type, cr.id transaction_id,
                    cr.sale_id, s.receipt_number, cr.original_amount amount,
                    'credit' payment_method, cr.branch_id, cr.created_at occurred_at,
-                   cr.due_date, NULL::varchar reference
+                   cr.due_date, NULL::varchar reference,
+                   cr.cashier_employee_id actor_id,
+                   COALESCE(emp.name, cr.cashier_employee_id::text, 'Unknown') actor_name
               FROM credit_receivables cr
               JOIN sales s ON s.id=cr.sale_id AND s.company_id=cr.company_id
+              LEFT JOIN employees emp ON emp.id=cr.cashier_employee_id
+               AND emp.company_id=cr.company_id AND emp.active=true AND emp.deleted=false
              WHERE cr.company_id=:company_id AND cr.customer_id=:customer_id
             UNION ALL
             SELECT 'settlement', cs.id, cr.sale_id, cs.receipt_number,
                    -cs.amount, cs.payment_method, cs.branch_id, cs.received_at,
-                   NULL::date, cs.reference
+                   NULL::date, cs.reference,
+                   COALESCE(cs.cashier_employee_id, cs.actor_user_id) actor_id,
+                   COALESCE(settle_emp.name, settle_user.email,
+                            cs.cashier_employee_id::text, cs.actor_user_id::text, 'Unknown') actor_name
               FROM credit_settlements cs
               JOIN credit_receivables cr ON cr.id=cs.receivable_id AND cr.company_id=cs.company_id
+              LEFT JOIN employees settle_emp ON settle_emp.id=cs.cashier_employee_id
+               AND settle_emp.company_id=cs.company_id AND settle_emp.active=true AND settle_emp.deleted=false
+              LEFT JOIN users settle_user ON settle_user.id=cs.actor_user_id
+               AND settle_user.company_id=cs.company_id AND settle_user.active=true AND settle_user.deleted=false
              WHERE cs.company_id=:company_id AND cs.customer_id=:customer_id
             ORDER BY occurred_at, transaction_id
         """), {"company_id": company_id, "customer_id": customer_id})

@@ -10,6 +10,14 @@ class ExpenseService:
     def __init__(self, repo: ExpenseRepository):
         self.repo = repo
 
+    async def attach_actor(self, expense):
+        actor_id, actor_name = await self.repo.actor_identity(
+            expense.company_id, expense.employee_id, expense.actor_user_id,
+        )
+        expense.actor_id = actor_id
+        expense.actor_name = actor_name
+        return expense
+
     async def create_category(self, data: ExpenseCategoryCreate, actor):
         enforce_actor_company(actor, data.company_id)
         name = data.name.strip()
@@ -63,7 +71,7 @@ class ExpenseService:
                 or existing.payment_method != data.payment_method
             ):
                 raise HTTPException(409, "Idempotency key was already used for a different expense")
-            return existing
+            return await self.attach_actor(existing)
         branch = await self.repo.get_branch(data.company_id, data.branch_id)
         if not branch:
             raise HTTPException(404, "Branch not found")
@@ -82,7 +90,7 @@ class ExpenseService:
             idempotency_key=data.idempotency_key.strip(),
         )
         audit = AuditEvent(company_id=data.company_id, actor_user_id=expense.actor_user_id, actor_employee_id=expense.employee_id, action="expense_posted", details={"amount": str(data.amount), "payment_method": data.payment_method, "category_id": str(category.id)})
-        return await self.repo.save(expense, audit)
+        return await self.attach_actor(await self.repo.save(expense, audit))
 
     async def list_expenses(self, company_id, actor, **filters):
         enforce_actor_company(actor, company_id)
@@ -92,4 +100,7 @@ class ExpenseService:
                 enforce_actor_branch(actor, branch_id)
             filters["branch_id"] = actor.employee.branch_id
         rows = await self.repo.list_expenses(company_id, **filters)
-        return [{**{column.name: getattr(expense, column.name) for column in expense.__table__.columns}, "category_name": category_name} for expense, category_name in rows]
+        return [{
+            **{column.name: getattr(expense, column.name) for column in expense.__table__.columns},
+            "category_name": category_name, "actor_id": actor_id, "actor_name": actor_name,
+        } for expense, category_name, actor_id, actor_name in rows]

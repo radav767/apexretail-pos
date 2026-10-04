@@ -1,7 +1,7 @@
-from sqlalchemy import select
+from sqlalchemy import String, and_, cast, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Branch, CreditReceivable, CreditSettlement, Customer, Sale, Shop
+from app.models import Branch, CreditReceivable, CreditSettlement, Customer, Employee, Sale, Shop, User
 
 
 class CreditRepository:
@@ -37,14 +37,52 @@ class CreditRepository:
         return (await self.db.execute(query.order_by(CreditReceivable.created_at.desc(), CreditReceivable.id).limit(limit).offset(offset))).all()
 
     async def list_settlements(self, company_id, *, receivable_id=None, customer_id=None, branch_id=None, limit=100, offset=0):
-        query = select(CreditSettlement).where(CreditSettlement.company_id == company_id)
+        actor_id = func.coalesce(CreditSettlement.cashier_employee_id, CreditSettlement.actor_user_id).label("actor_id")
+        actor_name = func.coalesce(
+            Employee.name,
+            User.email,
+            cast(actor_id, String),
+            literal("Unknown"),
+        ).label("actor_name")
+        query = select(CreditSettlement, actor_id, actor_name).outerjoin(
+            Employee,
+            and_(
+                Employee.id == CreditSettlement.cashier_employee_id,
+                Employee.company_id == CreditSettlement.company_id,
+                Employee.active.is_(True),
+                Employee.deleted.is_(False),
+            ),
+        ).outerjoin(
+            User,
+            and_(
+                User.id == CreditSettlement.actor_user_id,
+                User.company_id == CreditSettlement.company_id,
+                User.active.is_(True),
+                User.deleted.is_(False),
+            ),
+        ).where(CreditSettlement.company_id == company_id)
         if receivable_id is not None:
             query = query.where(CreditSettlement.receivable_id == receivable_id)
         if customer_id is not None:
             query = query.where(CreditSettlement.customer_id == customer_id)
         if branch_id is not None:
             query = query.where(CreditSettlement.branch_id == branch_id)
-        return list((await self.db.execute(query.order_by(CreditSettlement.received_at.desc(), CreditSettlement.id).limit(limit).offset(offset))).scalars().all())
+        return (await self.db.execute(query.order_by(CreditSettlement.received_at.desc(), CreditSettlement.id).limit(limit).offset(offset))).all()
+
+    async def actor_identity(self, company_id, employee_id=None, user_id=None):
+        actor_id = employee_id or user_id
+        name = None
+        if employee_id is not None:
+            name = (await self.db.execute(select(Employee.name).where(
+                Employee.id == employee_id, Employee.company_id == company_id,
+                Employee.active.is_(True), Employee.deleted.is_(False),
+            ))).scalar_one_or_none()
+        elif user_id is not None:
+            name = (await self.db.execute(select(User.email).where(
+                User.id == user_id, User.company_id == company_id,
+                User.active.is_(True), User.deleted.is_(False),
+            ))).scalar_one_or_none()
+        return actor_id, name or (str(actor_id) if actor_id else "Unknown")
 
     async def save_settlement(self, receivable, settlement, audit):
         self.db.add(receivable)

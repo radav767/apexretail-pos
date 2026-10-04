@@ -98,8 +98,8 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
   const userOptions = useMemo(() => {
     const options = new Map<string, string>();
     expenses.forEach((expense) => {
-      if (expense.employee_id) options.set(`employee:${expense.employee_id}`, `Employee ${shortId(expense.employee_id)}`);
-      else if (expense.actor_user_id) options.set(`user:${expense.actor_user_id}`, `Backoffice ${shortId(expense.actor_user_id)}`);
+      if (expense.employee_id) options.set(`employee:${expense.employee_id}`, expense.actor_name || expense.actor_id || expense.employee_id);
+      else if (expense.actor_user_id) options.set(`user:${expense.actor_user_id}`, expense.actor_name || expense.actor_id || expense.actor_user_id);
     });
     return [...options.entries()];
   }, [expenses]);
@@ -190,7 +190,7 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
           <td data-label="Amount"><strong>{money(expense.amount, expense.currency_code)}</strong></td>
           <td data-label="Payment"><span className={`expense-method expense-method-${expense.payment_method}`}>{expense.payment_method === "mobile" ? "Mobile / Transfer" : expense.payment_method[0].toUpperCase() + expense.payment_method.slice(1)}</span></td>
           <td data-label="Branch">{branchName(expense.branch_id)}</td>
-          <td data-label="User">{expense.employee_id ? `Employee ${shortId(expense.employee_id)}` : `Backoffice ${shortId(expense.actor_user_id)}`}</td>
+          <td data-label="User">{expense.actor_name || expense.actor_id || expense.employee_id || expense.actor_user_id || "Unknown"}</td>
           <td data-label="Status"><span className="expense-posted">Posted</span></td>
         </tr>)}
       </tbody></table></div>

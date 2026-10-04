@@ -4,6 +4,8 @@ export type ExpenseLogicRow = {
   category_id: string;
   actor_user_id: string | null;
   employee_id: string | null;
+  actor_id?: string | null;
+  actor_name?: string | null;
   amount: string | number;
   payment_method: string;
   reference: string | null;

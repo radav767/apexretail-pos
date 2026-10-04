@@ -28,6 +28,11 @@ test("expense filters and audit history expose required fields", () => {
   assert.match(page, />Posted</);
 });
 
+test("expense report and actor filter display resolved staff names", () => {
+  assert.match(page, /expense\.actor_name \|\| expense\.actor_id \|\| expense\.employee_id/);
+  assert.match(page, /options\.set\(`employee:\$\{expense\.employee_id\}`, expense\.actor_name/);
+});
+
 test("expense layouts cover desktop, tablet, phone and narrow phone", () => {
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 1100px\)/);

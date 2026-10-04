@@ -387,6 +387,84 @@ class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(summary["card_sales"], Decimal("0.00"))
             self.assertEqual(summary["mobile_sales"], Decimal("0.00"))
 
+    async def test_financial_history_resolves_actor_names_with_scoped_fallbacks(self):
+        customer = await self.create_customer(code="ACTOR", limit="100.00")
+        sale = await self.credit_sale(customer["id"], "20.00")
+        async with AsyncSession(self.engine) as session:
+            receivable_id = (await session.execute(
+                select(CreditReceivable.id).where(CreditReceivable.sale_id == sale.id)
+            )).scalar_one()
+            settlement = await CreditService(CreditRepository(session)).create_settlement(
+                SettlementCreate(
+                    company_id=COMPANY, receivable_id=receivable_id,
+                    branch_id=BRANCH, amount="5.00", payment_method="cash",
+                    idempotency_key="actor-settlement-001",
+                ),
+                self.employee,
+            )
+            self.assertEqual(settlement["actor_id"], EMPLOYEE)
+            self.assertEqual(settlement["actor_name"], "Cashier")
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            expenses = ExpenseService(ExpenseRepository(session))
+            category = await expenses.create_category(
+                ExpenseCategoryCreate(company_id=COMPANY, name="Actor history"), self.owner
+            )
+        async with AsyncSession(self.engine) as session:
+            expenses = ExpenseService(ExpenseRepository(session))
+            employee_expense = await expenses.create_expense(ExpenseCreate(
+                company_id=COMPANY, category_id=category.id, branch_id=BRANCH,
+                amount="1.00", occurred_at=datetime.now(timezone.utc),
+                payment_method="cash", description="Employee expense",
+                idempotency_key="actor-expense-employee-001",
+            ), self.employee)
+            owner_expense = await expenses.create_expense(ExpenseCreate(
+                company_id=COMPANY, category_id=category.id, branch_id=BRANCH,
+                amount="1.00", occurred_at=datetime.now(timezone.utc),
+                payment_method="card", description="Owner expense",
+                idempotency_key="actor-expense-owner-001",
+            ), self.owner)
+            self.assertEqual(employee_expense.actor_name, "Cashier")
+            self.assertEqual(owner_expense.actor_name, "owner@example.test")
+        async with AsyncSession(self.engine) as session:
+            settlement_rows = await CreditService(CreditRepository(session)).list_settlements(
+                COMPANY, self.owner, customer_id=customer["id"], limit=100, offset=0,
+            )
+            expense_rows = await ExpenseService(ExpenseRepository(session)).list_expenses(
+                COMPANY, self.owner, branch_id=BRANCH, limit=100, offset=0,
+            )
+            history = await CustomerService(CustomerRepository(session)).history(COMPANY, customer["id"])
+            self.assertEqual(settlement_rows[0]["actor_name"], "Cashier")
+            self.assertEqual(
+                {row["description"]: row["actor_name"] for row in expense_rows},
+                {"Employee expense": "Cashier", "Owner expense": "owner@example.test"},
+            )
+            settlement_history = next(row for row in history if row["transaction_type"] == "settlement")
+            self.assertEqual(settlement_history["actor_name"], "Cashier")
+
+        async with self.engine.begin() as connection:
+            await connection.execute(text(
+                "UPDATE employees SET active=false WHERE id=:employee"
+            ), {"employee": EMPLOYEE})
+        async with AsyncSession(self.engine) as session:
+            settlement_rows = await CreditService(CreditRepository(session)).list_settlements(
+                COMPANY, self.owner, customer_id=customer["id"], limit=100, offset=0,
+            )
+            expense_rows = await ExpenseService(ExpenseRepository(session)).list_expenses(
+                COMPANY, self.owner, employee_id=EMPLOYEE, limit=100, offset=0,
+            )
+            self.assertEqual(settlement_rows[0]["actor_name"], str(EMPLOYEE))
+            self.assertEqual(expense_rows[0]["actor_name"], str(EMPLOYEE))
+
+        async with self.engine.begin() as connection:
+            await connection.execute(text(
+                "UPDATE employees SET active=true, company_id=:other WHERE id=:employee"
+            ), {"employee": EMPLOYEE, "other": OTHER_COMPANY})
+        async with AsyncSession(self.engine) as session:
+            settlement_rows = await CreditService(CreditRepository(session)).list_settlements(
+                COMPANY, self.owner, customer_id=customer["id"], limit=100, offset=0,
+            )
+            self.assertEqual(settlement_rows[0]["actor_name"], str(EMPLOYEE))
+
     async def test_expense_category_lifecycle_and_history_filters(self):
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             expenses = ExpenseService(ExpenseRepository(session))

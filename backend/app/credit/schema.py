@@ -52,6 +52,8 @@ class SettlementOut(BaseModel):
     branch_id: UUID
     actor_user_id: UUID | None
     cashier_employee_id: UUID | None
+    actor_id: UUID | None = None
+    actor_name: str = "Unknown"
     device_id: UUID | None
     amount: Decimal
     payment_method: str

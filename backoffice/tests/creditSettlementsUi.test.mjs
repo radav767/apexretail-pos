@@ -26,3 +26,7 @@ test("Backoffice is a read-only outstanding, ageing and settlement report", () =
 test("history and filters cover customer, branch, method, date, status and audit user", () => {
   for (const label of ["Search customer", "Customer", "Branch", "Method", "Status", "Date from", "Date to", "Settlement report", "User"]) assert.ok(page.includes(label));
 });
+
+test("settlement report prefers the resolved actor name and safely falls back to IDs", () => {
+  assert.match(page, /row\.actor_name\|\|row\.actor_id\|\|row\.cashier_employee_id\|\|row\.actor_user_id\|\|"Unknown"/);
+});

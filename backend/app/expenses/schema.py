@@ -47,6 +47,8 @@ class ExpenseOut(BaseModel):
     branch_id: UUID
     actor_user_id: UUID | None
     employee_id: UUID | None
+    actor_id: UUID | None = None
+    actor_name: str = "Unknown"
     amount: Decimal
     currency_code: str
     occurred_at: datetime

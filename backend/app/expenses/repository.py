@@ -1,7 +1,7 @@
-from sqlalchemy import func, or_, select
+from sqlalchemy import String, and_, cast, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Branch, CompanySetting, Expense, ExpenseCategory
+from app.models import Branch, CompanySetting, Employee, Expense, ExpenseCategory, User
 
 
 class ExpenseRepository:
@@ -59,7 +59,33 @@ class ExpenseRepository:
         return list((await self.db.execute(query.order_by(ExpenseCategory.name))).scalars().all())
 
     async def list_expenses(self, company_id, *, start_at=None, end_at=None, branch_id=None, category_id=None, payment_method=None, employee_id=None, actor_user_id=None, search=None, limit=100, offset=0):
-        query = select(Expense, ExpenseCategory.name.label("category_name")).join(ExpenseCategory, (ExpenseCategory.id == Expense.category_id) & (ExpenseCategory.company_id == Expense.company_id)).where(Expense.company_id == company_id)
+        actor_id = func.coalesce(Expense.employee_id, Expense.actor_user_id).label("actor_id")
+        actor_name = func.coalesce(
+            Employee.name,
+            User.email,
+            cast(actor_id, String),
+            literal("Unknown"),
+        ).label("actor_name")
+        query = select(Expense, ExpenseCategory.name.label("category_name"), actor_id, actor_name).join(
+            ExpenseCategory,
+            (ExpenseCategory.id == Expense.category_id) & (ExpenseCategory.company_id == Expense.company_id),
+        ).outerjoin(
+            Employee,
+            and_(
+                Employee.id == Expense.employee_id,
+                Employee.company_id == Expense.company_id,
+                Employee.active.is_(True),
+                Employee.deleted.is_(False),
+            ),
+        ).outerjoin(
+            User,
+            and_(
+                User.id == Expense.actor_user_id,
+                User.company_id == Expense.company_id,
+                User.active.is_(True),
+                User.deleted.is_(False),
+            ),
+        ).where(Expense.company_id == company_id)
         for value, column, operator in (
             (start_at, Expense.occurred_at, "ge"), (end_at, Expense.occurred_at, "lt"),
             (branch_id, Expense.branch_id, "eq"), (category_id, Expense.category_id, "eq"),
@@ -72,3 +98,18 @@ class ExpenseRepository:
             value = f"%{search.strip()}%"
             query = query.where(or_(Expense.reference.ilike(value), Expense.description.ilike(value)))
         return (await self.db.execute(query.order_by(Expense.occurred_at.desc(), Expense.id).limit(limit).offset(offset))).all()
+
+    async def actor_identity(self, company_id, employee_id=None, user_id=None):
+        actor_id = employee_id or user_id
+        name = None
+        if employee_id is not None:
+            name = (await self.db.execute(select(Employee.name).where(
+                Employee.id == employee_id, Employee.company_id == company_id,
+                Employee.active.is_(True), Employee.deleted.is_(False),
+            ))).scalar_one_or_none()
+        elif user_id is not None:
+            name = (await self.db.execute(select(User.email).where(
+                User.id == user_id, User.company_id == company_id,
+                User.active.is_(True), User.deleted.is_(False),
+            ))).scalar_one_or_none()
+        return actor_id, name or (str(actor_id) if actor_id else "Unknown")

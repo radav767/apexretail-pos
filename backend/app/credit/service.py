@@ -15,9 +15,11 @@ class CreditService:
         self.repo = repo
 
     @staticmethod
-    def settlement_view(settlement, outstanding=None):
+    def settlement_view(settlement, outstanding=None, actor_id=None, actor_name="Unknown"):
         values = {column.name: getattr(settlement, column.name) for column in settlement.__table__.columns}
         values["outstanding_balance"] = outstanding
+        values["actor_id"] = actor_id
+        values["actor_name"] = actor_name
         return values
 
     @staticmethod
@@ -55,7 +57,8 @@ class CreditService:
         if existing:
             self.ensure_same_request(existing, data)
             receivable = await self.repo.get_receivable(data.company_id, existing.receivable_id)
-            return self.settlement_view(existing, receivable.outstanding_balance if receivable else None)
+            actor_id, actor_name = await self.repo.actor_identity(data.company_id, existing.cashier_employee_id, existing.actor_user_id)
+            return self.settlement_view(existing, receivable.outstanding_balance if receivable else None, actor_id, actor_name)
 
         branch = await self.repo.get_branch(data.company_id, data.branch_id)
         if not branch:
@@ -67,7 +70,8 @@ class CreditService:
         existing = await self.repo.get_settlement_by_key(data.company_id, data.idempotency_key)
         if existing:
             self.ensure_same_request(existing, data)
-            return self.settlement_view(existing, receivable.outstanding_balance)
+            actor_id, actor_name = await self.repo.actor_identity(data.company_id, existing.cashier_employee_id, existing.actor_user_id)
+            return self.settlement_view(existing, receivable.outstanding_balance, actor_id, actor_name)
         amount = Decimal(data.amount).quantize(Decimal("0.01"))
         outstanding = Decimal(receivable.outstanding_balance)
         if amount <= 0:
@@ -100,7 +104,8 @@ class CreditService:
             details={"settlement_id": str(settlement.id), "receivable_id": str(receivable.id), "amount": str(amount), "payment_method": data.payment_method},
         )
         saved = await self.repo.save_settlement(receivable, settlement, audit)
-        return self.settlement_view(saved, new_outstanding)
+        actor_id, actor_name = await self.repo.actor_identity(data.company_id, saved.cashier_employee_id, saved.actor_user_id)
+        return self.settlement_view(saved, new_outstanding, actor_id, actor_name)
 
     async def list_settlements(self, company_id, actor, **filters):
         enforce_actor_company(actor, company_id)
@@ -109,4 +114,5 @@ class CreditService:
             if branch_id is not None:
                 enforce_actor_branch(actor, branch_id)
             filters["branch_id"] = actor.employee.branch_id
-        return await self.repo.list_settlements(company_id, **filters)
+        rows = await self.repo.list_settlements(company_id, **filters)
+        return [self.settlement_view(settlement, actor_id=actor_id, actor_name=actor_name) for settlement, actor_id, actor_name in rows]

@@ -39,6 +39,13 @@ test("expenses use session branch and server-derived cashier", () => {
   assert.match(page, /idempotency_key: expenseKey\.current/);
 });
 
+test("financial histories display server-resolved actor names with identifier fallback", () => {
+  assert.match(page, /row\.actor_name \|\| row\.actor_id \|\| "Unknown"/);
+  assert.equal((page.match(/row\.actor_name \|\| row\.actor_id \|\| "Unknown"/g) || []).length, 3);
+  assert.match(page, /type Settlement = \{[^\n]*actor_name\?: string \| null/);
+  assert.match(page, /type Expense = \{[^\n]*actor_name\?: string \| null/);
+});
+
 test("Customers list uses the shared mobile header clearance", () => {
   assert.match(page, /activeModule === "Customers"/);
   assert.match(page, /<h2>Customers<\/h2>/);

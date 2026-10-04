@@ -19,6 +19,8 @@ export type SettlementFilterRow = {
   branch_id: string;
   payment_method: string;
   received_at: string;
+  actor_id?: string | null;
+  actor_name?: string | null;
 };
 
 export function settlementAmountError(value: string | number, outstanding: string | number): string | null {
