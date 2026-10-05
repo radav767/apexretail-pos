@@ -48,6 +48,23 @@ PRODUCT = UUID("77000000-0000-0000-0000-000000000001")
 
 
 class CreditPolicyValidationTest(unittest.TestCase):
+    def test_financial_pagination_parameters_reject_invalid_values(self):
+        from app.main import app
+        schema = app.openapi()
+        for path in (
+            "/api/customers/{company_id}",
+            "/api/customers/{company_id}/{customer_id}/transactions",
+            "/api/credit/{company_id}/receivables",
+            "/api/credit/{company_id}/settlements",
+            "/api/expenses/{company_id}",
+        ):
+            parameters = {item["name"]: item["schema"] for item in schema["paths"][path]["get"]["parameters"]}
+            page_schema = next(item for item in parameters["page"]["anyOf"] if item.get("type") == "integer")
+            size_schema = next(item for item in parameters["page_size"]["anyOf"] if item.get("type") == "integer")
+            self.assertEqual(page_schema["minimum"], 1)
+            self.assertEqual(size_schema["minimum"], 1)
+            self.assertEqual(size_schema["maximum"], 100)
+
     def test_credit_requires_explicit_policy(self):
         base = {"company_id": uuid4(), "customer_code": "C1", "name": "Customer"}
         with self.assertRaises(ValidationError):
@@ -283,7 +300,7 @@ class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):
             view = await customers.get(COMPANY, customer["id"])
             history = await customers.history(COMPANY, customer["id"])
             self.assertEqual(view["outstanding_balance"], Decimal("0.00"))
-            self.assertEqual([row["transaction_type"] for row in history], ["credit_sale", "settlement", "settlement"])
+            self.assertEqual([row["transaction_type"] for row in history], ["settlement", "settlement", "credit_sale"])
 
             expenses = ExpenseService(ExpenseRepository(session))
             category = await expenses.create_category(ExpenseCategoryCreate(company_id=COMPANY, name="Utilities"), self.owner)
@@ -521,6 +538,62 @@ class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):
                     OTHER_COMPANY, used.id, ExpenseCategoryUpdate(active=False), self.owner
                 )
             self.assertEqual(isolated.exception.status_code, 403)
+
+    async def test_financial_lists_are_filtered_paginated_and_company_scoped(self):
+        created = []
+        for index in range(5):
+            enabled_customer = index % 2 == 0
+            created.append(await self.create_customer(code=f"PAGE-{index}", enabled=enabled_customer, limit="100.00" if enabled_customer else None))
+        async with AsyncSession(self.engine) as session:
+            customers = CustomerService(CustomerRepository(session))
+            first, first_total = await customers.list(COMPANY, limit=2, offset=0, with_total=True)
+            middle, middle_total = await customers.list(COMPANY, limit=2, offset=2, with_total=True)
+            last, last_total = await customers.list(COMPANY, limit=2, offset=4, with_total=True)
+            matched, matched_total = await customers.list(COMPANY, search="PAGE-3", limit=25, offset=0, with_total=True)
+            enabled, enabled_total = await customers.list(COMPANY, credit_enabled=True, limit=25, offset=0, with_total=True)
+            empty, empty_total = await customers.list(COMPANY, search="DOES-NOT-EXIST", limit=25, offset=0, with_total=True)
+            self.assertEqual((len(first), len(middle), len(last)), (2, 2, 1))
+            self.assertEqual((first_total, middle_total, last_total), (5, 5, 5))
+            self.assertEqual(([row["customer_code"] for row in matched], matched_total), (["PAGE-3"], 1))
+            self.assertEqual(enabled_total, 3)
+            self.assertTrue(all(row["credit_enabled"] for row in enabled))
+            self.assertEqual((empty, empty_total), ([], 0))
+
+        sale = await self.credit_sale(created[0]["id"], "20.00")
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            receivable = (await session.execute(select(CreditReceivable).where(CreditReceivable.sale_id == sale.id))).scalar_one()
+            settlement = await CreditService(CreditRepository(session)).create_settlement(
+                SettlementCreate(company_id=COMPANY, receivable_id=receivable.id, branch_id=BRANCH, amount="5.00", payment_method="card", reference="PAGE-SETTLE", idempotency_key="pagination-settlement"),
+                self.owner,
+            )
+        async with AsyncSession(self.engine) as session:
+            credit = CreditService(CreditRepository(session))
+            partial, partial_total = await credit.list_receivables(COMPANY, self.owner, customer_id=created[0]["id"], status="partially_paid", search=sale.receipt_number, limit=25, offset=0, with_total=True)
+            payments, payment_total = await credit.list_settlements(COMPANY, self.owner, customer_id=created[0]["id"], payment_method="card", search="PAGE-SETTLE", limit=25, offset=0, with_total=True)
+            self.assertEqual(([row["id"] for row in partial], partial_total), ([receivable.id], 1))
+            self.assertEqual(([row["id"] for row in payments], payment_total), ([settlement["id"]], 1))
+            history, history_total = await CustomerService(CustomerRepository(session)).history(COMPANY, created[0]["id"], transaction_type="settlement", start_at=datetime.now(timezone.utc) - timedelta(days=1), end_at=datetime.now(timezone.utc) + timedelta(days=1), limit=25, offset=0, with_total=True)
+            self.assertEqual((len(history), history_total), (1, 1))
+
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            expenses = ExpenseService(ExpenseRepository(session))
+            category = await expenses.create_category(ExpenseCategoryCreate(company_id=COMPANY, name="Pagination"), self.owner)
+            for index, method in enumerate(("cash", "card", "mobile", "cash", "card")):
+                await ExpenseService(ExpenseRepository(session)).create_expense(ExpenseCreate(
+                    company_id=COMPANY, category_id=category.id, branch_id=BRANCH,
+                    amount="1.00", occurred_at=datetime.now(timezone.utc), payment_method=method,
+                    reference=f"PAGE-EXP-{index}", description=f"Paged expense {index}",
+                    idempotency_key=f"pagination-expense-{index}",
+                ), self.owner)
+        async with AsyncSession(self.engine) as session:
+            expenses = ExpenseService(ExpenseRepository(session))
+            expense_first, expense_total, expense_summary = await expenses.list_expenses(COMPANY, self.owner, category_id=category.id, branch_id=BRANCH, limit=2, offset=0, with_total=True)
+            expense_last, last_expense_total, _ = await expenses.list_expenses(COMPANY, self.owner, category_id=category.id, limit=2, offset=4, with_total=True)
+            filtered, filtered_total, filtered_summary = await expenses.list_expenses(COMPANY, self.owner, category_id=category.id, payment_method="mobile", actor_id=USER, search="PAGE-EXP-2", start_at=datetime.now(timezone.utc)-timedelta(days=1), end_at=datetime.now(timezone.utc)+timedelta(days=1), limit=25, offset=0, with_total=True)
+            self.assertEqual((len(expense_first), len(expense_last), expense_total, last_expense_total), (2, 1, 5, 5))
+            self.assertEqual(([row["reference"] for row in filtered], filtered_total), (["PAGE-EXP-2"], 1))
+            self.assertEqual(expense_summary["total"], Decimal("5.00"))
+            self.assertEqual(filtered_summary["mobile"], Decimal("1.00"))
 
 
 if __name__ == "__main__":

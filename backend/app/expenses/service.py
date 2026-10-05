@@ -100,7 +100,12 @@ class ExpenseService:
                 enforce_actor_branch(actor, branch_id)
             filters["branch_id"] = actor.employee.branch_id
         rows = await self.repo.list_expenses(company_id, **filters)
-        return [{
+        total = None
+        summary = None
+        if filters.get("with_total"):
+            rows, total, summary = rows
+        items = [{
             **{column.name: getattr(expense, column.name) for column in expense.__table__.columns},
             "category_name": category_name, "actor_id": actor_id, "actor_name": actor_name,
         } for expense, category_name, actor_id, actor_name in rows]
+        return (items, total, summary) if total is not None else items

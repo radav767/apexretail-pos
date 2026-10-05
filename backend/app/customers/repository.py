@@ -26,7 +26,7 @@ class CustomerRepository:
         result = await self.db.execute(select(func.coalesce(func.sum(CreditReceivable.outstanding_balance), 0)).where(CreditReceivable.company_id == company_id, CreditReceivable.customer_id == customer_id))
         return result.scalar_one()
 
-    async def list(self, company_id, *, search=None, active=None, limit=100, offset=0):
+    async def list(self, company_id, *, search=None, active=None, credit_enabled=None, limit=100, offset=0, with_total=False):
         balance = func.coalesce(func.sum(CreditReceivable.outstanding_balance), 0).label("outstanding_balance")
         query = select(Customer, balance).outerjoin(
             CreditReceivable,
@@ -37,8 +37,22 @@ class CustomerRepository:
             query = query.where(or_(Customer.name.ilike(value), Customer.customer_code.ilike(value), Customer.phone.ilike(value)))
         if active is not None:
             query = query.where(Customer.active == active)
+        if credit_enabled is not None:
+            query = query.where(Customer.credit_enabled == credit_enabled)
+        total = None
+        if with_total:
+            count_query = select(func.count(Customer.id)).where(Customer.company_id == company_id, Customer.deleted.is_(False))
+            if search:
+                value = f"%{search.strip()}%"
+                count_query = count_query.where(or_(Customer.name.ilike(value), Customer.customer_code.ilike(value), Customer.phone.ilike(value)))
+            if active is not None:
+                count_query = count_query.where(Customer.active == active)
+            if credit_enabled is not None:
+                count_query = count_query.where(Customer.credit_enabled == credit_enabled)
+            total = int((await self.db.execute(count_query)).scalar_one())
         query = query.group_by(Customer.id).order_by(Customer.name, Customer.id).limit(limit).offset(offset)
-        return (await self.db.execute(query)).all()
+        rows = (await self.db.execute(query)).all()
+        return (rows, total) if with_total else rows
 
     async def save(self, customer):
         self.db.add(customer)
@@ -46,9 +60,10 @@ class CustomerRepository:
         await self.db.refresh(customer)
         return customer
 
-    async def history(self, company_id, customer_id):
-        result = await self.db.execute(text("""
-            SELECT 'credit_sale' transaction_type, cr.id transaction_id,
+    async def history(self, company_id, customer_id, *, transaction_type=None, start_at=None, end_at=None, limit=100, offset=0, with_total=False):
+        sql = """
+            WITH history AS (
+            SELECT 'credit_sale'::varchar transaction_type, cr.id transaction_id,
                    cr.sale_id, s.receipt_number, cr.original_amount amount,
                    'credit' payment_method, cr.branch_id, cr.created_at occurred_at,
                    cr.due_date, NULL::varchar reference,
@@ -73,6 +88,15 @@ class CustomerRepository:
               LEFT JOIN users settle_user ON settle_user.id=cs.actor_user_id
                AND settle_user.company_id=cs.company_id AND settle_user.active=true AND settle_user.deleted=false
              WHERE cs.company_id=:company_id AND cs.customer_id=:customer_id
-            ORDER BY occurred_at, transaction_id
-        """), {"company_id": company_id, "customer_id": customer_id})
-        return [dict(row) for row in result.mappings().all()]
+            ) SELECT * FROM history
+             WHERE (CAST(:transaction_type AS varchar) IS NULL OR transaction_type=CAST(:transaction_type AS varchar))
+               AND (CAST(:start_at AS timestamptz) IS NULL OR occurred_at>=CAST(:start_at AS timestamptz))
+               AND (CAST(:end_at AS timestamptz) IS NULL OR occurred_at<CAST(:end_at AS timestamptz))
+        """
+        params = {"company_id": company_id, "customer_id": customer_id, "transaction_type": transaction_type, "start_at": start_at, "end_at": end_at, "limit": limit, "offset": offset}
+        total = None
+        if with_total:
+            total = int((await self.db.execute(text(f"SELECT count(*) FROM ({sql}) history_count"), params)).scalar_one())
+        result = await self.db.execute(text(sql + " ORDER BY occurred_at DESC, transaction_id DESC LIMIT :limit OFFSET :offset"), params)
+        rows = [dict(row) for row in result.mappings().all()]
+        return (rows, total) if with_total else rows

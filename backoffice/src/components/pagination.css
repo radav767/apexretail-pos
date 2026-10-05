@@ -1,0 +1,5 @@
+.report-pagination { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 0; color:#52606d; }
+.report-pagination > div { display:flex; align-items:center; gap:10px; }
+.report-pagination button { min-height:40px; padding:8px 14px; border:1px solid #bcccdc; border-radius:8px; background:#fff; font-weight:700; }
+.report-pagination button:disabled { cursor:not-allowed; opacity:.5; }
+@media (max-width:720px) { .report-pagination { align-items:stretch; flex-direction:column; } .report-pagination > div { justify-content:space-between; } }

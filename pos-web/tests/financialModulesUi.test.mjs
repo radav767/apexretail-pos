@@ -15,13 +15,26 @@ test("POS navigation exposes operational financial modules without changing logo
 
 test("customer workflow shares authoritative customer search with credit checkout", () => {
   assert.match(app, /searchCustomers\(companyId, query/);
-  assert.match(page, /searchCustomers\(companyId, search/);
+  assert.match(page, /search: search\.trim\(\) \|\| undefined,[^}]*page, page_size: 25/);
   assert.match(customerApi, /api\.get\(`\/customers\/\$\{companyId\}`/);
   assert.match(page, /Manager credit configuration/);
   assert.match(page, /Credit settings and active status require manager permission/);
   assert.match(page, /cashier\?\.permissions\?\.customers_manage/);
   assert.match(page, /canManageCredit \? policy/);
   assert.match(page, /credit_enabled: false, unlimited_credit: false, credit_limit: null, credit_terms_days: 0/);
+});
+
+test("financial modules use bounded server pages with cashier-friendly navigation states", () => {
+  assert.doesNotMatch(page, /limit:\s*(500|100)/);
+  assert.match(page, /type PageEnvelope<T>/);
+  assert.match(page, /page_size: 25/g);
+  assert.match(page, />Previous</);
+  assert.match(page, />Next</);
+  assert.match(page, /Loading customers/);
+  assert.match(page, /No customers match this search/);
+  assert.match(page, /No customer transactions found/);
+  assert.match(page, /No open receivables found/);
+  assert.match(page, /No expenses found today/);
 });
 
 test("settlements are online, idempotent, validated and printable", () => {

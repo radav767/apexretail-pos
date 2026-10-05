@@ -33,6 +33,13 @@ test("expense report and actor filter display resolved staff names", () => {
   assert.match(page, /options\.set\(`employee:\$\{expense\.employee_id\}`, expense\.actor_name/);
 });
 
+test("expense report uses server filters, totals and bounded pagination", () => {
+  for (const value of ["start_at", "end_at", "branch_id", "category_id", "payment_method", "search", "page_size: 25"]) assert.ok(page.includes(value));
+  assert.match(page, /unpackPage<Expense>/);
+  assert.match(page, /<Pagination meta=\{expensePage\}/);
+  assert.doesNotMatch(page, /limit: 500/);
+});
+
 test("expense layouts cover desktop, tablet, phone and narrow phone", () => {
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 1100px\)/);

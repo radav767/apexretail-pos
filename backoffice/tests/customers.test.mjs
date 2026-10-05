@@ -38,6 +38,15 @@ test("customer details expose history, receivables and settlements", () => {
   assert.match(page, /item\.actor_name \|\| item\.actor_id \|\| "Unknown"/);
 });
 
+test("customer report and statements use server pagination", () => {
+  assert.match(page, /page_size: 25/);
+  assert.match(page, /unpackPage<Customer>/);
+  assert.match(page, /unpackPage<CustomerTransaction>/);
+  assert.match(page, /<Pagination meta=\{customerPage\}/);
+  assert.match(page, /<Pagination meta=\{detailPages\[detailTab\]\}/);
+  assert.doesNotMatch(page, /limit: 500/);
+});
+
 test("Customers remains usable at desktop, tablet and phone widths", () => {
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(css, /@media \(max-width: 1100px\)/);

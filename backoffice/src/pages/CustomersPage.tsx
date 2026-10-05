@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api/client";
+import Pagination from "../components/Pagination";
+import { emptyPage, unpackPage } from "../components/pagination";
+import type { PageMeta } from "../components/pagination";
 import "./customers.css";
 
 type Customer = {
@@ -112,6 +115,10 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [creditFilter, setCreditFilter] = useState("all");
+  const [transactionType, setTransactionType] = useState("all");
+  const [historyFrom, setHistoryFrom] = useState("");
+  const [historyTo, setHistoryTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -125,8 +132,10 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [settlementsRestricted, setSettlementsRestricted] = useState(false);
   const [detailTab, setDetailTab] = useState<"history" | "receivables" | "settlements">("history");
+  const [customerPage, setCustomerPage] = useState<PageMeta>(emptyPage());
+  const [detailPages, setDetailPages] = useState({ history: emptyPage(), receivables: emptyPage(), settlements: emptyPage() });
 
-  const loadCustomers = useCallback(async (clearMessage = true) => {
+  const loadCustomers = useCallback(async (clearMessage = true, page = 1) => {
     if (!companyId) return;
     setLoading(true);
     if (clearMessage) setMessage("");
@@ -135,10 +144,14 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
         params: {
           search: appliedSearch || undefined,
           active: activeFilter === "all" ? undefined : activeFilter === "active",
-          limit: 500,
+          credit_enabled: creditFilter === "all" ? undefined : creditFilter === "enabled",
+          page,
+          page_size: 25,
         },
       });
-      setCustomers(response.data);
+      const result = unpackPage<Customer>(response.data);
+      setCustomers(result.items);
+      setCustomerPage(result.meta);
     } catch (error: any) {
       setCustomers([]);
       setMessage(error.response?.status === 403
@@ -147,16 +160,16 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [activeFilter, appliedSearch, companyId]);
+  }, [activeFilter, appliedSearch, companyId, creditFilter]);
 
   useEffect(() => { void loadCustomers(); }, [loadCustomers]);
 
   const summary = useMemo(() => ({
-    total: customers.length,
+    total: customerPage.total,
     active: customers.filter((customer) => customer.active).length,
     credit: customers.filter((customer) => customer.credit_enabled).length,
     outstanding: customers.reduce((total, customer) => total + Number(customer.outstanding_balance || 0), 0),
-  }), [customers]);
+  }), [customerPage.total, customers]);
 
   function openEdit(customer: Customer) {
     setEditingId(customer.id);
@@ -231,16 +244,15 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
     }
   }
 
-  async function openDetails(customerId: string) {
+  async function openDetails(customerId: string, page = 1) {
     setDetailsLoading(true);
     setSettlementsRestricted(false);
     setMessage("");
-    setDetailTab("history");
     const [customerResult, historyResult, receivableResult, settlementResult] = await Promise.allSettled([
       api.get(`/customers/${companyId}/${customerId}`),
-      api.get(`/customers/${companyId}/${customerId}/transactions`),
-      api.get(`/credit/${companyId}/receivables`, { params: { customer_id: customerId, limit: 500 } }),
-      api.get(`/credit/${companyId}/settlements`, { params: { customer_id: customerId, limit: 500 } }),
+      api.get(`/customers/${companyId}/${customerId}/transactions`, { params: { transaction_type: transactionType === "all" ? undefined : transactionType, start_at: historyFrom ? new Date(`${historyFrom}T00:00:00`).toISOString() : undefined, end_at: historyTo ? new Date(new Date(`${historyTo}T00:00:00`).getTime() + 86400000).toISOString() : undefined, page, page_size: 25 } }),
+      api.get(`/credit/${companyId}/receivables`, { params: { customer_id: customerId, start_at: historyFrom ? new Date(`${historyFrom}T00:00:00`).toISOString() : undefined, end_at: historyTo ? new Date(new Date(`${historyTo}T00:00:00`).getTime() + 86400000).toISOString() : undefined, page, page_size: 25 } }),
+      api.get(`/credit/${companyId}/settlements`, { params: { customer_id: customerId, start_at: historyFrom ? new Date(`${historyFrom}T00:00:00`).toISOString() : undefined, end_at: historyTo ? new Date(new Date(`${historyTo}T00:00:00`).getTime() + 86400000).toISOString() : undefined, page, page_size: 25 } }),
     ]);
     if (customerResult.status === "rejected") {
       setSelected(null);
@@ -249,9 +261,13 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
       return;
     }
     setSelected(customerResult.value.data);
-    setTransactions(historyResult.status === "fulfilled" ? historyResult.value.data : []);
-    setReceivables(receivableResult.status === "fulfilled" ? receivableResult.value.data : []);
-    setSettlements(settlementResult.status === "fulfilled" ? settlementResult.value.data : []);
+    const history = unpackPage<CustomerTransaction>(historyResult.status === "fulfilled" ? historyResult.value.data : []);
+    const credit = unpackPage<Receivable>(receivableResult.status === "fulfilled" ? receivableResult.value.data : []);
+    const paid = unpackPage<Settlement>(settlementResult.status === "fulfilled" ? settlementResult.value.data : []);
+    setTransactions(history.items);
+    setReceivables(credit.items);
+    setSettlements(paid.items);
+    setDetailPages({ history: history.meta, receivables: credit.meta, settlements: paid.meta });
     setSettlementsRestricted(settlementResult.status === "rejected" && settlementResult.reason?.response?.status === 403);
     setDetailsLoading(false);
   }
@@ -279,6 +295,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
       }}>
         <label>Search customers<input aria-label="Search customers" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone or customer code" /></label>
         <label>Status<select value={activeFilter} onChange={(event) => setActiveFilter(event.target.value)}><option value="all">All customers</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+        <label>Credit status<select value={creditFilter} onChange={(event) => setCreditFilter(event.target.value)}><option value="all">All policies</option><option value="enabled">Credit enabled</option><option value="disabled">Credit disabled</option></select></label>
         <button type="submit" disabled={loading}>{loading ? "Searching…" : "Search"}</button>
       </form>
 
@@ -294,11 +311,12 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
               <td data-label="Credit">{customer.credit_enabled ? <><strong>{customer.unlimited_credit ? "Unlimited" : `Limit ${amount(customer.credit_limit)}`}</strong><small>{customer.credit_terms_days} day terms</small></> : <span className="customer-muted">Disabled</span>}</td>
               <td data-label="Outstanding"><strong>{amount(customer.outstanding_balance)}</strong></td>
               <td data-label="Status"><span className={customer.active ? "customer-active" : "customer-inactive"}>{customer.active ? "Active" : "Inactive"}</span></td>
-              <td data-label="Actions"><div className="customer-row-actions"><button type="button" onClick={() => void openDetails(customer.id)}>Statement</button><button type="button" onClick={() => openEdit(customer)}>Administrative edit</button></div></td>
+              <td data-label="Actions"><div className="customer-row-actions"><button type="button" onClick={() => { setDetailTab("history"); void openDetails(customer.id); }}>Statement</button><button type="button" onClick={() => openEdit(customer)}>Administrative edit</button></div></td>
             </tr>)}
           </tbody>
         </table>
       </div>
+      <Pagination meta={customerPage} onPage={(page) => void loadCustomers(true, page)} />
     </section>
 
     {(selected || detailsLoading) && <section className="customer-details-panel" aria-live="polite">
@@ -320,12 +338,14 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
           <button type="button" role="tab" aria-selected={detailTab === "receivables"} className={detailTab === "receivables" ? "active" : ""} onClick={() => setDetailTab("receivables")}>Receivables ({receivables.length})</button>
           <button type="button" role="tab" aria-selected={detailTab === "settlements"} className={detailTab === "settlements" ? "active" : ""} onClick={() => setDetailTab("settlements")}>Settlements ({settlements.length})</button>
         </div>
+        <div className="customer-filters"><label>Transaction type<select value={transactionType} onChange={(event) => setTransactionType(event.target.value)}><option value="all">All transactions</option><option value="credit_sale">Credit sales</option><option value="settlement">Settlements</option></select></label><label>Date from<input type="date" value={historyFrom} onChange={(event) => setHistoryFrom(event.target.value)} /></label><label>Date to<input type="date" value={historyTo} onChange={(event) => setHistoryTo(event.target.value)} /></label><button type="button" onClick={() => void openDetails(selected.id, 1)}>Apply</button></div>
 
         <div className="customer-activity-list">
           {detailTab === "history" && (transactions.length ? transactions.map((item) => <article key={`${item.transaction_type}-${item.transaction_id}`}><div><strong>{item.transaction_type === "credit_sale" ? "Credit sale" : "Settlement"}</strong><span>{item.receipt_number || item.reference || "No reference"} · {item.actor_name || item.actor_id || "Unknown"}</span></div><div><strong className={Number(item.amount) < 0 ? "customer-credit" : ""}>{Number(item.amount) < 0 ? "−" : "+"}{amount(Math.abs(Number(item.amount)), detailCurrency)}</strong><span>{dateTime(item.occurred_at)}</span></div></article>) : <p className="customer-empty-state">No customer transactions yet.</p>)}
           {detailTab === "receivables" && (receivables.length ? receivables.map((item) => <article key={item.id}><div><strong>{item.sale_receipt_number || "Credit sale"}</strong><span>Due {new Date(`${item.due_date}T00:00:00`).toLocaleDateString()} · {titleCase(item.status)}</span></div><div><strong>{amount(item.outstanding_balance, item.currency_code)}</strong><span>{amount(item.amount_settled, item.currency_code)} settled of {amount(item.original_amount, item.currency_code)}</span></div></article>) : <p className="customer-empty-state">No credit receivables yet.</p>)}
           {detailTab === "settlements" && (settlementsRestricted ? <p className="customer-empty-state">You do not have permission to view settlement history.</p> : settlements.length ? settlements.map((item) => <article key={item.id}><div><strong>{item.receipt_number}</strong><span>{titleCase(item.payment_method)} · {item.reference || "No reference"} · {item.actor_name || item.actor_id || "Unknown"}</span></div><div><strong className="customer-credit">{amount(item.amount, detailCurrency)}</strong><span>{dateTime(item.received_at)}</span></div></article>) : <p className="customer-empty-state">No credit settlements yet.</p>)}
         </div>
+        <Pagination meta={detailPages[detailTab]} onPage={(page) => void openDetails(selected.id, page)} />
       </>}
     </section>}
 

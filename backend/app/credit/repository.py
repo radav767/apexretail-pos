@@ -22,7 +22,7 @@ class CreditRepository:
         result = await self.db.execute(select(CreditSettlement).where(CreditSettlement.company_id == company_id, CreditSettlement.idempotency_key == key))
         return result.scalar_one_or_none()
 
-    async def list_receivables(self, company_id, *, customer_id=None, branch_id=None, status=None, limit=100, offset=0):
+    async def list_receivables(self, company_id, *, customer_id=None, branch_id=None, status=None, start_at=None, end_at=None, search=None, limit=100, offset=0, with_total=False):
         query = select(
             CreditReceivable,
             Customer.name.label("customer_name"), Customer.customer_code.label("customer_code"),
@@ -33,10 +33,24 @@ class CreditRepository:
         if branch_id is not None:
             query = query.where(CreditReceivable.branch_id == branch_id)
         if status is not None:
-            query = query.where(CreditReceivable.status == status)
-        return (await self.db.execute(query.order_by(CreditReceivable.created_at.desc(), CreditReceivable.id).limit(limit).offset(offset))).all()
+            if status == "overdue":
+                query = query.where(CreditReceivable.outstanding_balance > 0, CreditReceivable.due_date < func.current_date())
+            elif status == "outstanding":
+                query = query.where(CreditReceivable.status.in_(("unpaid", "partially_paid")))
+            elif status == "open":
+                query = query.where(CreditReceivable.status == "unpaid")
+            else:
+                query = query.where(CreditReceivable.status == status)
+        if start_at is not None: query = query.where(CreditReceivable.created_at >= start_at)
+        if end_at is not None: query = query.where(CreditReceivable.created_at < end_at)
+        if search:
+            value = f"%{search.strip()}%"
+            query = query.where(Sale.receipt_number.ilike(value))
+        total = int((await self.db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one()) if with_total else None
+        rows = (await self.db.execute(query.order_by(CreditReceivable.created_at.desc(), CreditReceivable.id.desc()).limit(limit).offset(offset))).all()
+        return (rows, total) if with_total else rows
 
-    async def list_settlements(self, company_id, *, receivable_id=None, customer_id=None, branch_id=None, limit=100, offset=0):
+    async def list_settlements(self, company_id, *, receivable_id=None, customer_id=None, branch_id=None, status=None, payment_method=None, start_at=None, end_at=None, search=None, limit=100, offset=0, with_total=False):
         actor_id = func.coalesce(CreditSettlement.cashier_employee_id, CreditSettlement.actor_user_id).label("actor_id")
         actor_name = func.coalesce(
             Employee.name,
@@ -44,7 +58,11 @@ class CreditRepository:
             cast(actor_id, String),
             literal("Unknown"),
         ).label("actor_name")
-        query = select(CreditSettlement, actor_id, actor_name).outerjoin(
+        query = select(
+            CreditSettlement, actor_id, actor_name,
+            Customer.name.label("customer_name"), Customer.customer_code.label("customer_code"),
+            Sale.receipt_number.label("sale_receipt_number"),
+        ).outerjoin(
             Employee,
             and_(
                 Employee.id == CreditSettlement.cashier_employee_id,
@@ -60,14 +78,27 @@ class CreditRepository:
                 User.active.is_(True),
                 User.deleted.is_(False),
             ),
-        ).where(CreditSettlement.company_id == company_id)
+        ).join(CreditReceivable, and_(CreditReceivable.id == CreditSettlement.receivable_id, CreditReceivable.company_id == CreditSettlement.company_id)).join(Customer, and_(Customer.id == CreditSettlement.customer_id, Customer.company_id == CreditSettlement.company_id)).join(Sale, and_(Sale.id == CreditReceivable.sale_id, Sale.company_id == CreditSettlement.company_id)).where(CreditSettlement.company_id == company_id)
         if receivable_id is not None:
             query = query.where(CreditSettlement.receivable_id == receivable_id)
         if customer_id is not None:
             query = query.where(CreditSettlement.customer_id == customer_id)
         if branch_id is not None:
             query = query.where(CreditSettlement.branch_id == branch_id)
-        return (await self.db.execute(query.order_by(CreditSettlement.received_at.desc(), CreditSettlement.id).limit(limit).offset(offset))).all()
+        if status is not None:
+            if status == "overdue": query = query.where(CreditReceivable.outstanding_balance > 0, CreditReceivable.due_date < func.current_date())
+            elif status == "outstanding": query = query.where(CreditReceivable.status.in_(("unpaid", "partially_paid")))
+            elif status == "open": query = query.where(CreditReceivable.status == "unpaid")
+            else: query = query.where(CreditReceivable.status == status)
+        if payment_method is not None: query = query.where(CreditSettlement.payment_method == payment_method)
+        if start_at is not None: query = query.where(CreditSettlement.received_at >= start_at)
+        if end_at is not None: query = query.where(CreditSettlement.received_at < end_at)
+        if search:
+            value = f"%{search.strip()}%"
+            query = query.where(CreditSettlement.reference.ilike(value) | CreditSettlement.receipt_number.ilike(value) | Sale.receipt_number.ilike(value))
+        total = int((await self.db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one()) if with_total else None
+        rows = (await self.db.execute(query.order_by(CreditSettlement.received_at.desc(), CreditSettlement.id.desc()).limit(limit).offset(offset))).all()
+        return (rows, total) if with_total else rows
 
     async def actor_identity(self, company_id, employee_id=None, user_id=None):
         actor_id = employee_id or user_id

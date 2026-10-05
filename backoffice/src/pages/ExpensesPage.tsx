@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { api } from "../api/client";
+import Pagination from "../components/Pagination";
+import { emptyPage, unpackPage } from "../components/pagination";
 import { categoryBreakdown, expenseSummary } from "./expenseLogic";
 import type { ExpenseLogicRow } from "./expenseLogic";
 import "./expenses.css";
@@ -50,6 +52,8 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
   const [categoryDescription, setCategoryDescription] = useState("");
   const [editingCategoryId, setEditingCategoryId] = useState("");
   const [categorySaving, setCategorySaving] = useState(false);
+  const [expensePage, setExpensePage] = useState(emptyPage());
+  const [serverSummary, setServerSummary] = useState<ReturnType<typeof expenseSummary> | null>(null);
 
   const loadCategoriesAndBranches = useCallback(async () => {
     if (!companyId) return;
@@ -61,7 +65,7 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
     setBranches(branchResponse.data);
   }, [companyId]);
 
-  const loadExpenses = useCallback(async (preserveMessage = false) => {
+  const loadExpenses = useCallback(async (preserveMessage = false, page = 1) => {
     if (!companyId) return;
     setLoading(true);
     if (!preserveMessage) setMessage("");
@@ -73,12 +77,16 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
         category_id: categoryId || undefined,
         payment_method: paymentMethod || undefined,
         search: appliedSearch || undefined,
-        limit: 500,
+        page,
+        page_size: 25,
       };
       if (userFilter.startsWith("employee:")) params.employee_id = userFilter.slice(9);
       if (userFilter.startsWith("user:")) params.actor_user_id = userFilter.slice(5);
       const response = await api.get(`/expenses/${companyId}`, { params });
-      setExpenses(response.data);
+      const result = unpackPage<Expense>(response.data);
+      setExpenses(result.items);
+      setExpensePage(result.meta);
+      setServerSummary(response.data.summary || null);
     } catch (error: any) {
       setExpenses([]);
       setMessage(error.response?.status === 403 ? "You do not have permission to view expense history." : error.response?.data?.detail || "Failed to load expenses.");
@@ -92,7 +100,7 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
   }, [loadCategoriesAndBranches]);
   useEffect(() => { void loadExpenses(); }, [loadExpenses]);
 
-  const summary = useMemo(() => expenseSummary(expenses), [expenses]);
+  const summary = useMemo(() => serverSummary || expenseSummary(expenses), [expenses, serverSummary]);
   const breakdown = useMemo(() => categoryBreakdown(expenses), [expenses]);
   const currency = expenses[0]?.currency_code || "USD";
   const userOptions = useMemo(() => {
@@ -194,10 +202,11 @@ export default function ExpensesPage({ companyId }: { companyId: string }) {
           <td data-label="Status"><span className="expense-posted">Posted</span></td>
         </tr>)}
       </tbody></table></div>
+      <Pagination meta={expensePage} onPage={(page) => void loadExpenses(false, page)} />
     </section>
 
     <section className="expense-bottom-grid">
-      <article className="expense-category-breakdown"><div className="expense-section-header"><div><h2>Category breakdown</h2><p>Expense totals for the selected filters.</p></div></div>{breakdown.length ? <div className="expense-breakdown-list">{breakdown.map((item) => <div key={item.categoryId}><span>{item.name}</span><strong>{money(item.amount, currency)}</strong></div>)}</div> : <p className="expense-empty-state">No category totals for this period.</p>}</article>
+      <article className="expense-category-breakdown"><div className="expense-section-header"><div><h2>Category breakdown</h2><p>Expense totals for the current report page.</p></div></div>{breakdown.length ? <div className="expense-breakdown-list">{breakdown.map((item) => <div key={item.categoryId}><span>{item.name}</span><strong>{money(item.amount, currency)}</strong></div>)}</div> : <p className="expense-empty-state">No category totals for this period.</p>}</article>
       <article className="expense-category-manager"><div className="expense-section-header"><div><h2>Expense categories</h2><p>Inactive categories remain available in historical reports.</p></div></div>
         <form className="expense-category-form" onSubmit={(event) => void saveCategory(event)}><label>Category name<input maxLength={120} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} /></label><label>Description<input maxLength={1000} value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} /></label><div className="expense-category-form-actions">{editingCategoryId && <button type="button" onClick={resetCategoryForm}>Cancel</button>}<button type="submit" className="primary-button" disabled={categorySaving}>{categorySaving ? "Saving…" : editingCategoryId ? "Save Category" : "Create Category"}</button></div></form>
         <div className="expense-category-list">{categories.map((category) => <div key={category.id}><div><strong>{category.name}</strong><small>{category.description || "No description"}</small><span className={category.active ? "expense-category-active" : "expense-category-inactive"}>{category.active ? "Active" : "Inactive"}</span></div><div className="expense-category-actions"><button type="button" onClick={() => editCategory(category)}>Edit</button><button type="button" onClick={() => void toggleCategory(category)}>{category.active ? "Deactivate" : "Activate"}</button><button type="button" className="expense-delete-button" onClick={() => void deleteCategory(category)}>Delete</button></div></div>)}</div>

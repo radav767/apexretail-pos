@@ -64,4 +64,7 @@ class SettlementOut(BaseModel):
     receipt_number: str
     created_at: datetime
     outstanding_balance: Decimal | None = None
+    customer_name: str | None = None
+    customer_code: str | None = None
+    sale_receipt_number: str | None = None
     model_config = ConfigDict(from_attributes=True)

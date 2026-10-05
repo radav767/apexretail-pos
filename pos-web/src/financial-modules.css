@@ -14,6 +14,7 @@
 .financial-toolbar { margin-bottom: 16px; }
 .financial-toolbar form { display: flex; flex: 1; gap: 8px; }
 .financial-toolbar input { flex: 1; }
+.financial-history-filters { display:grid; grid-template-columns:1fr repeat(2, minmax(130px, .7fr)) auto; gap:8px; margin-bottom:12px; }
 
 .financial-split {
   display: grid;
@@ -69,7 +70,10 @@
 .financial-form input,
 .financial-form select,
 .financial-form textarea,
-.financial-toolbar input {
+.financial-toolbar input,
+.financial-toolbar select,
+.financial-history-filters input,
+.financial-history-filters select {
   box-sizing: border-box;
   width: 100%;
   min-height: 44px;
@@ -84,6 +88,9 @@
 .financial-form fieldset label { display: flex; align-items: center; }
 .financial-form fieldset input[type="checkbox"] { width: auto; min-height: auto; margin-right: 8px; }
 .financial-warning { padding: 12px; border-radius: 8px; background: #fff7ed; color: #9a3412; }
+.financial-pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #d9e2ec; color: #52606d; }
+.financial-pager > div { display: flex; align-items: center; gap: 10px; }
+.financial-pager button:disabled { cursor: not-allowed; opacity: .5; }
 
 .financial-modal-backdrop {
   position: fixed;
@@ -124,10 +131,14 @@
   .financial-split { grid-template-columns: 1fr; }
   .financial-toolbar { align-items: stretch; flex-direction: column; }
   .financial-toolbar form { display: grid; grid-template-columns: 1fr auto; }
+  .financial-toolbar form,
+  .financial-history-filters { grid-template-columns: 1fr; }
   .financial-summary { grid-template-columns: 1fr; }
   .financial-list,
   .financial-table { max-height: none; }
   .financial-panel { padding: 13px; }
+  .financial-pager { align-items: stretch; flex-direction: column; padding-bottom: max(4px, env(safe-area-inset-bottom)); }
+  .financial-pager > div { justify-content: space-between; }
 
   .financial-modal-backdrop {
     box-sizing: border-box;

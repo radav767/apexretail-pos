@@ -78,8 +78,11 @@ class CustomerService:
         return self.view(customer, await self.repo.balance(company_id, customer_id))
 
     async def list(self, company_id, **filters):
-        rows = await self.repo.list(company_id, **filters)
-        return [self.view(customer, balance) for customer, balance in rows]
+        result = await self.repo.list(company_id, **filters)
+        if filters.get("with_total"):
+            rows, total = result
+            return [self.view(customer, balance) for customer, balance in rows], total
+        return [self.view(customer, balance) for customer, balance in result]
 
     async def update(self, company_id, customer_id, data: CustomerUpdate, actor):
         customer = await self.repo.get(company_id, customer_id, for_update=True)
@@ -106,7 +109,7 @@ class CustomerService:
         await self.repo.save(customer)
         return self.view(customer, await self.repo.balance(company_id, customer.id))
 
-    async def history(self, company_id, customer_id):
+    async def history(self, company_id, customer_id, **filters):
         if not await self.repo.get(company_id, customer_id):
             raise HTTPException(404, "Customer not found")
-        return await self.repo.history(company_id, customer_id)
+        return await self.repo.history(company_id, customer_id, **filters)

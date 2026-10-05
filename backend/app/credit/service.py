@@ -40,7 +40,11 @@ class CreditService:
                 enforce_actor_branch(actor, branch_id)
             filters["branch_id"] = actor.employee.branch_id
         rows = await self.repo.list_receivables(company_id, **filters)
-        return [{**{column.name: getattr(receivable, column.name) for column in receivable.__table__.columns}, "customer_name": name, "customer_code": code, "sale_receipt_number": receipt} for receivable, name, code, receipt in rows]
+        total = None
+        if filters.get("with_total"):
+            rows, total = rows
+        items = [{**{column.name: getattr(receivable, column.name) for column in receivable.__table__.columns}, "customer_name": name, "customer_code": code, "sale_receipt_number": receipt} for receivable, name, code, receipt in rows]
+        return (items, total) if total is not None else items
 
     async def get_receivable(self, company_id, receivable_id, actor):
         enforce_actor_company(actor, company_id)
@@ -115,4 +119,8 @@ class CreditService:
                 enforce_actor_branch(actor, branch_id)
             filters["branch_id"] = actor.employee.branch_id
         rows = await self.repo.list_settlements(company_id, **filters)
-        return [self.settlement_view(settlement, actor_id=actor_id, actor_name=actor_name) for settlement, actor_id, actor_name in rows]
+        total = None
+        if filters.get("with_total"):
+            rows, total = rows
+        items = [self.settlement_view(settlement, actor_id=actor_id, actor_name=actor_name) | {"customer_name": customer_name, "customer_code": customer_code, "sale_receipt_number": sale_receipt_number} for settlement, actor_id, actor_name, customer_name, customer_code, sale_receipt_number in rows]
+        return (items, total) if total is not None else items

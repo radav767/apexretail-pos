@@ -24,7 +24,16 @@ test("Backoffice is a read-only outstanding, ageing and settlement report", () =
 });
 
 test("history and filters cover customer, branch, method, date, status and audit user", () => {
-  for (const label of ["Search customer", "Customer", "Branch", "Method", "Status", "Date from", "Date to", "Settlement report", "User"]) assert.ok(page.includes(label));
+  for (const label of ["Search customer", "Customer", "Sale / settlement reference", "Branch", "Method", "Status", "Date from", "Date to", "Settlement report", "User"]) assert.ok(page.includes(label));
+});
+
+test("credit reports send filters and pagination to the server", () => {
+  for (const value of ["customer_id", "branch_id", "payment_method", "start_at", "end_at", "search", "page_size:25"]) assert.ok(page.includes(value));
+  assert.match(page, /unpackPage<Receivable>/);
+  assert.match(page, /unpackPage<Settlement>/);
+  assert.match(page, /<Pagination meta=\{receivablePage\}/);
+  assert.match(page, /<Pagination meta=\{settlementPage\}/);
+  assert.doesNotMatch(page, /limit:500/);
 });
 
 test("settlement report prefers the resolved actor name and safely falls back to IDs", () => {
