@@ -18,6 +18,7 @@ class ReceivableOut(BaseModel):
     branch_id: UUID
     cashier_employee_id: UUID | None
     device_id: UUID | None
+    shift_id: UUID | None = None
     currency_code: str
     original_amount: Decimal
     amount_settled: Decimal
@@ -35,7 +36,13 @@ class SettlementCreate(BaseModel):
     company_id: UUID
     receivable_id: UUID
     branch_id: UUID
-    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    original_amount: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=4)
+    payment_currency_code: str | None = Field(default=None, max_length=8)
+    shift_id: UUID | None = None
+    settle_full: bool = False
+    exchange_rate_id: UUID | None = None
+    exchange_rate_snapshot: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=10)
     payment_method: PaymentMethod
     reference: str | None = Field(default=None, max_length=160)
     note: str | None = Field(default=None, max_length=1000)
@@ -55,6 +62,12 @@ class SettlementOut(BaseModel):
     actor_id: UUID | None = None
     actor_name: str = "Unknown"
     device_id: UUID | None
+    shift_id: UUID | None = None
+    base_currency_code: str | None = None
+    payment_currency_code: str | None = None
+    exchange_rate_id: UUID | None = None
+    exchange_rate_snapshot: Decimal | None = None
+    original_amount: Decimal | None = None
     amount: Decimal
     payment_method: str
     reference: str | None

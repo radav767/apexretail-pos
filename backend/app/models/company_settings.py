@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +18,15 @@ class CompanySetting(Base, BaseModel):
         unique=True,
         index=True,
     )
+
+    base_currency_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("company_currencies.id", ondelete="RESTRICT"), nullable=True
+    )
+    currency_config_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    multi_currency_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    shift_enforcement_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    shift_required_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reporting_timezone: Mapped[str] = mapped_column(String(80), nullable=False, default="Africa/Harare", server_default="Africa/Harare")
 
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -75,6 +75,14 @@ class Sale(Base):
     )
     customer_name_snapshot = Column(String(160), nullable=True)
     customer_code_snapshot = Column(String(40), nullable=True)
+    shift_id = Column(UUID(as_uuid=True), ForeignKey("cashier_shifts.id", ondelete="RESTRICT"), nullable=True, index=True)
+    base_currency_code = Column(String(8), nullable=True)
+    payment_currency_code = Column(String(8), nullable=True)
+    exchange_rate_id = Column(UUID(as_uuid=True), ForeignKey("currency_exchange_rates.id", ondelete="RESTRICT"), nullable=True)
+    exchange_rate_snapshot = Column(Numeric(20, 10), nullable=True)
+    payment_amount_original = Column(Numeric(18, 4), nullable=True)
+    tendered_amount_original = Column(Numeric(18, 4), nullable=True)
+    change_amount_original = Column(Numeric(18, 4), nullable=True)
 
     cashier_name = Column(
         String(160),

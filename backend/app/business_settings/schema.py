@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +30,10 @@ class CompanySettingsUpdate(BaseModel):
     paper_size: Literal["58mm", "80mm"] | None = None
     auto_print: bool | None = None
     payment_methods: list[str] | None = None
+    multi_currency_enabled: bool | None = None
+    shift_enforcement_enabled: bool | None = None
+    shift_required_from: datetime | None = None
+    reporting_timezone: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class CompanySettingsOut(BaseModel):
@@ -60,6 +65,12 @@ class CompanySettingsOut(BaseModel):
     paper_size: str
     auto_print: bool
     payment_methods: list[str]
+    base_currency_id: UUID | None = None
+    currency_config_version: int = 1
+    multi_currency_enabled: bool = False
+    shift_enforcement_enabled: bool = False
+    shift_required_from: datetime | None = None
+    reporting_timezone: str = "Africa/Harare"
 
 
 class CompanyProfileOut(BaseModel):

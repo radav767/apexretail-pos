@@ -27,6 +27,7 @@ class AuthActor:
     user: User | None = None
     employee: Employee | None = None
     permissions: dict[str, bool] | None = None
+    pos_session: PosSession | None = None
 
 
 async def get_auth_actor(
@@ -94,6 +95,7 @@ async def resolve_auth_actor(
                 employee.role,
                 employee.permissions,
             ),
+            pos_session=session,
         )
         await db.commit()
         return actor

@@ -1,9 +1,14 @@
+from decimal import Decimal
+
 from fastapi import HTTPException
 
 from app.expenses.repository import ExpenseRepository
 from app.expenses.schema import ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCreate
 from app.financial_access import enforce_actor_branch, enforce_actor_company
 from app.models import AuditEvent, Expense, ExpenseCategory
+from app.currencies.repository import CurrencyRepository
+from app.currencies.service import CurrencyService
+from app.financial_context import resolve_shift_for_write
 
 
 class ExpenseService:
@@ -67,7 +72,10 @@ class ExpenseService:
             if (
                 existing.category_id != data.category_id
                 or existing.branch_id != data.branch_id
-                or existing.amount != data.amount
+                or (data.amount is not None and existing.amount != data.amount)
+                or (data.original_amount is not None and existing.original_amount != data.original_amount)
+                or (data.currency_code is not None and existing.currency_code != data.currency_code.strip().upper())
+                or (data.shift_id is not None and existing.shift_id != data.shift_id)
                 or existing.payment_method != data.payment_method
             ):
                 raise HTTPException(409, "Idempotency key was already used for a different expense")
@@ -80,16 +88,36 @@ class ExpenseService:
             raise HTTPException(404, "Expense category not found")
         if data.occurred_at.tzinfo is None or data.occurred_at.utcoffset() is None:
             raise HTTPException(400, "occurred_at must include a timezone")
+        shift = await resolve_shift_for_write(
+            self.repo.db, actor, data.company_id, branch.id, data.shift_id,
+            occurred_at=data.occurred_at,
+        )
+        original_input = data.original_amount if data.original_amount is not None else data.amount
+        if original_input is None:
+            raise HTTPException(400, "Expense amount is required")
+        snapshot = await CurrencyService(CurrencyRepository(self.repo.db)).resolve_snapshot(
+            data.company_id, data.payment_method, data.currency_code,
+            original_input, at=data.occurred_at,
+        )
+        base_amount = Decimal(snapshot["base_amount"]).quantize(Decimal("0.01"))
+        if data.amount is not None and data.original_amount is not None and Decimal(data.amount).quantize(Decimal("0.01")) != base_amount:
+            raise HTTPException(409, "Expense base amount does not match the authoritative currency conversion")
         expense = Expense(
             company_id=data.company_id, category_id=category.id, shop_id=branch.shop_id,
             branch_id=branch.id, actor_user_id=actor.user.id if actor.actor_type == "user" else None,
             employee_id=actor.employee.id if actor.actor_type == "employee" else None,
-            amount=data.amount, currency_code=await self.repo.currency_code(data.company_id),
+            device_id=shift.device_id if shift else (actor.pos_session.device_id if actor.actor_type == "employee" and actor.pos_session else None),
+            shift_id=shift.id if shift else None,
+            amount=base_amount, currency_code=snapshot["currency"].code,
+            base_currency_code=snapshot["base_currency"].code,
+            exchange_rate_id=snapshot["exchange_rate_id"],
+            exchange_rate_snapshot=snapshot["exchange_rate_snapshot"],
+            original_amount=snapshot["original_amount"],
             occurred_at=data.occurred_at, payment_method=data.payment_method,
             description=data.description.strip(), reference=(data.reference or "").strip() or None,
             idempotency_key=data.idempotency_key.strip(),
         )
-        audit = AuditEvent(company_id=data.company_id, actor_user_id=expense.actor_user_id, actor_employee_id=expense.employee_id, action="expense_posted", details={"amount": str(data.amount), "payment_method": data.payment_method, "category_id": str(category.id)})
+        audit = AuditEvent(company_id=data.company_id, actor_user_id=expense.actor_user_id, actor_employee_id=expense.employee_id, device_id=expense.device_id, action="expense_posted", details={"amount": str(base_amount), "original_amount": str(expense.original_amount), "currency": expense.currency_code, "rate": str(expense.exchange_rate_snapshot), "payment_method": data.payment_method, "category_id": str(category.id), "shift_id": str(expense.shift_id) if expense.shift_id else None})
         return await self.attach_actor(await self.repo.save(expense, audit))
 
     async def list_expenses(self, company_id, actor, **filters):

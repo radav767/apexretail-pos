@@ -8,6 +8,9 @@ from app.credit.repository import CreditRepository
 from app.credit.schema import SettlementCreate
 from app.financial_access import enforce_actor_branch, enforce_actor_company
 from app.models import AuditEvent, CreditSettlement
+from app.currencies.repository import CurrencyRepository
+from app.currencies.service import CurrencyService
+from app.financial_context import resolve_shift_for_write
 
 
 class CreditService:
@@ -24,10 +27,14 @@ class CreditService:
 
     @staticmethod
     def ensure_same_request(existing, data):
+        requested_amount = data.amount
         if (
             existing.receivable_id != data.receivable_id
             or existing.branch_id != data.branch_id
-            or Decimal(existing.amount) != Decimal(data.amount)
+            or (requested_amount is not None and Decimal(existing.amount) != Decimal(requested_amount))
+            or (data.original_amount is not None and Decimal(existing.original_amount or 0) != Decimal(data.original_amount))
+            or (data.payment_currency_code is not None and existing.payment_currency_code != data.payment_currency_code.strip().upper())
+            or (data.shift_id is not None and existing.shift_id != data.shift_id)
             or existing.payment_method != data.payment_method
         ):
             raise HTTPException(409, "Idempotency key was already used for a different settlement")
@@ -67,6 +74,10 @@ class CreditService:
         branch = await self.repo.get_branch(data.company_id, data.branch_id)
         if not branch:
             raise HTTPException(404, "Branch not found")
+        shift = await resolve_shift_for_write(
+            self.repo.db, actor, data.company_id, branch.id, data.shift_id,
+            occurred_at=data.received_at,
+        )
         receivable = await self.repo.get_receivable(data.company_id, data.receivable_id, for_update=True)
         if not receivable:
             raise HTTPException(404, "Receivable not found")
@@ -76,8 +87,25 @@ class CreditService:
             self.ensure_same_request(existing, data)
             actor_id, actor_name = await self.repo.actor_identity(data.company_id, existing.cashier_employee_id, existing.actor_user_id)
             return self.settlement_view(existing, receivable.outstanding_balance, actor_id, actor_name)
-        amount = Decimal(data.amount).quantize(Decimal("0.01"))
         outstanding = Decimal(receivable.outstanding_balance)
+        currency_service = CurrencyService(CurrencyRepository(self.repo.db))
+        if data.settle_full:
+            snapshot = await currency_service.resolve_from_base(
+                data.company_id, data.payment_method, data.payment_currency_code,
+                outstanding, at=data.received_at or datetime.now(timezone.utc),
+            )
+            amount = outstanding
+        else:
+            original_input = data.original_amount if data.original_amount is not None else data.amount
+            if original_input is None:
+                raise HTTPException(400, "Settlement amount is required")
+            snapshot = await currency_service.resolve_snapshot(
+                data.company_id, data.payment_method, data.payment_currency_code,
+                original_input, at=data.received_at or datetime.now(timezone.utc),
+            )
+            amount = Decimal(snapshot["base_amount"]).quantize(Decimal("0.01"))
+            if data.amount is not None and data.original_amount is not None and Decimal(data.amount).quantize(Decimal("0.01")) != amount:
+                raise HTTPException(409, "Settlement base amount does not match the authoritative currency conversion")
         if amount <= 0:
             raise HTTPException(400, "Settlement amount must be greater than zero")
         if amount > outstanding:
@@ -96,7 +124,14 @@ class CreditService:
             customer_id=receivable.customer_id, shop_id=branch.shop_id, branch_id=branch.id,
             actor_user_id=actor.user.id if actor.actor_type == "user" else None,
             cashier_employee_id=actor.employee.id if actor.actor_type == "employee" else None,
-            device_id=None, amount=amount, payment_method=data.payment_method,
+            device_id=shift.device_id if shift else (actor.pos_session.device_id if actor.actor_type == "employee" and actor.pos_session else None),
+            shift_id=shift.id if shift else None,
+            base_currency_code=snapshot["base_currency"].code,
+            payment_currency_code=snapshot["currency"].code,
+            exchange_rate_id=snapshot["exchange_rate_id"],
+            exchange_rate_snapshot=snapshot["exchange_rate_snapshot"],
+            original_amount=snapshot["original_amount"],
+            amount=amount, payment_method=data.payment_method,
             reference=(data.reference or "").strip() or None, note=(data.note or "").strip() or None,
             received_at=received_at,
             idempotency_key=data.idempotency_key.strip(),
@@ -105,7 +140,8 @@ class CreditService:
         audit = AuditEvent(
             company_id=data.company_id, actor_user_id=settlement.actor_user_id,
             actor_employee_id=settlement.cashier_employee_id, action="credit_settlement_posted",
-            details={"settlement_id": str(settlement.id), "receivable_id": str(receivable.id), "amount": str(amount), "payment_method": data.payment_method},
+            device_id=settlement.device_id,
+            details={"settlement_id": str(settlement.id), "receivable_id": str(receivable.id), "amount": str(amount), "original_amount": str(settlement.original_amount), "currency": settlement.payment_currency_code, "rate": str(settlement.exchange_rate_snapshot), "payment_method": data.payment_method, "shift_id": str(settlement.shift_id) if settlement.shift_id else None},
         )
         saved = await self.repo.save_settlement(receivable, settlement, audit)
         actor_id, actor_name = await self.repo.actor_identity(data.company_id, saved.cashier_employee_id, saved.actor_user_id)

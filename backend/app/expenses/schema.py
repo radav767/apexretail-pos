@@ -31,7 +31,12 @@ class ExpenseCreate(BaseModel):
     company_id: UUID
     category_id: UUID
     branch_id: UUID
-    amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
+    amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
+    original_amount: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=4)
+    currency_code: str | None = Field(default=None, max_length=8)
+    shift_id: UUID | None = None
+    exchange_rate_id: UUID | None = None
+    exchange_rate_snapshot: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=10)
     occurred_at: datetime
     payment_method: Literal["cash", "card", "mobile"]
     description: str = Field(min_length=1, max_length=1000)
@@ -47,6 +52,12 @@ class ExpenseOut(BaseModel):
     branch_id: UUID
     actor_user_id: UUID | None
     employee_id: UUID | None
+    device_id: UUID | None = None
+    shift_id: UUID | None = None
+    base_currency_code: str | None = None
+    exchange_rate_id: UUID | None = None
+    exchange_rate_snapshot: Decimal | None = None
+    original_amount: Decimal | None = None
     actor_id: UUID | None = None
     actor_name: str = "Unknown"
     amount: Decimal

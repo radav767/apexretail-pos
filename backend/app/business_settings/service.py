@@ -1,13 +1,14 @@
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_settings.schema import CompanySettingsUpdate
 from app.models.company import Company
 from app.models.company_settings import CompanySetting
 from app.models.shop import Shop
+from app.models import CompanyCurrency, CreditSettlement, Expense, Sale
 
 
 ALLOWED_PAYMENT_METHODS = {
@@ -96,6 +97,12 @@ class BusinessSettingsService:
             "paper_size": setting.paper_size,
             "auto_print": setting.auto_print,
             "payment_methods": setting.payment_methods,
+            "base_currency_id": setting.base_currency_id,
+            "currency_config_version": setting.currency_config_version,
+            "multi_currency_enabled": setting.multi_currency_enabled,
+            "shift_enforcement_enabled": setting.shift_enforcement_enabled,
+            "shift_required_from": setting.shift_required_from,
+            "reporting_timezone": setting.reporting_timezone,
         }
 
     @staticmethod
@@ -184,6 +191,24 @@ class BusinessSettingsService:
         setting = await self.get_or_create_setting(company_id)
         values = data.model_dump(exclude_unset=True)
 
+        base_currency = None
+        if setting.base_currency_id is not None and any(
+            field in values for field in ("currency_code", "currency_symbol", "decimal_places")
+        ):
+            base_currency = (await self.db.execute(select(CompanyCurrency).where(
+                CompanyCurrency.id == setting.base_currency_id,
+                CompanyCurrency.company_id == company_id,
+            ).with_for_update())).scalar_one_or_none()
+            requested_code = str(values.get("currency_code") or setting.currency_code).strip().upper()
+            if base_currency and requested_code != base_currency.code:
+                transaction_count = 0
+                for model in (Sale, CreditSettlement, Expense):
+                    transaction_count += int((await self.db.execute(
+                        select(func.count(model.id)).where(model.company_id == company_id)
+                    )).scalar_one())
+                if transaction_count:
+                    raise HTTPException(409, "Base currency cannot be changed after financial transactions exist")
+
         company_fields = {
             "name",
             "owner_name",
@@ -206,6 +231,10 @@ class BusinessSettingsService:
             "paper_size",
             "auto_print",
             "payment_methods",
+            "multi_currency_enabled",
+            "shift_enforcement_enabled",
+            "shift_required_from",
+            "reporting_timezone",
         }
 
         for field in company_fields:
@@ -258,9 +287,20 @@ class BusinessSettingsService:
 
             setattr(setting, field, value)
 
+        if base_currency is not None:
+            base_currency.code = setting.currency_code
+            base_currency.display_name = setting.currency_code
+            base_currency.symbol = setting.currency_symbol
+            if int(setting.decimal_places) > 2:
+                raise HTTPException(409, "Base accounting currency currently supports at most two decimal places")
+            base_currency.decimal_places = int(setting.decimal_places)
+            setting.currency_config_version = int(setting.currency_config_version or 0) + 1
+
         try:
             self.db.add(company)
             self.db.add(setting)
+            if base_currency is not None:
+                self.db.add(base_currency)
             await self.db.commit()
             await self.db.refresh(company)
             await self.db.refresh(setting)

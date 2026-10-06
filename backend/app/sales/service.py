@@ -1,5 +1,6 @@
 from app.business_settings.service import BusinessSettingsService
 import uuid
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -21,6 +22,9 @@ from app.devices.authority import (
     TERMINAL_IDENTITY_REVOKED,
     terminal_authority_error,
 )
+from app.currencies.repository import CurrencyRepository
+from app.currencies.service import CurrencyService, quantize_currency
+from app.financial_context import resolve_shift_for_write
 
 
 VALID_WEIGHT_ENTRY_UNITS = {"kg", "litre"}
@@ -30,6 +34,25 @@ VALID_PRODUCT_UNITS = {"each", "kg", "g", "litre", "ml"}
 class SalesService:
     def __init__(self, repo: SalesRepository):
         self.repo = repo
+
+    async def currency_from_base(self, company_id, payment_method, currency_code, amount, *, at):
+        if hasattr(self.repo.db, "execute"):
+            return await CurrencyService(CurrencyRepository(self.repo.db)).resolve_from_base(
+                company_id, payment_method, currency_code, amount, at=at,
+            )
+        # Lightweight service-unit repositories predate currency persistence.
+        # They exercise sale arithmetic only and therefore use deterministic
+        # base-currency semantics; foreign currency still requires a real DB.
+        code = (currency_code or "USD").strip().upper()
+        if code != "USD":
+            raise HTTPException(409, "Foreign currency validation requires configured company currencies")
+        value = Decimal(amount).quantize(Decimal("0.01"))
+        currency = SimpleNamespace(code="USD", decimal_places=2, is_base=True)
+        return {
+            "base_currency": currency, "currency": currency,
+            "exchange_rate_id": None, "exchange_rate_snapshot": Decimal("1"),
+            "original_amount": value, "base_amount": value,
+        }
 
     async def create_sale(
         self,
@@ -93,6 +116,13 @@ class SalesService:
             data.company_id,
             data.branch_id,
         )
+        shift = await resolve_shift_for_write(
+            self.repo.db, actor, data.company_id, branch.id, data.shift_id,
+            occurred_at=data.client_created_at,
+        )
+        if shift is not None:
+            data.device_id = shift.device_id
+            data.employee_id = shift.employee_id
 
         if payment_method == "credit":
             if data.customer_id is None:
@@ -504,20 +534,47 @@ class SalesService:
 
         total = total_amount
 
-        if payment_method == "cash":
-            amount_received = (
-                data.amount_received
-                if data.amount_received is not None
-                else Decimal("0")
-            )
+        currency_snapshot = await self.currency_from_base(
+            data.company_id, payment_method,
+            None if payment_method == "credit" else data.payment_currency_code, total,
+            at=data.client_created_at or datetime.now(timezone.utc),
+        )
+        base_currency = currency_snapshot["base_currency"]
+        payment_currency = currency_snapshot["currency"]
+        rate_snapshot = Decimal(currency_snapshot["exchange_rate_snapshot"])
+        payment_amount_original = (
+            Decimal("0") if payment_method == "credit"
+            else Decimal(currency_snapshot["original_amount"])
+        )
+        tendered_amount_original = payment_amount_original
+        change_amount_original = Decimal("0")
 
-            if amount_received < total:
+        if payment_method == "cash":
+            if payment_currency.is_base and data.tendered_amount_original is None:
+                tendered_amount_original = quantize_currency(
+                    data.amount_received or Decimal("0"), payment_currency.decimal_places
+                )
+            else:
+                if data.tendered_amount_original is None:
+                    raise HTTPException(400, "Tendered amount is required for the selected payment currency")
+                tendered_amount_original = quantize_currency(
+                    data.tendered_amount_original, payment_currency.decimal_places
+                )
+            if tendered_amount_original < payment_amount_original:
                 raise HTTPException(
                     400,
                     "Amount received is less than the sale total",
                 )
-
-            change_due = amount_received - total
+            change_amount_original = quantize_currency(
+                tendered_amount_original - payment_amount_original,
+                payment_currency.decimal_places,
+            )
+            amount_received = quantize_currency(
+                tendered_amount_original / rate_snapshot, base_currency.decimal_places
+            )
+            change_due = quantize_currency(
+                change_amount_original / rate_snapshot, base_currency.decimal_places
+            )
         elif payment_method == "credit":
             amount_received = Decimal("0.00")
             change_due = Decimal("0.00")
@@ -589,6 +646,14 @@ class SalesService:
             customer_id=customer.id if customer else None,
             customer_name_snapshot=customer.name if customer else None,
             customer_code_snapshot=customer.customer_code if customer else None,
+            shift_id=shift.id if shift else None,
+            base_currency_code=base_currency.code,
+            payment_currency_code=base_currency.code if payment_method == "credit" else payment_currency.code,
+            exchange_rate_id=None if payment_method == "credit" else currency_snapshot["exchange_rate_id"],
+            exchange_rate_snapshot=Decimal("1") if payment_method == "credit" else rate_snapshot,
+            payment_amount_original=payment_amount_original,
+            tendered_amount_original=tendered_amount_original,
+            change_amount_original=change_amount_original,
             cashier_name=employee.name if employee else None,
             shop_name_snapshot=shop.name if shop else None,
             shop_address_snapshot=shop_address_snapshot,
@@ -635,6 +700,7 @@ class SalesService:
                 branch_id=branch.id,
                 cashier_employee_id=employee.id if employee else None,
                 device_id=device.id if device else None,
+                shift_id=shift.id if shift else None,
                 currency_code=await self.repo.get_currency_code(data.company_id),
                 original_amount=total,
                 amount_settled=Decimal("0.00"),
@@ -699,6 +765,13 @@ class SalesService:
         branch = await self.repo.resolve_branch(
             data.company_id,
             data.branch_id or original_sale.branch_id,
+        )
+        shift = await resolve_shift_for_write(
+            self.repo.db,
+            actor,
+            data.company_id,
+            getattr(branch, "id", data.branch_id or original_sale.branch_id),
+            data.shift_id,
         )
         refund_id = uuid.uuid4()
         receipt_number = (
@@ -797,15 +870,31 @@ class SalesService:
                 )
             )
 
+        refund_tax = (Decimal(original_sale.tax_amount or 0) * (total / Decimal(original_sale.subtotal_amount or 1))).quantize(money_quantum, rounding=ROUND_HALF_UP)
+        refund_total = -(total + refund_tax)
+        refund_method = data.refund_method or original_sale.payment_method
+        refund_currency = await self.currency_from_base(
+            data.company_id, refund_method, data.payment_currency_code, abs(refund_total),
+            at=datetime.now(timezone.utc),
+        )
+        refund_original = -Decimal(refund_currency["original_amount"])
         refund_sale = Sale(
             id=refund_id,
             company_id=data.company_id,
             original_sale_id=original_sale.id,
             shop_id=original_sale.shop_id,
             branch_id=branch.id,
-            device_id=data.device_id or original_sale.device_id,
-            employee_id=data.employee_id or original_sale.employee_id,
-            cashier_name=original_sale.cashier_name,
+            device_id=shift.device_id if shift else (data.device_id or original_sale.device_id),
+            employee_id=shift.employee_id if shift else (data.employee_id or original_sale.employee_id),
+            cashier_name=getattr(actor.employee, "name", None) if actor and actor.actor_type == "employee" else original_sale.cashier_name,
+            shift_id=shift.id if shift else None,
+            base_currency_code=refund_currency["base_currency"].code,
+            payment_currency_code=refund_currency["currency"].code,
+            exchange_rate_id=refund_currency["exchange_rate_id"],
+            exchange_rate_snapshot=refund_currency["exchange_rate_snapshot"],
+            payment_amount_original=refund_original,
+            tendered_amount_original=refund_original,
+            change_amount_original=Decimal("0"),
             shop_name_snapshot=original_sale.shop_name_snapshot,
             shop_address_snapshot=original_sale.shop_address_snapshot,
             branch_name_snapshot=original_sale.branch_name_snapshot,
@@ -816,15 +905,15 @@ class SalesService:
             subtotal_amount=-total,
             tax_name=original_sale.tax_name,
             tax_rate=original_sale.tax_rate,
-            tax_amount=-(Decimal(original_sale.tax_amount or 0) * (total / Decimal(original_sale.subtotal_amount or 1))).quantize(money_quantum, rounding=ROUND_HALF_UP),
+            tax_amount=-refund_tax,
             tax_inclusive=original_sale.tax_inclusive,
-            total_amount=-(total + (Decimal(original_sale.tax_amount or 0) * (total / Decimal(original_sale.subtotal_amount or 1))).quantize(money_quantum, rounding=ROUND_HALF_UP)),
+            total_amount=refund_total,
             amount_received=Decimal("0.00"),
             change_due=Decimal("0.00"),
-            payment_method=data.refund_method or original_sale.payment_method,
+            payment_method=refund_method,
             status="refunded",
             refund_reason=data.reason.strip(),
-            refund_method=data.refund_method or original_sale.payment_method,
+            refund_method=refund_method,
             created_at=datetime.now(timezone.utc),
         )
         requested = {i.sale_item_id: i.quantity for i in data.items}

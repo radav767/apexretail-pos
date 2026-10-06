@@ -16,6 +16,8 @@ from app.subscriptions import router as subscriptions
 from app.customers import router as customers
 from app.credit import router as credit
 from app.expenses import router as expenses
+from app.currencies import router as currencies
+from app.shifts import router as shifts
 
 app = FastAPI(title="ApexRetail POS API")
 
@@ -91,6 +93,8 @@ app.include_router(subscriptions.router, prefix="/api")
 app.include_router(customers, prefix="/api")
 app.include_router(credit, prefix="/api")
 app.include_router(expenses, prefix="/api")
+app.include_router(currencies, prefix="/api")
+app.include_router(shifts, prefix="/api")
 
 
 @app.exception_handler(RequestValidationError)

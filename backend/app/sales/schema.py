@@ -32,6 +32,13 @@ class SaleCreate(BaseModel):
     )
     client_sale_id: UUID | None = None
     client_created_at: datetime | None = None
+    shift_id: UUID | None = None
+    payment_currency_code: str | None = Field(default=None, max_length=8)
+    tendered_amount_original: Decimal | None = Field(default=None, ge=0, max_digits=18, decimal_places=4)
+    exchange_rate_id: UUID | None = None
+    exchange_rate_snapshot: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=10)
+    currency_config_version: int | None = Field(default=None, ge=1)
+    offline_shift_token: str | None = Field(default=None, max_length=4000)
     items: list[SaleItemCreate]
 
 
@@ -49,6 +56,14 @@ class SaleOut(BaseModel):
     customer_id: UUID | None = None
     customer_name_snapshot: str | None = None
     customer_code_snapshot: str | None = None
+    shift_id: UUID | None = None
+    base_currency_code: str | None = None
+    payment_currency_code: str | None = None
+    exchange_rate_id: UUID | None = None
+    exchange_rate_snapshot: Decimal | None = None
+    payment_amount_original: Decimal | None = None
+    tendered_amount_original: Decimal | None = None
+    change_amount_original: Decimal | None = None
     device_id: UUID | None = None
     cashier_name: str | None = None
     shop_name_snapshot: str | None = None
@@ -121,4 +136,6 @@ class RefundCreate(BaseModel):
     device_key: str | None = Field(default=None, max_length=255)
     reason: str = Field(min_length=1, max_length=500)
     refund_method: str | None = Field(default=None, max_length=40)
+    shift_id: UUID | None = None
+    payment_currency_code: str | None = Field(default=None, max_length=8)
     items: list[RefundItemCreate] = Field(min_length=1)
