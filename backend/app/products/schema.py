@@ -73,3 +73,8 @@ class ProductOut(BaseModel):
     archived_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProductBarcodeLookupOut(ProductOut):
+    branch_id: UUID
+    branch_stock_qty: Decimal

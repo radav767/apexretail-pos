@@ -186,6 +186,55 @@
   grid-column: 1 / -1;
 }
 
+.pos-barcode-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.pos-barcode-input-row button,
+.pos-inventory-barcode-tools button {
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: #0f172a;
+  color: #fff;
+  font: inherit;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.pos-inventory-barcode-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.pos-inventory-barcode-tools label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pos-inventory-barcode-tools input {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font: inherit;
+}
+
+@media (max-width: 720px) {
+  .pos-barcode-input-row,
+  .pos-inventory-barcode-tools { grid-template-columns: 1fr; }
+}
+
 .pos-module-form-actions {
   grid-column: 1 / -1;
   display: flex;

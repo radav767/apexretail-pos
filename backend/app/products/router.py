@@ -1,10 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import (
     AuthActor,
+    ensure_company_access,
+    get_auth_actor,
     require_billable_body_company,
     require_billable_path_company,
     require_body_permission,
@@ -17,6 +19,7 @@ from app.products.schema import (
     CategoryOut,
     CategoryUpdate,
     ProductCreate,
+    ProductBarcodeLookupOut,
     ProductOut,
     ProductUpdate,
 )
@@ -28,6 +31,30 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 def get_service(db: AsyncSession = Depends(get_db)):
     return ProductService(ProductRepository(db))
+
+
+@router.get(
+    "/{company_id}/barcode-lookup",
+    response_model=ProductBarcodeLookupOut,
+)
+async def lookup_product_by_barcode(
+    company_id: UUID,
+    barcode: str = Query(min_length=1, max_length=80),
+    branch_id: UUID = Query(...),
+    service: ProductService = Depends(get_service),
+    actor: AuthActor = Depends(get_auth_actor),
+):
+    ensure_company_access(actor, company_id)
+    if actor.actor_type == "employee":
+        permissions = actor.permissions or {}
+        if not any(
+            permissions.get(key)
+            for key in ("sales", "manage_products", "manage_inventory")
+        ):
+            raise HTTPException(403, "Permission denied")
+        if actor.employee is not None and actor.employee.branch_id != branch_id:
+            raise HTTPException(403, "Branch access denied")
+    return await service.lookup_barcode(company_id, branch_id, barcode)
 
 
 @router.post("/categories", response_model=CategoryOut)

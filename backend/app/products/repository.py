@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -282,7 +282,7 @@ class ProductRepository:
             conditions.append(Product.sku.ilike(sku))
 
         if barcode:
-            conditions.append(Product.barcode.ilike(barcode))
+            conditions.append(func.btrim(Product.barcode) == barcode)
 
         if not conditions:
             return None
@@ -298,6 +298,38 @@ class ProductRepository:
 
         result = await self.db.execute(query)
         return result.scalars().first()
+
+    async def find_active_by_barcode(
+        self,
+        company_id: UUID,
+        barcode: str,
+    ):
+        result = await self.db.execute(
+            select(Product).where(
+                Product.company_id == company_id,
+                Product.active == True,
+                Product.deleted == False,
+                func.btrim(Product.barcode) == barcode,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_branch_stock_quantity(
+        self,
+        company_id: UUID,
+        branch_id: UUID,
+        product_id: UUID,
+    ) -> Decimal:
+        result = await self.db.execute(
+            select(InventoryBalance.quantity).where(
+                InventoryBalance.company_id == company_id,
+                InventoryBalance.branch_id == branch_id,
+                InventoryBalance.product_id == product_id,
+                InventoryBalance.active == True,
+                InventoryBalance.deleted == False,
+            )
+        )
+        return Decimal(result.scalar_one_or_none() or 0)
 
     async def update_product(self, product: Product, changes: dict):
         try:

@@ -2,6 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, getApiErrorMessage } from "./api/client";
 import { isDeviceOnline } from "./offline/offlineAuth";
+import BarcodeScannerDialog from "./barcode/BarcodeScannerDialog";
+import {
+  normalizeBarcode,
+  resolveBarcodeProduct,
+} from "./barcode/barcode";
+import { useKeyboardWedge } from "./barcode/useKeyboardWedge";
+import { KeyboardWedgeDetector } from "./barcode/keyboardWedge";
 import FinancialModules, { type FinancialModuleName } from "./FinancialModules";
 import {
   canRefundSale,
@@ -101,6 +108,7 @@ type BranchInventoryRow = {
   product_id: string;
   product_name: string;
   sku?: string | null;
+  barcode?: string | null;
   unit?: string;
   quantity: string | number;
   reorder_level: string | number;
@@ -361,6 +369,10 @@ export default function PosModulePage({
     useState<InventoryReceiveForm>(emptyReceiveForm);
   const [adjustmentForm, setAdjustmentForm] =
     useState<InventoryAdjustmentForm>(emptyAdjustmentForm);
+  const [barcodeScannerTarget, setBarcodeScannerTarget] = useState<
+    "product" | "inventory" | null
+  >(null);
+  const [inventoryBarcodeSearch, setInventoryBarcodeSearch] = useState("");
   const [printerDraft, setPrinterDraft] =
     useState<PrinterConfig>(printerConfig);
   const [printerSaveStatus, setPrinterSaveStatus] = useState<
@@ -374,6 +386,7 @@ export default function PosModulePage({
   >("");
   const [printerSettingsError, setPrinterSettingsError] = useState("");
   const hasHydratedPrinterDraftRef = useRef(false);
+  const inventorySearchWedgeRef = useRef(new KeyboardWedgeDetector());
 
   const canManageProducts =
     cashier?.role === "owner" ||
@@ -392,12 +405,26 @@ export default function PosModulePage({
   }
 
   const inventoryProducts = useMemo(() => {
-    return [...branchInventory].sort(
+    const normalizedSearch = normalizeBarcode(inventoryBarcodeSearch);
+    return [...branchInventory].filter((row) => {
+      if (!normalizedSearch) return true;
+      const product = products.find((item) => item.id === row.product_id);
+      return (
+        row.product_name.toLowerCase().includes(normalizedSearch.toLowerCase()) ||
+        (row.sku || "").toLowerCase().includes(normalizedSearch.toLowerCase()) ||
+        normalizeBarcode(product?.barcode || "") === normalizedSearch
+      );
+    }).sort(
       (first, second) =>
         Number(first.quantity || 0) -
         Number(second.quantity || 0),
     );
-  }, [branchInventory]);
+  }, [branchInventory, inventoryBarcodeSearch, products]);
+
+  useKeyboardWedge(
+    activeModule === "Inventory" && barcodeScannerTarget === null,
+    handleInventoryBarcode,
+  );
 
   const selectedBranchName =
     branches.find((branch) => branch.id === selectedBranchId)?.name ||
@@ -956,6 +983,55 @@ export default function PosModulePage({
       ...emptyProductForm,
       branch_id: selectedBranchId || branches[0]?.id || "",
     });
+  }
+
+  function handleInventoryBarcode(rawBarcode: string) {
+    const resolution = resolveBarcodeProduct(products, rawBarcode);
+    if (resolution.status === "not_found") {
+      setError(`Product Not Found: ${resolution.barcode}`);
+      return;
+    }
+    if (resolution.status === "ambiguous") {
+      setError(`Barcode ${resolution.barcode} is assigned to multiple products.`);
+      return;
+    }
+    setError("");
+    setNotice(`${resolution.product.name} selected. No stock was changed.`);
+    setInventoryBarcodeSearch(resolution.barcode);
+    setReceiveForm((current) => ({
+      ...current,
+      product_id: resolution.product.id,
+    }));
+    setAdjustmentForm((current) => ({
+      ...current,
+      product_id: resolution.product.id,
+    }));
+    setBarcodeScannerTarget(null);
+  }
+
+  function handleProductBarcode(rawBarcode: string) {
+    setProductForm((current) => ({
+      ...current,
+      barcode: normalizeBarcode(rawBarcode),
+    }));
+    setBarcodeScannerTarget(null);
+    setNotice("Barcode captured. Save the product to apply it.");
+  }
+
+  function handleInventorySearchKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>,
+  ) {
+    const barcode = inventorySearchWedgeRef.current.feed({
+      key: event.key,
+      timestamp: event.timeStamp,
+      modifier: event.altKey || event.ctrlKey || event.metaKey,
+      repeat: event.repeat,
+      composing: event.nativeEvent.isComposing,
+    });
+    if (barcode) {
+      event.preventDefault();
+      handleInventoryBarcode(barcode);
+    }
   }
 
   async function saveProduct() {
@@ -1545,17 +1621,26 @@ export default function PosModulePage({
                     />
                   </label>
 
-                  <label>
+                  <label className="pos-barcode-field">
                     Barcode
-                    <input
-                      value={productForm.barcode}
-                      onChange={(event) =>
-                        setProductForm((current) => ({
-                          ...current,
-                          barcode: event.target.value,
-                        }))
-                      }
-                    />
+                    <span className="pos-barcode-input-row">
+                      <input
+                        data-barcode-input="true"
+                        value={productForm.barcode}
+                        onChange={(event) =>
+                          setProductForm((current) => ({
+                            ...current,
+                            barcode: event.target.value,
+                          }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setBarcodeScannerTarget("product")}
+                      >
+                        Scan Barcode
+                      </button>
+                    </span>
                   </label>
 
                   <label>
@@ -2047,6 +2132,24 @@ export default function PosModulePage({
                 </div>
               </div>
 
+              <div className="pos-inventory-barcode-tools">
+                <label>
+                  Find product by name, SKU or barcode
+                  <input
+                    value={inventoryBarcodeSearch}
+                    onChange={(event) => setInventoryBarcodeSearch(event.target.value)}
+                    onKeyDown={handleInventorySearchKeyDown}
+                    placeholder="Scan or enter a barcode"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setBarcodeScannerTarget("inventory")}
+                >
+                  Scan Barcode
+                </button>
+              </div>
+
               <div className="pos-module-table-wrap">
                 <table className="pos-module-table">
                   <thead>
@@ -2194,6 +2297,22 @@ export default function PosModulePage({
               />
             </div>
           </>
+        )}
+
+        {barcodeScannerTarget && (
+          <BarcodeScannerDialog
+            title={
+              barcodeScannerTarget === "product"
+                ? "Scan product barcode"
+                : "Find inventory product"
+            }
+            onScan={
+              barcodeScannerTarget === "product"
+                ? handleProductBarcode
+                : handleInventoryBarcode
+            }
+            onClose={() => setBarcodeScannerTarget(null)}
+          />
         )}
 
         {!loading && activeModule === "Settings" && (

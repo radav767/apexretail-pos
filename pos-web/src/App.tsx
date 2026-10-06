@@ -11,6 +11,10 @@ import {
   type CreditCustomer,
 } from "./creditSale";
 import { searchCustomers } from "./customerApi";
+import BarcodeScannerDialog from "./barcode/BarcodeScannerDialog";
+import { resolveBarcodeProduct } from "./barcode/barcode";
+import { KeyboardWedgeDetector } from "./barcode/keyboardWedge";
+import { useKeyboardWedge } from "./barcode/useKeyboardWedge";
 import {
   clearAuthenticationPreservingDeviceIdentity,
   getOrCreateDeviceKey,
@@ -95,6 +99,7 @@ type Product = {
   selling_price: string;
   stock_qty: string;
   unit?: string;
+  active?: boolean;
 };
 
 type CartItem = Product & {
@@ -269,6 +274,7 @@ const [loggedIn, setLoggedIn] = useState(
   const [cart, setCart] = useState<CartItem[]>([]);
   const [saleDiscount, setSaleDiscount] = useState("0");
   const [search, setSearch] = useState("");
+  const [salesScannerOpen, setSalesScannerOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [message, setMessage] = useState("");
   const [quarantinedSales, setQuarantinedSales] =
@@ -336,6 +342,22 @@ const [loggedIn, setLoggedIn] = useState(
   const activeDiscoveryScopeRef = useRef<string | null>(null);
   const saleSubmissionInFlightRef = useRef(false);
   const creditClientSaleIdRef = useRef<string | null>(null);
+  const salesSearchWedgeRef = useRef(new KeyboardWedgeDetector());
+
+  useKeyboardWedge(
+    Boolean(
+      loggedIn &&
+      cashier &&
+      activePosModule === "Sales" &&
+      !menuOpen &&
+      !showTender &&
+      !showCreditSale &&
+      !weightedProduct &&
+      !receipt &&
+      !salesScannerOpen
+    ),
+    handleSalesBarcode,
+  );
 
   function validateRegistrationForm() {
     const trimmedOwnerName = ownerName.trim();
@@ -1889,6 +1911,38 @@ const [loggedIn, setLoggedIn] = useState(
     });
   }
 
+  function handleSalesBarcode(rawBarcode: string) {
+    const resolution = resolveBarcodeProduct(products, rawBarcode);
+    if (resolution.status === "not_found") {
+      setMessage(`Product Not Found: ${resolution.barcode}`);
+      return;
+    }
+    if (resolution.status === "ambiguous") {
+      setMessage(
+        `Barcode ${resolution.barcode} is assigned to multiple products. Contact a manager.`,
+      );
+      return;
+    }
+    setMessage("");
+    setSalesScannerOpen(false);
+    addToCart(resolution.product);
+  }
+
+  function handleSalesSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    const barcode = salesSearchWedgeRef.current.feed({
+      key: event.key,
+      timestamp: event.timeStamp,
+      modifier: event.altKey || event.ctrlKey || event.metaKey,
+      repeat: event.repeat,
+      composing: event.nativeEvent.isComposing,
+    });
+    if (barcode) {
+      event.preventDefault();
+      setSearch("");
+      handleSalesBarcode(barcode);
+    }
+  }
+
   function changeQty(id: string, difference: number) {
     setCart((currentCart) =>
       currentCart.map((item) => {
@@ -3326,13 +3380,23 @@ const [loggedIn, setLoggedIn] = useState(
           </section>
         )}
 
-        <input
-          className="pos-sales-search"
-          style={searchBox}
-          placeholder="Search product by name, SKU or barcode..."
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
+        <div className="pos-sales-search-row">
+          <input
+            className="pos-sales-search"
+            style={searchBox}
+            placeholder="Search product by name, SKU or barcode..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onKeyDown={handleSalesSearchKeyDown}
+          />
+          <button
+            type="button"
+            className="pos-scan-barcode-button"
+            onClick={() => setSalesScannerOpen(true)}
+          >
+            Scan Barcode
+          </button>
+        </div>
 
         <div style={productGrid} className="pos-sales-product-grid">
           {filteredProducts.map((product) => (
@@ -3519,6 +3583,14 @@ const [loggedIn, setLoggedIn] = useState(
 
         <p style={messageText}>{message}</p>
       </aside>
+
+      {salesScannerOpen && (
+        <BarcodeScannerDialog
+          title="Scan product barcode"
+          onScan={handleSalesBarcode}
+          onClose={() => setSalesScannerOpen(false)}
+        />
+      )}
 
       {showCreditSale && (
         <div style={overlay} className="pos-credit-overlay">

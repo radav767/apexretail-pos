@@ -73,6 +73,30 @@
     box-shadow 150ms ease;
 }
 
+.pos-sales-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.pos-scan-barcode-button {
+  min-height: 54px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 14px;
+  background: #0f172a;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .pos-sales-search-row { grid-template-columns: 1fr; }
+  .pos-scan-barcode-button { margin-top: -10px; margin-bottom: 18px; }
+}
+
 .pos-sales-search:focus {
   border-color: #2563eb !important;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);

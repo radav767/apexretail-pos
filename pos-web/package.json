@@ -11,6 +11,7 @@
     "test:device-identity": "node scripts/run-device-identity-tests.mjs && node --test tests/sessionUi.test.mjs",
     "test:credit-sale": "node scripts/run-credit-sale-tests.mjs && node --test tests/creditCheckoutUi.test.mjs",
     "test:financial-modules": "node --test tests/financialModulesUi.test.mjs",
+    "test:barcode": "node scripts/run-barcode-tests.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test:discounts": "node scripts/run-discount-tests.mjs && node scripts/run-receipt-discount-tests.mjs && node scripts/test-offline-discounts.mjs && node --test tests/checkoutUi.test.mjs",
@@ -25,11 +26,13 @@
     "@hookform/resolvers": "^5.4.0",
     "@tanstack/react-query": "^5.101.2",
     "axios": "^1.18.1",
+    "barcode-detector": "3.2.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.81.0",
     "react-router-dom": "^7.18.1",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "zxing-wasm": "3.1.3"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.6.8",

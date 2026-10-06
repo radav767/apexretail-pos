@@ -120,9 +120,10 @@ class ProductService:
         )
 
         if conflict:
-            raise HTTPException(
-                409,
-                "Another product already uses this SKU or barcode",
+            self._raise_product_conflict(
+                conflict,
+                values.get("sku"),
+                values.get("barcode"),
             )
 
         if branch_id is not None or opening_quantity > 0:
@@ -146,7 +147,7 @@ class ProductService:
                 opening_quantity=opening_quantity,
                 branch_id=branch_id,
             )
-        except IntegrityError:
+        except IntegrityError as error:
             if create_request_key:
                 existing = await self.repo.get_by_create_request_key(
                     data.company_id,
@@ -155,7 +156,7 @@ class ProductService:
 
                 if existing:
                     return existing
-
+            self._raise_barcode_integrity_error(error)
             raise
 
     async def list_products(self, company_id: UUID):
@@ -208,12 +209,58 @@ class ProductService:
         )
 
         if conflict:
-            raise HTTPException(
-                409,
-                "Another product already uses this SKU or barcode",
+            self._raise_product_conflict(
+                conflict,
+                resulting_sku,
+                resulting_barcode,
             )
 
-        return await self.repo.update_product(product, changes)
+        try:
+            return await self.repo.update_product(product, changes)
+        except IntegrityError as error:
+            self._raise_barcode_integrity_error(error)
+            raise
+
+    async def lookup_barcode(
+        self,
+        company_id: UUID,
+        branch_id: UUID,
+        barcode: str,
+    ):
+        normalized = self._clean_optional(barcode)
+        if not normalized:
+            raise HTTPException(400, "Barcode is required")
+
+        branch = await self.repo.resolve_branch(company_id, branch_id)
+        product = await self.repo.find_active_by_barcode(
+            company_id,
+            normalized,
+        )
+        if product is None:
+            raise HTTPException(404, "Product Not Found")
+
+        branch_stock_qty = await self.repo.get_branch_stock_quantity(
+            company_id,
+            branch.id,
+            product.id,
+        )
+        return {
+            "id": product.id,
+            "company_id": product.company_id,
+            "category_id": product.category_id,
+            "name": product.name,
+            "sku": product.sku,
+            "barcode": product.barcode,
+            "unit": product.unit,
+            "cost_price": product.cost_price,
+            "selling_price": product.selling_price,
+            "stock_qty": product.stock_qty,
+            "reorder_level": product.reorder_level,
+            "active": product.active,
+            "archived_at": product.archived_at,
+            "branch_id": branch.id,
+            "branch_stock_qty": branch_stock_qty,
+        }
 
     async def delete_product(
         self,
@@ -267,3 +314,32 @@ class ProductService:
 
         cleaned = value.strip()
         return cleaned or None
+
+    @staticmethod
+    def _raise_product_conflict(
+        conflict: Product,
+        sku: str | None,
+        barcode: str | None,
+    ) -> None:
+        if (
+            barcode is not None
+            and conflict.barcode is not None
+            and conflict.barcode.strip() == barcode
+        ):
+            raise HTTPException(
+                409,
+                "Barcode already exists for this company",
+            )
+        raise HTTPException(409, "SKU already exists for this company")
+
+    @staticmethod
+    def _raise_barcode_integrity_error(error: IntegrityError) -> None:
+        diagnostic = getattr(getattr(error, "orig", None), "diag", None)
+        if (
+            getattr(diagnostic, "constraint_name", None)
+            == "uq_products_company_barcode_trimmed"
+        ):
+            raise HTTPException(
+                409,
+                "Barcode already exists for this company",
+            ) from error
