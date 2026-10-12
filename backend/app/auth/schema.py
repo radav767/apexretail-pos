@@ -1,4 +1,6 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+
+from app.auth.registration_currencies import REGISTRATION_CURRENCY_BY_CODE
 
 
 class RegisterRequest(BaseModel):
@@ -13,6 +15,10 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
     confirm_password: str = Field(min_length=8, max_length=200)
+
+    base_currency_code: str = Field(min_length=3, max_length=8)
+    base_currency_symbol: str = Field(min_length=1, max_length=10)
+    base_currency_decimal_places: int = Field(ge=0, le=2)
 
     # This connects the device created during registration
     # to the same browser that registered the business.
@@ -46,6 +52,36 @@ class RegisterRequest(BaseModel):
             stripped = value.strip()
             return stripped or None
         return value
+
+    @field_validator("base_currency_code", mode="before")
+    @classmethod
+    def normalize_currency_code(cls, value: str):
+        if isinstance(value, str):
+            return value.strip().upper()
+        return value
+
+    @field_validator("base_currency_symbol", mode="before")
+    @classmethod
+    def normalize_currency_symbol(cls, value: str):
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @model_validator(mode="after")
+    def validate_supported_base_currency(self):
+        definition = REGISTRATION_CURRENCY_BY_CODE.get(self.base_currency_code)
+        if definition is None:
+            raise ValueError("Select a supported base currency")
+        if self.base_currency_symbol != definition.symbol:
+            raise ValueError(
+                f"The symbol for {definition.code} must be {definition.symbol}"
+            )
+        if self.base_currency_decimal_places != definition.decimal_places:
+            raise ValueError(
+                f"The decimal precision for {definition.code} must be "
+                f"{definition.decimal_places}"
+            )
+        return self
 
 
 class LoginRequest(BaseModel):

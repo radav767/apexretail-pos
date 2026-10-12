@@ -1,7 +1,18 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Company, Shop, Branch, User, Employee, Device, DeviceTombstone
+from app.models import (
+    AuditEvent,
+    Branch,
+    Company,
+    CompanyCurrency,
+    CompanySetting,
+    Device,
+    DeviceTombstone,
+    Employee,
+    Shop,
+    User,
+)
 
 
 class AuthRepository:
@@ -26,7 +37,18 @@ class AuthRepository:
         )
         return result.scalar_one_or_none() is not None
 
-    async def create_registration_bundle(self, company, shop, branch, user, employee, device):
+    async def create_registration_bundle(
+        self,
+        company: Company,
+        shop: Shop,
+        branch: Branch,
+        user: User,
+        employee: Employee,
+        device: Device,
+        base_currency: CompanyCurrency,
+        company_settings: CompanySetting,
+        audit_event: AuditEvent,
+    ):
         self.db.add(company)
         await self.db.flush()
 
@@ -37,10 +59,18 @@ class AuthRepository:
         await self.db.flush()
 
         self.db.add(user)
+        await self.db.flush()
+
+        self.db.add(base_currency)
+        await self.db.flush()
+
+        self.db.add(company_settings)
         self.db.add(employee)
         self.db.add(device)
+        await self.db.flush()
 
-        await self.db.commit()
+        self.db.add(audit_event)
+        await self.db.flush()
 
         return {
             "company": company,
@@ -49,4 +79,12 @@ class AuthRepository:
             "user": user,
             "employee": employee,
             "device": device,
+            "base_currency": base_currency,
+            "company_settings": company_settings,
         }
+
+    async def commit_registration(self):
+        await self.db.commit()
+
+    async def rollback_registration(self):
+        await self.db.rollback()

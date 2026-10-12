@@ -5,8 +5,14 @@ from app.db.session import get_db
 from app.auth.schema import RegisterRequest, LoginRequest
 from app.auth.repository import AuthRepository
 from app.auth.service import AuthService
+from app.auth.registration_currencies import serialize_registration_currencies
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+@router.get("/registration-currencies")
+async def registration_currencies():
+    return {"items": serialize_registration_currencies()}
 
 
 @router.post("/register")

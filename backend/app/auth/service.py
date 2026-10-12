@@ -1,7 +1,19 @@
 import uuid
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 
-from app.models import Company, Shop, Branch, User, Employee, Device
+from app.auth.registration_currencies import REGISTRATION_CURRENCY_BY_CODE
+from app.models import (
+    AuditEvent,
+    Branch,
+    Company,
+    CompanyCurrency,
+    CompanySetting,
+    Device,
+    Employee,
+    Shop,
+    User,
+)
 from app.auth.repository import AuthRepository
 from app.auth.security import (
     create_access_token,
@@ -58,6 +70,7 @@ class AuthService:
         user_id = uuid.uuid4()
         employee_id = uuid.uuid4()
         device_id = uuid.uuid4()
+        base_currency_id = uuid.uuid4()
 
         company = Company(
             id=company_id,
@@ -78,6 +91,36 @@ class AuthService:
             email=email,
             password_hash=hash_password(data.password),
             role="owner",
+        )
+
+        currency_definition = REGISTRATION_CURRENCY_BY_CODE[
+            data.base_currency_code
+        ]
+        base_currency = CompanyCurrency(
+            id=base_currency_id,
+            company_id=company_id,
+            code=currency_definition.code,
+            display_name=currency_definition.display_name,
+            symbol=currency_definition.symbol,
+            decimal_places=currency_definition.decimal_places,
+            active=True,
+            is_base=True,
+            cash_accepted=True,
+            card_accepted=True,
+            mobile_accepted=True,
+            display_order=0,
+            created_by_user_id=user_id,
+        )
+        company_settings = CompanySetting(
+            company_id=company_id,
+            base_currency_id=base_currency_id,
+            currency_code=currency_definition.code,
+            currency_symbol=currency_definition.symbol,
+            decimal_places=currency_definition.decimal_places,
+            currency_config_version=1,
+            multi_currency_enabled=False,
+            shift_enforcement_enabled=False,
+            contact_email=email,
         )
 
         employee = Employee(
@@ -122,15 +165,46 @@ class AuthService:
             app_version="1.0.0",
         )
 
-        bundle = await self.repo.create_registration_bundle(
-            company, shop, branch, user, employee, device
+        audit_event = AuditEvent(
+            company_id=company_id,
+            actor_user_id=user_id,
+            actor_employee_id=employee_id,
+            device_id=device_id,
+            action="company_registered",
+            details={
+                "base_currency": currency_definition.code,
+                "decimal_places": currency_definition.decimal_places,
+            },
         )
-        settings = get_settings()
-        await SubscriptionService(
-            self.repo.db,
-            offline_grace_hours=settings.subscription_offline_grace_hours,
-            provider_name=settings.subscription_provider_name,
-        ).get_or_create_trial(company_id)
+
+        try:
+            await self.repo.create_registration_bundle(
+                company,
+                shop,
+                branch,
+                user,
+                employee,
+                device,
+                base_currency,
+                company_settings,
+                audit_event,
+            )
+            settings = get_settings()
+            await SubscriptionService(
+                self.repo.db,
+                offline_grace_hours=settings.subscription_offline_grace_hours,
+                provider_name=settings.subscription_provider_name,
+            ).get_or_create_trial(company_id, commit=False)
+            await self.repo.commit_registration()
+        except IntegrityError as exc:
+            await self.repo.rollback_registration()
+            raise HTTPException(
+                409,
+                "Registration conflicts with an existing account or terminal",
+            ) from exc
+        except Exception:
+            await self.repo.rollback_registration()
+            raise
 
         token = create_access_token(str(user.id), user.email)
 
@@ -156,6 +230,11 @@ class AuthService:
                 ),
             },
             "device": {"id": str(device.id), "name": device.name, "device_key": device.device_key},
+            "base_currency": {
+                "code": base_currency.code,
+                "symbol": base_currency.symbol,
+                "decimal_places": base_currency.decimal_places,
+            },
         }
 
     async def login(self, data):

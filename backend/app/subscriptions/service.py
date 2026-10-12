@@ -254,6 +254,8 @@ class SubscriptionService:
     async def get_or_create_trial(
         self,
         company_id: UUID,
+        *,
+        commit: bool = True,
     ) -> CompanySubscription:
         existing = await self.get_current(company_id)
         if existing is not None:
@@ -292,8 +294,9 @@ class SubscriptionService:
                 note="Free trial created by server",
             )
         )
-        await self.db.commit()
-        await self.db.refresh(subscription)
+        if commit:
+            await self.db.commit()
+            await self.db.refresh(subscription)
         return self.apply_status_windows(subscription)
 
     async def get_current(

@@ -185,6 +185,13 @@ type SubscriptionPage = {
   };
 };
 
+type RegistrationCurrency = {
+  code: string;
+  display_name: string;
+  symbol: string;
+  decimal_places: number;
+};
+
 type SaleReceiptResponse = Receipt & {
   items: Array<{
     product_id?: string;
@@ -267,6 +274,10 @@ const [loggedIn, setLoggedIn] = useState(
   const [country, setCountry] = useState("Zimbabwe");
   const [phone, setPhone] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [registrationCurrencies, setRegistrationCurrencies] = useState<RegistrationCurrency[]>([]);
+  const [baseCurrencyCode, setBaseCurrencyCode] = useState("");
+  const [registrationCurrenciesLoading, setRegistrationCurrenciesLoading] = useState(false);
+  const [registrationCurrenciesError, setRegistrationCurrenciesError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
 
 
@@ -369,6 +380,9 @@ const [loggedIn, setLoggedIn] = useState(
     const trimmedPhone = phone.trim();
     const normalizedEmail =
       email.trim().toLowerCase();
+    const selectedCurrency = registrationCurrencies.find(
+      (currency) => currency.code === baseCurrencyCode,
+    );
 
     if (trimmedOwnerName.length < 2) {
       throw new Error(
@@ -430,6 +444,10 @@ const [loggedIn, setLoggedIn] = useState(
       throw new Error("confirm password: Passwords do not match");
     }
 
+    if (!selectedCurrency) {
+      throw new Error("base currency: Select a base currency");
+    }
+
     return {
       owner_name: trimmedOwnerName,
       owner_pin: ownerPin,
@@ -440,8 +458,43 @@ const [loggedIn, setLoggedIn] = useState(
       email: normalizedEmail,
       password,
       confirm_password: confirmPassword,
+      base_currency_code: selectedCurrency.code,
+      base_currency_symbol: selectedCurrency.symbol,
+      base_currency_decimal_places: selectedCurrency.decimal_places,
     };
   }
+
+  useEffect(() => {
+    if (loggedIn || authMode !== "register" || registrationCurrencies.length) {
+      return;
+    }
+
+    let cancelled = false;
+    setRegistrationCurrenciesLoading(true);
+    setRegistrationCurrenciesError("");
+    void api.get("/auth/registration-currencies")
+      .then((response) => {
+        if (!cancelled) {
+          setRegistrationCurrencies(response.data?.items || []);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRegistrationCurrenciesError(
+            getApiErrorMessage(error, "Unable to load supported currencies"),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRegistrationCurrenciesLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authMode, loggedIn, registrationCurrencies.length]);
 
   useEffect(() => {
     const onInvalidated = () => {
@@ -2816,6 +2869,30 @@ const [loggedIn, setLoggedIn] = useState(
                 </label>
 
                 <label style={modalLabel}>
+                  Base currency
+                  <select
+                    style={input}
+                    value={baseCurrencyCode}
+                    disabled={registrationCurrenciesLoading}
+                    onChange={(event) => setBaseCurrencyCode(event.target.value)}
+                  >
+                    <option value="">
+                      {registrationCurrenciesLoading
+                        ? "Loading currencies..."
+                        : "Select base currency"}
+                    </option>
+                    {registrationCurrencies.map((currency) => (
+                      <option key={currency.code} value={currency.code}>
+                        {currency.code} — {currency.display_name} ({currency.symbol}, {currency.decimal_places} decimals)
+                      </option>
+                    ))}
+                  </select>
+                  <span style={{ display: "block", marginTop: 7, fontSize: 12, fontWeight: 500 }}>
+                    This is your accounting currency and cannot be changed after financial activity begins.
+                  </span>
+                </label>
+
+                <label style={modalLabel}>
                   Email address
                   <input
                     style={input}
@@ -2860,10 +2937,14 @@ const [loggedIn, setLoggedIn] = useState(
                 </label>
               </div>
 
+              {registrationCurrenciesError && (
+                <p style={errorText}>{registrationCurrenciesError}</p>
+              )}
+
               <button
                 type="button"
                 style={primaryButton}
-                disabled={authLoading}
+                disabled={authLoading || registrationCurrenciesLoading || Boolean(registrationCurrenciesError)}
                 onClick={() => void registerBusiness()}
               >
                 {authLoading
