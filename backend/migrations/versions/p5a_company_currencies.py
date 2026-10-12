@@ -16,6 +16,55 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Currency configuration is accounting data. Every company must have an
+    # explicit, active settings record before this migration may derive its
+    # base currency. Never infer a currency for a company with missing or
+    # unusable settings.
+    op.execute("""
+        DO $$
+        DECLARE
+            missing_company_ids text;
+            invalid_company_ids text;
+        BEGIN
+            SELECT string_agg(c.id::text, ', ' ORDER BY c.id::text)
+              INTO missing_company_ids
+              FROM companies c
+              LEFT JOIN company_settings cs
+                ON cs.company_id = c.id
+               AND cs.active IS TRUE
+               AND cs.deleted IS FALSE
+             WHERE cs.id IS NULL;
+
+            IF missing_company_ids IS NOT NULL THEN
+                RAISE EXCEPTION
+                    'p5a_company_currencies requires active company_settings for every company; missing company ids: %',
+                    missing_company_ids
+                    USING HINT = 'Configure each company base currency explicitly before retrying the migration.';
+            END IF;
+
+            SELECT string_agg(c.id::text, ', ' ORDER BY c.id::text)
+              INTO invalid_company_ids
+              FROM companies c
+              JOIN company_settings cs
+                ON cs.company_id = c.id
+               AND cs.active IS TRUE
+               AND cs.deleted IS FALSE
+             WHERE NULLIF(btrim(cs.currency_code), '') IS NULL
+                OR char_length(btrim(cs.currency_code)) > 8
+                OR NULLIF(btrim(cs.currency_symbol), '') IS NULL
+                OR cs.decimal_places < 0
+                OR cs.decimal_places > 4;
+
+            IF invalid_company_ids IS NOT NULL THEN
+                RAISE EXCEPTION
+                    'p5a_company_currencies found invalid explicit currency settings for company ids: %',
+                    invalid_company_ids
+                    USING HINT = 'Correct currency code, symbol, and decimal precision before retrying the migration.';
+            END IF;
+        END;
+        $$;
+    """)
+
     op.create_table(
         "company_currencies",
         sa.Column("id", sa.UUID(), nullable=False),
@@ -82,7 +131,8 @@ def upgrade() -> None:
     op.add_column("company_settings", sa.Column("reporting_timezone", sa.String(80), server_default="Africa/Harare", nullable=False))
     op.create_foreign_key("fk_company_settings_base_currency", "company_settings", "company_currencies", ["base_currency_id"], ["id"], ondelete="RESTRICT")
 
-    # This is configuration-only seeding. No historical transaction is altered.
+    # This is configuration-only seeding from explicit company settings. No
+    # historical transaction is altered and no currency fallback is invented.
     op.execute("""
         INSERT INTO company_currencies (
             id, company_id, code, display_name, symbol, decimal_places,
@@ -90,14 +140,16 @@ def upgrade() -> None:
             display_order, created_at, updated_at
         )
         SELECT gen_random_uuid(), c.id,
-               upper(btrim(COALESCE(NULLIF(cs.currency_code, ''), 'USD'))),
-               upper(btrim(COALESCE(NULLIF(cs.currency_code, ''), 'USD'))),
-               COALESCE(NULLIF(cs.currency_symbol, ''), '$'),
-               LEAST(GREATEST(COALESCE(cs.decimal_places, 2), 0), 4),
+               upper(btrim(cs.currency_code)),
+               upper(btrim(cs.currency_code)),
+               btrim(cs.currency_symbol),
+               cs.decimal_places,
                true, true, true, true, true, 0, now(), now()
           FROM companies c
-          LEFT JOIN company_settings cs
-            ON cs.company_id=c.id AND cs.deleted IS FALSE
+          JOIN company_settings cs
+            ON cs.company_id=c.id
+           AND cs.active IS TRUE
+           AND cs.deleted IS FALSE
     """)
     op.execute("""
         UPDATE company_settings cs
