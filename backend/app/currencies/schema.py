@@ -35,6 +35,10 @@ class CurrencyUpdate(BaseModel):
     display_order: int | None = None
 
 
+class MultiCurrencyUpdate(BaseModel):
+    enabled: bool
+
+
 class CurrencyOut(BaseModel):
     id: UUID
     company_id: UUID
@@ -51,6 +55,8 @@ class CurrencyOut(BaseModel):
     current_rate: Decimal | None = None
     current_rate_id: UUID | None = None
     rate_effective_at: datetime | None = None
+    previous_rate: Decimal | None = None
+    previous_rate_effective_at: datetime | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -72,7 +78,18 @@ class ExchangeRateOut(BaseModel):
     created_by_user_id: UUID | None
     note: str | None
     created_at: datetime
+    base_currency_code: str
+    actor_id: UUID | None = None
+    actor_name: str = "Unknown"
     model_config = ConfigDict(from_attributes=True)
+
+
+class ExchangeRatePage(BaseModel):
+    items: list[ExchangeRateOut]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int
 
 
 class CurrencySnapshot(BaseModel):

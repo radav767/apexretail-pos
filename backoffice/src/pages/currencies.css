@@ -1,0 +1,68 @@
+.currency-settings { display: grid; gap: 20px; }
+.currency-loading, .currency-panel, .currency-base-card { padding: 24px; border: 1px solid #dbe3ee; border-radius: 18px; background: #fff; box-shadow: 0 8px 24px rgba(15,23,42,.04); }
+.currency-base-card { display: flex; justify-content: space-between; align-items: center; gap: 24px; background: linear-gradient(135deg,#eff6ff,#fff 62%); }
+.currency-base-card h3, .currency-panel h3 { margin: 4px 0 7px; color: #0f172a; }
+.currency-base-card p, .currency-panel-heading p { margin: 0; color: #64748b; line-height: 1.5; }
+.currency-eyebrow { color: #1d4ed8; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.currency-base-actions { display: grid; min-width: 210px; gap: 12px; text-align: right; }
+.currency-base-actions strong { font-size: 24px; }
+.currency-base-actions button, .currency-panel-heading button, .currency-form-actions button, .currency-row-actions button { border: 0; border-radius: 10px; padding: 10px 14px; background: #0f172a; color: #fff; font-weight: 750; cursor: pointer; }
+.currency-policy-note { display: flex; gap: 14px; padding: 15px 18px; border: 1px solid #f4cf72; border-radius: 13px; background: #fffbeb; color: #713f12; }
+.currency-policy-note span { line-height: 1.45; }
+.currency-alert { padding: 14px 17px; border-radius: 11px; font-weight: 700; }
+.currency-alert-error { border: 1px solid #fca5a5; background: #fee2e2; color: #991b1b; }
+.currency-alert-success { border: 1px solid #86efac; background: #dcfce7; color: #166534; }
+.currency-panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 19px; }
+.currency-table-wrap { overflow-x: auto; }
+.currency-table { width: 100%; border-collapse: collapse; }
+.currency-table th, .currency-table td { padding: 14px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+.currency-table th { color: #475569; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.currency-table td strong, .currency-table td small { display: block; }
+.currency-table td small { margin-top: 5px; color: #64748b; line-height: 1.45; }
+.currency-status { display: inline-flex; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.currency-status.active { background: #dcfce7; color: #166534; }
+.currency-status.inactive { background: #e2e8f0; color: #475569; }
+.currency-methods { display: flex; flex-wrap: wrap; gap: 5px; }
+.currency-methods em { padding: 4px 7px; border-radius: 7px; background: #eef2ff; color: #3730a3; font-size: 12px; font-style: normal; font-weight: 750; }
+.currency-row-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.currency-row-actions button { padding: 7px 10px; background: #334155; font-size: 12px; }
+.currency-row-actions button:disabled, .currency-base-actions button:disabled, .currency-form-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.currency-form-grid, .currency-rate-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+.currency-form-grid label, .currency-rate-grid label { display: grid; gap: 7px; color: #334155; font-size: 13px; font-weight: 750; }
+.currency-form-grid input, .currency-form-grid select, .currency-rate-grid input, .currency-rate-grid select { width: 100%; box-sizing: border-box; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; color: #0f172a; font: inherit; }
+.currency-check { display: flex !important; align-items: center; gap: 9px !important; min-height: 42px; }
+.currency-check input { width: 18px; height: 18px; }
+.currency-form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.currency-form-actions .secondary { border: 1px solid #cbd5e1; background: #fff; color: #0f172a; }
+.currency-preview { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 17px; padding: 15px; border-radius: 12px; background: #f1f5f9; color: #334155; }
+.currency-preview strong { width: 100%; color: #0f172a; }
+.currency-preview small { width: 100%; color: #b91c1c; }
+
+@media (max-width: 900px) {
+  .currency-form-grid, .currency-rate-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .currency-table { min-width: 760px; }
+}
+
+@media (max-width: 720px) {
+  .currency-base-card, .currency-panel-heading, .currency-policy-note { align-items: stretch; flex-direction: column; }
+  .currency-base-actions { min-width: 0; text-align: left; }
+  .currency-panel, .currency-base-card { padding: 18px; }
+  .currency-form-grid, .currency-rate-grid { grid-template-columns: 1fr; }
+  .currency-table { min-width: 0; }
+  .currency-table thead { display: none; }
+  .currency-table, .currency-table tbody, .currency-table tr, .currency-table td { display: block; width: 100%; box-sizing: border-box; }
+  .currency-table tr { margin-bottom: 14px; padding: 10px 12px; border: 1px solid #dbe3ee; border-radius: 13px; }
+  .currency-table td { display: grid; grid-template-columns: minmax(105px,35%) 1fr; gap: 12px; padding: 9px 0; border-bottom: 1px solid #eef2f7; }
+  .currency-table td:last-child { border-bottom: 0; }
+  .currency-table td::before { content: attr(data-label); color: #64748b; font-size: 12px; font-weight: 800; text-transform: uppercase; }
+  .rate-history-table td[colspan]::before { content: none; }
+}
+
+@media (max-width: 390px) {
+  .currency-settings { gap: 14px; }
+  .currency-panel, .currency-base-card { padding: 15px; border-radius: 14px; }
+  .currency-form-actions { flex-direction: column-reverse; padding-bottom: max(8px,env(safe-area-inset-bottom)); }
+  .currency-form-actions button, .currency-panel-heading button, .currency-base-actions button { width: 100%; }
+  .currency-table td { grid-template-columns: 1fr; gap: 5px; }
+  .currency-preview { flex-direction: column; }
+}

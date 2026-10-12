@@ -11,11 +11,12 @@
     "test:credit-settlements": "node scripts/run-credit-settlement-tests.mjs && node --test tests/creditSettlementsUi.test.mjs tests/navigation.test.mjs",
     "test:expenses": "node scripts/run-expense-tests.mjs && node --test tests/expensesUi.test.mjs tests/navigation.test.mjs",
     "test:financial-reports": "node --test tests/financialReportsUi.test.mjs",
+    "test:currencies": "node scripts/run-currency-tests.mjs && node --test tests/currenciesUi.test.mjs tests/navigation.test.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
-    "axios": "^1.18.1",
+    "axios": "^1.20.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

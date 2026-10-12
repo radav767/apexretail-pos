@@ -134,6 +134,27 @@
   grid-column: 1 / -1;
 }
 
+.settings-currency-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 17px;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.settings-currency-summary strong,
+.settings-currency-summary span {
+  display: block;
+}
+
+.settings-currency-summary span {
+  margin-top: 5px;
+  color: #64748b;
+}
+
 .settings-checkbox-row {
   display: flex !important;
   align-items: center;
@@ -407,6 +428,11 @@
 
   .settings-wide-field {
     grid-column: auto;
+  }
+
+  .settings-currency-summary {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .subscription-panel-heading {

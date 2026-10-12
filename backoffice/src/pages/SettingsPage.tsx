@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api/client";
 import ShopsDevicesPage from "./ShopsDevicesPage";
+import CurrencySettingsPanel from "./CurrencySettingsPanel";
 import "./settings.css";
 
 type SettingsSection =
   | "home"
   | "company"
+  | "currencies"
   | "shops"
   | "receipts"
   | "subscription"
@@ -268,6 +270,12 @@ export default function SettingsPage({
           "Per-shop address, phone and tax/VAT details for receipts.",
       },
       {
+        id: "currencies" as const,
+        title: "Currencies",
+        description:
+          "Base currency, accepted payment currencies and immutable exchange-rate history.",
+      },
+      {
         id: "receipts" as const,
         title: "Receipts",
         description:
@@ -474,10 +482,6 @@ export default function SettingsPage({
         phone: companyForm.phone.trim() || null,
         contact_email:
           companyForm.contact_email.trim() || null,
-        currency_code:
-          companyForm.currency_code.trim().toUpperCase(),
-        currency_symbol: companyForm.currency_symbol.trim(),
-        decimal_places: Number(companyForm.decimal_places),
       });
 
       setMessage("Company settings saved.");
@@ -817,50 +821,10 @@ export default function SettingsPage({
               />
             </label>
 
-            <label>
-              Currency code
-              <input
-                value={companyForm.currency_code}
-                onChange={(event) =>
-                  updateCompanyField(
-                    "currency_code",
-                    event.target.value.toUpperCase(),
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Currency symbol
-              <input
-                value={companyForm.currency_symbol}
-                onChange={(event) =>
-                  updateCompanyField(
-                    "currency_symbol",
-                    event.target.value,
-                  )
-                }
-              />
-            </label>
-
-            <label>
-              Decimal places
-              <select
-                value={companyForm.decimal_places}
-                onChange={(event) =>
-                  updateCompanyField(
-                    "decimal_places",
-                    event.target.value,
-                  )
-                }
-              >
-                <option value="0">0</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-              </select>
-            </label>
+            <div className="settings-wide-field settings-currency-summary">
+              <div><strong>Accounting currency</strong><span>{companyForm.currency_code} · {companyForm.currency_symbol} · {companyForm.decimal_places} decimal places</span></div>
+              <button type="button" className="settings-secondary-button" onClick={() => setSection("currencies")}>Manage currencies</button>
+            </div>
           </div>
 
           <div className="settings-footer-actions">
@@ -874,6 +838,10 @@ export default function SettingsPage({
             </button>
           </div>
         </section>
+      ) : null}
+
+      {section === "currencies" ? (
+        <CurrencySettingsPanel companyId={companyId} />
       ) : null}
 
       {section === "shops" ? (

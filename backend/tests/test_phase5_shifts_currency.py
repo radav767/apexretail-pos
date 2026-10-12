@@ -1,7 +1,7 @@
 import asyncio
 import os
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -12,11 +12,13 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.auth.dependencies import AuthActor
+from app.business_settings.schema import CompanySettingsUpdate
+from app.business_settings.service import BusinessSettingsService
 from app.credit.repository import CreditRepository
 from app.credit.schema import SettlementCreate
 from app.credit.service import CreditService
 from app.currencies.repository import CurrencyRepository
-from app.currencies.schema import CurrencyCreate, ExchangeRateCreate
+from app.currencies.schema import CurrencyCreate, CurrencyUpdate, ExchangeRateCreate
 from app.currencies.service import CurrencyService, quantize_currency
 from app.expenses.repository import ExpenseRepository
 from app.expenses.schema import ExpenseCreate
@@ -181,6 +183,134 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
                     (id,company_id,code,display_name,symbol,decimal_places,active,is_base,cash_accepted,card_accepted,mobile_accepted,display_order)
                     VALUES (:id,:company,'BASE2','Other Base','B',2,true,true,true,true,true,9)
                 """), {"id": uuid4(), "company": COMPANY})
+
+    async def test_currency_admin_permissions_acceptance_and_base_protection(self):
+        manager = AuthActor(
+            "employee", COMPANY, "manager",
+            employee=SimpleNamespace(id=EMPLOYEE, branch_id=BRANCH, name="Currency Manager"),
+            permissions={"currencies_manage": True},
+            pos_session=self.actor.pos_session,
+        )
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = CurrencyService(CurrencyRepository(session))
+            with self.assertRaisesRegex(HTTPException, "Currency administration"):
+                await service.list(COMPANY, self.actor)
+            eur = await service.create(CurrencyCreate(
+                company_id=COMPANY, code=" eur ", display_name="Euro", symbol="€",
+                cash_accepted=False, card_accepted=True, mobile_accepted=False,
+                display_order=3,
+            ), manager)
+            self.assertEqual(eur["code"], "EUR")
+            updated = await service.update(COMPANY, eur["id"], CurrencyUpdate(
+                active=True, cash_accepted=True, card_accepted=False,
+                mobile_accepted=True, display_order=2,
+            ), manager)
+            self.assertTrue(updated["cash_accepted"])
+            self.assertFalse(updated["card_accepted"])
+            self.assertTrue(updated["mobile_accepted"])
+            configuration = await service.set_multi_currency(COMPANY, False, manager)
+            self.assertFalse(configuration["multi_currency_enabled"])
+            configuration = await service.set_multi_currency(COMPANY, True, manager)
+            self.assertTrue(configuration["multi_currency_enabled"])
+            with self.assertRaisesRegex(HTTPException, "Currency Settings"):
+                await BusinessSettingsService(session).update(
+                    COMPANY, CompanySettingsUpdate(currency_code="EUR")
+                )
+            zar = await service.repo.by_code(COMPANY, "ZAR")
+            new_base = await service.set_base(COMPANY, zar.id, manager)
+            self.assertTrue(new_base["is_base"])
+            self.assertEqual(new_base["current_rate"], Decimal("1"))
+            bases = [row for row in await service.repo.list(COMPANY) if row.is_base]
+            self.assertEqual([row.code for row in bases], ["ZAR"])
+            self.assertEqual((await service.repo.base(OTHER_COMPANY)).code, "USD")
+            await service.update(COMPANY, zar.id, CurrencyUpdate(symbol="R$", decimal_places=2), manager)
+            settings = await service.repo.settings(COMPANY)
+            self.assertEqual(settings.currency_symbol, "R$")
+            self.assertEqual(settings.currency_code, "ZAR")
+            with self.assertRaisesRegex(HTTPException, "cannot be deactivated"):
+                await service.update(COMPANY, zar.id, CurrencyUpdate(active=False), manager)
+            legacy = Sale(
+                id=uuid4(), company_id=COMPANY, receipt_number=f"BASE-{uuid4().hex[:8]}",
+                subtotal_amount=Decimal("1"), tax_rate=Decimal("0"), tax_amount=Decimal("0"),
+                tax_inclusive=False, total_amount=Decimal("1"), amount_received=Decimal("1"),
+                change_due=Decimal("0"), payment_method="cash", status="completed",
+            )
+            session.add(legacy)
+            await session.commit()
+            usd = await service.repo.by_code(COMPANY, "USD", active=False)
+            with self.assertRaisesRegex(HTTPException, "cannot be changed after financial activity"):
+                await service.set_base(COMPANY, usd.id, manager)
+
+    async def test_rate_validation_attribution_ordering_and_company_isolation(self):
+        owner = AuthActor("user", COMPANY, "owner", user=SimpleNamespace(id=USER))
+        manager = AuthActor(
+            "employee", COMPANY, "manager",
+            employee=SimpleNamespace(id=EMPLOYEE, branch_id=BRANCH, name="Currency Manager"),
+            permissions={"currencies_manage": True},
+            pos_session=self.actor.pos_session,
+        )
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = CurrencyService(CurrencyRepository(session))
+            zar = await service.repo.by_code(COMPANY, "ZAR")
+            other_usd = await service.repo.by_code(OTHER_COMPANY, "USD")
+            with self.assertRaises(Exception):
+                ExchangeRateCreate(
+                    company_id=COMPANY, currency_id=zar.id,
+                    foreign_units_per_base="0", effective_at=datetime.now(timezone.utc),
+                )
+            with self.assertRaises(Exception):
+                ExchangeRateCreate(
+                    company_id=COMPANY, currency_id=zar.id,
+                    foreign_units_per_base="-1", effective_at=datetime.now(timezone.utc),
+                )
+            with self.assertRaises(Exception):
+                ExchangeRateCreate(
+                    company_id=COMPANY, currency_id=zar.id,
+                    foreign_units_per_base="1.12345678901", effective_at=datetime.now(timezone.utc),
+                )
+            with self.assertRaisesRegex(HTTPException, "Currency not found"):
+                await service.create_rate(ExchangeRateCreate(
+                    company_id=COMPANY, currency_id=other_usd.id,
+                    foreign_units_per_base="2", effective_at=datetime.now(timezone.utc),
+                ), owner)
+            base = await service.repo.base(COMPANY)
+            with self.assertRaisesRegex(HTTPException, "always has an exchange rate of 1"):
+                await service.create_rate(ExchangeRateCreate(
+                    company_id=COMPANY, currency_id=base.id,
+                    foreign_units_per_base="1", effective_at=datetime.now(timezone.utc),
+                ), owner)
+            older = datetime.now(timezone.utc) - timedelta(hours=2)
+            newer = datetime.now(timezone.utc) - timedelta(hours=1)
+            future = datetime.now(timezone.utc) + timedelta(hours=1)
+            first = await service.create_rate(ExchangeRateCreate(
+                company_id=COMPANY, currency_id=zar.id,
+                foreign_units_per_base="18.5000000000", effective_at=older,
+            ), owner)
+            second = await service.create_rate(ExchangeRateCreate(
+                company_id=COMPANY, currency_id=zar.id,
+                foreign_units_per_base="19.2500000000", effective_at=newer,
+            ), owner)
+            scheduled = await service.create_rate(ExchangeRateCreate(
+                company_id=COMPANY, currency_id=zar.id,
+                foreign_units_per_base="20.0000000000", effective_at=future,
+            ), owner)
+            manager_scheduled = await service.create_rate(ExchangeRateCreate(
+                company_id=COMPANY, currency_id=zar.id,
+                foreign_units_per_base="21.0000000000", effective_at=future + timedelta(hours=1),
+            ), manager)
+            self.assertEqual(first.actor_name, "phase5-owner@example.test")
+            self.assertEqual(second.actor_id, USER)
+            page_one, total = await service.rates(COMPANY, owner, limit=1, offset=0)
+            page_two, _ = await service.rates(COMPANY, owner, limit=1, offset=1)
+            self.assertEqual(total, 4)
+            self.assertEqual(page_one[0]["id"], manager_scheduled.id)
+            self.assertEqual(page_one[0]["actor_name"], "Cashier")
+            self.assertEqual(page_two[0]["id"], scheduled.id)
+            current = next(row for row in await service.list(COMPANY, owner) if row["code"] == "ZAR")
+            self.assertEqual(current["current_rate"], Decimal("19.2500000000"))
+            self.assertEqual(current["previous_rate"], Decimal("18.5000000000"))
+            with self.assertRaisesRegex(HTTPException, "exchange-rate history"):
+                await service.set_base(COMPANY, zar.id, owner)
 
     async def test_concurrent_open_shift_is_prevented_and_identity_isolated(self):
         async def attempt(key):

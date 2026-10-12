@@ -53,6 +53,7 @@ PERMISSION_KEYS = {
     "expenses_manage",
     "expenses_create",
     "expense_reports",
+    "currencies_manage",
 }
 
 
@@ -66,6 +67,7 @@ ROLE_PERMISSIONS = {
         "customers_view": True, "customers_manage": True,
         "credit_sales": True, "credit_settlements": True,
         "expenses_manage": True, "expenses_create": True, "expense_reports": True,
+        "currencies_manage": True,
     },
     "cashier": {
         "sales": True,
@@ -81,6 +83,7 @@ ROLE_PERMISSIONS = {
         "customers_view": True, "customers_manage": False,
         "credit_sales": False, "credit_settlements": False,
         "expenses_manage": False, "expenses_create": True, "expense_reports": False,
+        "currencies_manage": False,
     },
     "manager": {
         "sales": True,
@@ -96,6 +99,7 @@ ROLE_PERMISSIONS = {
         "customers_view": True, "customers_manage": True,
         "credit_sales": True, "credit_settlements": True,
         "expenses_manage": True, "expenses_create": True, "expense_reports": True,
+        "currencies_manage": True,
     },
     "owner": {
         "sales": True,
@@ -111,6 +115,7 @@ ROLE_PERMISSIONS = {
         "customers_view": True, "customers_manage": True,
         "credit_sales": True, "credit_settlements": True,
         "expenses_manage": True, "expenses_create": True, "expense_reports": True,
+        "currencies_manage": True,
     },
 }
 
