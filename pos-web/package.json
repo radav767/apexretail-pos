@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/build-production.mjs",
-    "test:entitlement": "node scripts/run-entitlement-tests.mjs",
+    "test:entitlement": "node scripts/run-entitlement-tests.mjs && node --test tests/entitlementUi.test.mjs",
     "test:sales-history": "node scripts/run-sales-history-tests.mjs",
     "test:device-identity": "node scripts/run-device-identity-tests.mjs && node --test tests/sessionUi.test.mjs",
     "test:credit-sale": "node scripts/run-credit-sale-tests.mjs && node --test tests/creditCheckoutUi.test.mjs",

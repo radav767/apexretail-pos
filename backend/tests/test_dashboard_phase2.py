@@ -261,8 +261,11 @@ class DashboardPhase2ApiTest(unittest.IsolatedAsyncioTestCase):
                 )
             )
         )
+        async def dashboard_service_override():
+            return self.service
+
         app.dependency_overrides[get_dashboard_service] = (
-            lambda: self.service
+            dashboard_service_override
         )
 
     def tearDown(self):
@@ -275,7 +278,10 @@ class DashboardPhase2ApiTest(unittest.IsolatedAsyncioTestCase):
             role="manager",
             permissions={"reports": reports},
         )
-        app.dependency_overrides[get_auth_actor] = lambda: actor
+        async def auth_actor_override():
+            return actor
+
+        app.dependency_overrides[get_auth_actor] = auth_actor_override
 
     async def request(self, path, **kwargs):
         transport = httpx.ASGITransport(app=app)

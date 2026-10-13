@@ -196,7 +196,7 @@ class SubscriptionSecurityTest(unittest.TestCase):
                 provided_signature="sha256=bad",
             )
 
-    def test_entitlement_token_round_trip(self):
+    def test_entitlement_token_rejects_symmetric_signing(self):
         now = datetime.now(UTC)
         settings = SimpleNamespace(
             jwt_secret="test-secret",
@@ -206,18 +206,14 @@ class SubscriptionSecurityTest(unittest.TestCase):
             entitlement_public_key=None,
         )
         with patch("app.auth.security.get_settings", return_value=settings):
-            token = create_entitlement_snapshot_token(
-                company_id="company-1",
-                status="active",
-                plan="monthly",
-                offline_grace_expires_at=now + timedelta(hours=4),
-                snapshot_expires_at=now + timedelta(hours=1),
-            )
-            claims = decode_entitlement_token(token)
-
-        self.assertEqual(claims["company_id"], "company-1")
-        self.assertEqual(claims["status"], "active")
-        self.assertEqual(claims["plan"], "monthly")
+            with self.assertRaises(RuntimeError):
+                create_entitlement_snapshot_token(
+                    company_id="company-1",
+                    status="active",
+                    plan="monthly",
+                    offline_grace_expires_at=now + timedelta(hours=4),
+                    snapshot_expires_at=now + timedelta(hours=1),
+                )
 
 
 class SubscriptionPresentationTest(unittest.TestCase):

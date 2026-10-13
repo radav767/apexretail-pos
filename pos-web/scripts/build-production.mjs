@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -7,25 +7,60 @@ const projectDirectory = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const publicKeyPath = resolve(
-  projectDirectory,
-  "../backend/secrets/entitlement_public.pem",
-);
+const publicKeyringPath = process.env.ENTITLEMENT_PUBLIC_KEYRING_FILE
+  ? resolve(process.env.ENTITLEMENT_PUBLIC_KEYRING_FILE)
+  : resolve(projectDirectory, "../backend/secrets/entitlement_public_keyring.json");
 
-if (!existsSync(publicKeyPath)) {
+if (!existsSync(publicKeyringPath)) {
   throw new Error(
-    "POS production build cannot continue: entitlement_public.pem is missing.",
+    "POS production build cannot continue: entitlement public keyring is missing.",
   );
 }
 
-const publicKey = readFileSync(publicKeyPath, "utf8").trim();
-if (
-  !publicKey.includes("-----BEGIN PUBLIC KEY-----") ||
-  publicKey.includes("PRIVATE KEY")
-) {
+const publicKeyring = readFileSync(publicKeyringPath, "utf8").trim();
+let parsedKeyring;
+try {
+  parsedKeyring = JSON.parse(publicKeyring);
+} catch {
+  throw new Error("POS production build cannot continue: public keyring is invalid JSON.");
+}
+if (publicKeyring.includes("PRIVATE KEY") || parsedKeyring?.version !== 1 ||
+    !Array.isArray(parsedKeyring?.keys) || parsedKeyring.keys.length === 0 ||
+    parsedKeyring.keys.some((key) =>
+      !key?.kid || !String(key.public_key_pem || "").includes("-----BEGIN PUBLIC KEY-----")
+    )) {
   throw new Error(
-    "POS production build cannot continue: entitlement_public.pem is not a public PEM key.",
+    "POS production build cannot continue: entitlement keyring must contain public keys only.",
   );
+}
+
+function scanBuildInputs(directory) {
+  if (!existsSync(directory)) return;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      scanBuildInputs(path);
+      continue;
+    }
+    if (/^\.env(?:\.|$)/.test(entry.name) || /private.*key|\.pem$/i.test(entry.name)) {
+      throw new Error(`POS build input contains a forbidden secret/key file: ${entry.name}`);
+    }
+    const source = readFileSync(path, "utf8");
+    if (source.includes("-----BEGIN PRIVATE KEY-----") ||
+        source.includes("-----BEGIN RSA PRIVATE KEY-----")) {
+      throw new Error(`POS build input contains private key material: ${entry.name}`);
+    }
+  }
+}
+
+scanBuildInputs(resolve(projectDirectory, "src"));
+scanBuildInputs(resolve(projectDirectory, "public"));
+for (const entry of readdirSync(projectDirectory, { withFileTypes: true })) {
+  if (entry.isFile() && /^\.env(?:\.|$)/.test(entry.name)) {
+    throw new Error(
+      `POS production build refuses environment files in the project root: ${entry.name}`,
+    );
+  }
 }
 
 function run(command, args) {
@@ -33,7 +68,7 @@ function run(command, args) {
     cwd: projectDirectory,
     env: {
       ...process.env,
-      VITE_ENTITLEMENT_PUBLIC_KEY: publicKey,
+      VITE_ENTITLEMENT_PUBLIC_KEYRING: publicKeyring,
     },
     stdio: "inherit",
   });

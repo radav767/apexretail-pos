@@ -51,10 +51,10 @@ import {
   subtractQuantities,
 } from "./decimal";
 import {
-  isEntitlementSnapshotUsable,
+  entitlementReconnectMessage,
   loadEntitlementSnapshot,
   saveEntitlementSnapshot,
-  verifyEntitlementSnapshot,
+  verifyEntitlementSnapshotDetailed,
   type CachedEntitlementSnapshot,
 } from "./offline/entitlement";
 import {
@@ -309,6 +309,8 @@ const [loggedIn, setLoggedIn] = useState(
     useState<BusinessSettings | null>(null);
   const [entitlementSnapshot, setEntitlementSnapshot] =
     useState<CachedEntitlementSnapshot | null>(null);
+  const [entitlementVerificationMessage, setEntitlementVerificationMessage] =
+    useState("");
   const [weightedProduct, setWeightedProduct] =
     useState<Product | null>(null);
   const [weightedQuantity, setWeightedQuantity] = useState("0.250");
@@ -815,17 +817,30 @@ const [loggedIn, setLoggedIn] = useState(
         updated_at: new Date().toISOString(),
       };
       saveEntitlementSnapshot(cached);
-      setEntitlementSnapshot(
-        (await verifyEntitlementSnapshot(cached))
-          ? cached
-          : null,
-      );
+      const verification = await verifyEntitlementSnapshotDetailed(cached);
+      if (verification.ok) {
+        setEntitlementSnapshot(cached);
+        setEntitlementVerificationMessage("");
+      } else {
+        setEntitlementSnapshot(null);
+        setEntitlementVerificationMessage(
+          entitlementReconnectMessage(verification.category),
+        );
+      }
     } catch (error) {
-      const cached =
-        loadEntitlementSnapshot(selectedCompanyId);
-      setEntitlementSnapshot(cached);
+      const cached = loadEntitlementSnapshot(selectedCompanyId);
       if (!cached) {
         throw error;
+      }
+      const verification = await verifyEntitlementSnapshotDetailed(cached);
+      if (verification.ok) {
+        setEntitlementSnapshot(cached);
+        setEntitlementVerificationMessage("");
+      } else {
+        setEntitlementSnapshot(null);
+        setEntitlementVerificationMessage(
+          entitlementReconnectMessage(verification.category),
+        );
       }
     }
   }
@@ -857,9 +872,17 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   async function canCreateOfflineSale() {
-    return await isEntitlementSnapshotUsable(
+    const verification = await verifyEntitlementSnapshotDetailed(
       entitlementSnapshot,
     );
+    if (verification.ok) {
+      setEntitlementVerificationMessage("");
+      return true;
+    }
+    setEntitlementVerificationMessage(
+      entitlementReconnectMessage(verification.category),
+    );
+    return false;
   }
 
   function getBranchName() {
@@ -2251,7 +2274,7 @@ const [loggedIn, setLoggedIn] = useState(
       }
       if (!(await canCreateOfflineSale())) {
         setMessage(
-          entitlementSnapshot?.message ||
+          entitlementVerificationMessage || entitlementSnapshot?.message ||
             "Offline authorization has expired. Reconnect to renew this POS subscription.",
         );
         return;
@@ -2427,7 +2450,7 @@ const [loggedIn, setLoggedIn] = useState(
         ) {
           if (!(await canCreateOfflineSale())) {
             throw new Error(
-              entitlementSnapshot?.message ||
+              entitlementVerificationMessage || entitlementSnapshot?.message ||
                 "Offline authorization has expired. Reconnect to renew this POS subscription.",
             );
           }
@@ -3397,6 +3420,11 @@ const [loggedIn, setLoggedIn] = useState(
             >
               Subscription: {entitlementSnapshot.status.replace(/_/g, " ")}
             </p>
+          )}
+          {entitlementVerificationMessage && (
+            <div className="subscription-banner subscription-banner-error" role="alert">
+              {entitlementVerificationMessage}
+            </div>
           )}
           </div>
 

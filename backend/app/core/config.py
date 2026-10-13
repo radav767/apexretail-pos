@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     entitlement_signing_algorithm: str = "RS256"
     entitlement_private_key: str | None = None
     entitlement_public_key: str | None = None
+    entitlement_active_key_id: str | None = None
+    entitlement_signing_key_file: str | None = None
+    entitlement_signing_key_credential: str | None = None
+    entitlement_public_keyring_file: str | None = None
+    entitlement_legacy_key_id: str | None = None
+    entitlement_legacy_accept_until: str | None = None
+    entitlement_max_token_lifetime_seconds: int = 43200
+    entitlement_max_offline_grace_seconds: int = 259200
 
     class Config:
         env_file = ".env"

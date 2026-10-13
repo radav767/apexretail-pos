@@ -1,9 +1,11 @@
 const STORAGE_KEY = "apexpos_entitlement_snapshot_v1";
+const ENTITLEMENT_ISSUER = "apexpos";
+const ENTITLEMENT_AUDIENCE = "apexpos-pos-entitlement";
+const ACCEPTED_STATUSES = new Set(["trial", "active", "grace_period"]);
 
-const PUBLIC_KEY_PEM =
-  (import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  }).env?.VITE_ENTITLEMENT_PUBLIC_KEY || "";
+const PUBLIC_KEYRING_JSON =
+  (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env
+    ?.VITE_ENTITLEMENT_PUBLIC_KEYRING || "";
 
 export type CachedEntitlementSnapshot = {
   company_id: string;
@@ -18,25 +20,69 @@ export type CachedEntitlementSnapshot = {
   updated_at: string;
 };
 
-type EntitlementClaims = {
+export type EntitlementClaims = {
+  sub: string;
   company_id: string;
   status: string;
   plan?: string | null;
   offline_grace_expires_at: string;
   token_type: string;
+  iat?: number;
   exp: number;
+  iss?: string;
+  aud?: string;
 };
+
+export type EntitlementFailureCategory =
+  | "missing_snapshot" | "keyring_not_configured" | "malformed_token"
+  | "algorithm_mismatch" | "type_mismatch" | "invalid_key_id"
+  | "unknown_key_id" | "key_retired" | "legacy_not_configured"
+  | "legacy_key_retired" | "invalid_signature" | "invalid_claims"
+  | "invalid_token_type" | "company_mismatch" | "subscription_not_writable"
+  | "snapshot_expired" | "offline_grace_expired" | "issued_in_future"
+  | "token_lifetime_exceeded" | "offline_grace_exceeded"
+  | "issuer_mismatch" | "audience_mismatch";
+
+export type EntitlementKeyring = {
+  version: 1;
+  max_token_lifetime_seconds: number;
+  max_offline_grace_seconds: number;
+  keys: Array<{
+    kid: string;
+    public_key_pem: string;
+    accept_until?: string | null;
+  }>;
+  legacy_no_kid?: { kid: string; accept_until: string } | null;
+};
+
+export type EntitlementVerificationResult =
+  | { ok: true; claims: EntitlementClaims; kid: string; legacy: boolean }
+  | { ok: false; category: EntitlementFailureCategory; kid?: string };
+
+type EntitlementKeyringInput = EntitlementKeyring | string;
+const KID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
 function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded =
-    normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+  const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
   const binary = atob(padded);
   const bytes = new Uint8Array(new ArrayBuffer(binary.length));
   for (let index = 0; index < binary.length; index += 1) {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+function decodeJsonPart(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(
+      new TextDecoder().decode(decodeBase64Url(value)),
+    ) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 function normalizePublicKeyPem(pem: string): string {
@@ -48,92 +94,51 @@ function pemToArrayBuffer(pem: string): ArrayBuffer {
     .replace(/-----BEGIN PUBLIC KEY-----/g, "")
     .replace(/-----END PUBLIC KEY-----/g, "")
     .replace(/\s+/g, "");
-  const bytes = decodeBase64Url(
-    base64.replace(/\+/g, "-").replace(/\//g, "_"),
-  );
-  return bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength,
-  );
+  const bytes = decodeBase64Url(base64.replace(/\+/g, "-").replace(/\//g, "_"));
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
 async function importVerificationKey(publicKeyPem: string) {
   const normalizedPem = normalizePublicKeyPem(publicKeyPem);
-  if (!normalizedPem || !globalThis.crypto?.subtle) {
+  if (!normalizedPem.includes("-----BEGIN PUBLIC KEY-----") ||
+      normalizedPem.includes("PRIVATE KEY") || !globalThis.crypto?.subtle) {
     return null;
   }
   return globalThis.crypto.subtle.importKey(
-    "spki",
-    pemToArrayBuffer(normalizedPem),
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      hash: "SHA-256",
-    },
-    false,
-    ["verify"],
+    "spki", pemToArrayBuffer(normalizedPem),
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"],
   );
 }
 
-async function verifyJwt(
-  token: string,
-  publicKeyPem: string,
-): Promise<EntitlementClaims | null> {
-  const parts = token.split(".");
-  if (parts.length !== 3) {
-    return null;
-  }
-  const [header, payload, signature] = parts;
-  let key: CryptoKey | null;
+function parseKeyring(input: EntitlementKeyringInput): EntitlementKeyring | null {
   try {
-    key = await importVerificationKey(publicKeyPem);
-  } catch {
-    return null;
-  }
-  if (!key) {
-    return null;
-  }
-  const valid = await globalThis.crypto.subtle.verify(
-    "RSASSA-PKCS1-v1_5",
-    key,
-    decodeBase64Url(signature),
-    new TextEncoder().encode(`${header}.${payload}`),
-  );
-  if (!valid) {
-    return null;
-  }
-  try {
-    const claims = JSON.parse(
-      new TextDecoder().decode(decodeBase64Url(payload)),
-    ) as EntitlementClaims;
-    if (claims.token_type !== "entitlement") {
-      return null;
+    const parsed = (
+      typeof input === "string" ? JSON.parse(input) : input
+    ) as EntitlementKeyring;
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.keys) ||
+        parsed.keys.length === 0 ||
+        !Number.isInteger(parsed.max_token_lifetime_seconds) ||
+        parsed.max_token_lifetime_seconds <= 0 ||
+        !Number.isInteger(parsed.max_offline_grace_seconds) ||
+        parsed.max_offline_grace_seconds <= 0) return null;
+    const seen = new Set<string>();
+    for (const key of parsed.keys) {
+      const pem = normalizePublicKeyPem(key.public_key_pem);
+      if (!KID_PATTERN.test(key.kid) || seen.has(key.kid) ||
+          !pem.includes("-----BEGIN PUBLIC KEY-----") || pem.includes("PRIVATE KEY") ||
+          (key.accept_until != null && !Number.isFinite(Date.parse(key.accept_until)))) {
+        return null;
+      }
+      seen.add(key.kid);
     }
-    return claims;
-  } catch {
-    return null;
-  }
-}
-
-export function saveEntitlementSnapshot(
-  snapshot: CachedEntitlementSnapshot,
-) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-}
-
-export function loadEntitlementSnapshot(
-  companyId: string,
-): CachedEntitlementSnapshot | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw) as CachedEntitlementSnapshot;
-    if (!parsed?.company_id || parsed.company_id !== companyId) {
-      return null;
-    }
-    if (!parsed.snapshot_token) {
-      return null;
+    if (parsed.legacy_no_kid) {
+      const legacyKey = parsed.keys.find(
+        (key) => key.kid === parsed.legacy_no_kid?.kid,
+      );
+      const legacyDeadline = Date.parse(parsed.legacy_no_kid.accept_until);
+      if (!legacyKey || !Number.isFinite(legacyDeadline) ||
+          (legacyKey.accept_until != null &&
+           legacyDeadline > Date.parse(legacyKey.accept_until))) return null;
     }
     return parsed;
   } catch {
@@ -141,46 +146,147 @@ export function loadEntitlementSnapshot(
   }
 }
 
+function failure(category: EntitlementFailureCategory, kid?: unknown): EntitlementVerificationResult {
+  const safeKid = typeof kid === "string" && KID_PATTERN.test(kid) ? kid : undefined;
+  console.warn("[entitlement] verification failed", {
+    category, kid: safeKid || "none",
+  });
+  return { ok: false, category, ...(safeKid ? { kid: safeKid } : {}) };
+}
+
+function finiteTimestamp(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function entitlementReconnectMessage(category: EntitlementFailureCategory): string {
+  if (["unknown_key_id", "key_retired", "legacy_key_retired"].includes(category)) {
+    return "This POS authorization key has changed or retired. Reconnect and reload the POS to renew access.";
+  }
+  if (category === "legacy_not_configured") {
+    return "This saved POS authorization is no longer supported. Reconnect and reload the POS.";
+  }
+  if (category === "snapshot_expired" || category === "offline_grace_expired") {
+    return "Offline authorization has expired. Reconnect and reload the POS to renew the subscription snapshot.";
+  }
+  return "The saved POS authorization could not be verified. Reconnect and reload the POS.";
+}
+
+export async function verifyEntitlementSnapshotDetailed(
+  snapshot: CachedEntitlementSnapshot | null,
+  keyringInput: EntitlementKeyringInput = PUBLIC_KEYRING_JSON,
+  now = Date.now(),
+): Promise<EntitlementVerificationResult> {
+  if (!snapshot) return failure("missing_snapshot");
+  const keyring = parseKeyring(keyringInput);
+  if (!keyring) return failure("keyring_not_configured");
+  const parts = snapshot.snapshot_token.split(".");
+  if (parts.length !== 3) return failure("malformed_token");
+  const [encodedHeader, encodedPayload, encodedSignature] = parts;
+  const header = decodeJsonPart(encodedHeader);
+  if (!header) return failure("malformed_token");
+  if (header.alg !== "RS256") return failure("algorithm_mismatch", header.kid);
+  if (header.typ !== "JWT") return failure("type_mismatch", header.kid);
+
+  const legacy = header.kid == null || header.kid === "";
+  let kid: string;
+  let legacyDeadline: number | null = null;
+  if (legacy) {
+    if (!keyring.legacy_no_kid) return failure("legacy_not_configured");
+    kid = keyring.legacy_no_kid.kid;
+    legacyDeadline = Date.parse(keyring.legacy_no_kid.accept_until);
+    if (now > legacyDeadline) return failure("legacy_key_retired", kid);
+  } else {
+    if (typeof header.kid !== "string" || !KID_PATTERN.test(header.kid)) {
+      return failure("invalid_key_id");
+    }
+    kid = header.kid;
+  }
+  const selectedKey = keyring.keys.find((key) => key.kid === kid);
+  if (!selectedKey) return failure("unknown_key_id", kid);
+  if (selectedKey.accept_until && now > Date.parse(selectedKey.accept_until)) {
+    return failure("key_retired", kid);
+  }
+
+  let cryptoKey: CryptoKey | null;
+  try { cryptoKey = await importVerificationKey(selectedKey.public_key_pem); }
+  catch { cryptoKey = null; }
+  if (!cryptoKey) return failure("keyring_not_configured", kid);
+  let signatureValid = false;
+  try {
+    signatureValid = await globalThis.crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5", cryptoKey, decodeBase64Url(encodedSignature),
+      new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`),
+    );
+  } catch { signatureValid = false; }
+  if (!signatureValid) return failure("invalid_signature", kid);
+
+  const rawClaims = decodeJsonPart(encodedPayload);
+  if (!rawClaims) return failure("invalid_claims", kid);
+  const claims = rawClaims as unknown as EntitlementClaims;
+  if (claims.token_type !== "entitlement") return failure("invalid_token_type", kid);
+  if (!claims.company_id || claims.company_id !== snapshot.company_id ||
+      claims.sub !== claims.company_id) return failure("company_mismatch", kid);
+  if (!ACCEPTED_STATUSES.has(claims.status)) {
+    return failure("subscription_not_writable", kid);
+  }
+  const expirySeconds = finiteTimestamp(claims.exp);
+  const graceMilliseconds = Date.parse(claims.offline_grace_expires_at);
+  if (expirySeconds == null || !Number.isFinite(graceMilliseconds)) {
+    return failure("invalid_claims", kid);
+  }
+  if (now > expirySeconds * 1000) return failure("snapshot_expired", kid);
+  if (now > graceMilliseconds) return failure("offline_grace_expired", kid);
+
+  if (!legacy) {
+    const issuedSeconds = finiteTimestamp(claims.iat);
+    if (issuedSeconds == null) return failure("invalid_claims", kid);
+    if (issuedSeconds * 1000 > now + 60_000) return failure("issued_in_future", kid);
+    if (expirySeconds <= issuedSeconds ||
+        expirySeconds - issuedSeconds > keyring.max_token_lifetime_seconds) {
+      return failure("token_lifetime_exceeded", kid);
+    }
+    if (graceMilliseconds <= issuedSeconds * 1000 ||
+        graceMilliseconds - issuedSeconds * 1000 >
+          keyring.max_offline_grace_seconds * 1000) {
+      return failure("offline_grace_exceeded", kid);
+    }
+    if (claims.iss !== ENTITLEMENT_ISSUER) return failure("issuer_mismatch", kid);
+    if (claims.aud !== ENTITLEMENT_AUDIENCE) return failure("audience_mismatch", kid);
+  } else if (legacyDeadline == null || now > legacyDeadline) {
+    return failure("legacy_key_retired", kid);
+  }
+  return { ok: true, claims, kid, legacy };
+}
+
+export function saveEntitlementSnapshot(snapshot: CachedEntitlementSnapshot) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+}
+
+export function loadEntitlementSnapshot(companyId: string): CachedEntitlementSnapshot | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedEntitlementSnapshot;
+    if (!parsed?.company_id || parsed.company_id !== companyId || !parsed.snapshot_token) {
+      return null;
+    }
+    return parsed;
+  } catch { return null; }
+}
+
 export async function verifyEntitlementSnapshot(
   snapshot: CachedEntitlementSnapshot | null,
-  publicKeyPem = PUBLIC_KEY_PEM,
+  keyringInput: EntitlementKeyringInput = PUBLIC_KEYRING_JSON,
+  now = Date.now(),
 ): Promise<EntitlementClaims | null> {
-  if (!snapshot) {
-    return null;
-  }
-  const claims = await verifyJwt(
-    snapshot.snapshot_token,
-    publicKeyPem,
-  );
-  if (!claims) {
-    return null;
-  }
-  if (claims.company_id !== snapshot.company_id) {
-    return null;
-  }
-  return claims;
+  const result = await verifyEntitlementSnapshotDetailed(snapshot, keyringInput, now);
+  return result.ok ? result.claims : null;
 }
 
 export async function isEntitlementSnapshotUsable(
   snapshot: CachedEntitlementSnapshot | null,
-  publicKeyPem = PUBLIC_KEY_PEM,
+  keyringInput: EntitlementKeyringInput = PUBLIC_KEYRING_JSON,
   now = Date.now(),
 ): Promise<boolean> {
-  if (!snapshot) {
-    return false;
-  }
-  const claims = await verifyEntitlementSnapshot(
-    snapshot,
-    publicKeyPem,
-  );
-  if (!claims) {
-    return false;
-  }
-  if (!["trial", "active", "grace_period"].includes(claims.status)) {
-    return false;
-  }
-  return (
-    now <= claims.exp * 1000 &&
-    now <= new Date(claims.offline_grace_expires_at).getTime()
-  );
+  return (await verifyEntitlementSnapshotDetailed(snapshot, keyringInput, now)).ok;
 }
