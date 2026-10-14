@@ -35,22 +35,34 @@ class CurrencyService:
             raise HTTPException(403, "Currency administration permission required")
 
     async def ensure_base(self, company_id):
+        settings = await self.repo.settings(company_id)
         base = await self.repo.base(company_id)
-        if base is not None:
-            return base
-        settings = await self.repo.settings(company_id, for_update=True)
-        code = str(getattr(settings, "currency_code", None) or "USD").strip().upper()
-        symbol = str(getattr(settings, "currency_symbol", None) or "$").strip() or "$"
-        places = min(max(int(getattr(settings, "decimal_places", 2) or 2), 0), 2)
-        base = CompanyCurrency(
-            company_id=company_id, code=code, display_name=code, symbol=symbol,
-            decimal_places=places, active=True, is_base=True,
-            cash_accepted=True, card_accepted=True, mobile_accepted=True, display_order=0,
-        )
-        self.repo.db.add(base)
-        await self.repo.db.flush()
-        if settings is not None:
-            settings.base_currency_id = base.id
+        if settings is None or base is None:
+            raise HTTPException(409, "Company base currency configuration is incomplete")
+
+        configured_code = str(getattr(settings, "currency_code", "") or "").strip().upper()
+        configured_symbol = str(getattr(settings, "currency_symbol", "") or "").strip()
+        base_code = str(getattr(base, "code", "") or "").strip().upper()
+        base_symbol = str(getattr(base, "symbol", "") or "").strip()
+        try:
+            configured_places = int(settings.decimal_places)
+            base_places = int(base.decimal_places)
+        except (AttributeError, TypeError, ValueError):
+            raise HTTPException(409, "Company base currency configuration is invalid")
+
+        if (
+            getattr(settings, "base_currency_id", None) != base.id
+            or configured_code != base_code
+            or configured_symbol != base_symbol
+            or configured_places != base_places
+            or not base_code.isascii()
+            or not base_code.isalnum()
+            or not 3 <= len(base_code) <= 8
+            or not getattr(base, "active", False)
+            or not getattr(base, "is_base", False)
+            or not 0 <= base_places <= 4
+        ):
+            raise HTTPException(409, "Company base currency configuration is inconsistent")
         return base
 
     async def serialize(self, currency, *, at=None):
@@ -78,10 +90,8 @@ class CurrencyService:
     async def pos_config(self, company_id, actor):
         enforce_actor_company(actor, company_id)
         generated_at = datetime.now(timezone.utc)
-        base = await self.repo.base(company_id)
+        base = await self.ensure_base(company_id)
         settings = await self.repo.settings(company_id)
-        if base is None or settings is None:
-            raise HTTPException(409, "Company currency configuration is incomplete")
         currencies = [
             await self.serialize(row, at=generated_at)
             for row in await self.repo.list(company_id, active=True)

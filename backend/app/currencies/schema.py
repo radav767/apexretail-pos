@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+import re
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -21,7 +22,18 @@ class CurrencyCreate(BaseModel):
     @field_validator("code")
     @classmethod
     def normalize_code(cls, value: str) -> str:
-        return value.strip().upper()
+        normalized = value.strip().upper()
+        if not re.fullmatch(r"[A-Z0-9]{3,8}", normalized):
+            raise ValueError("Currency code must contain 3 to 8 letters or digits")
+        return normalized
+
+    @field_validator("display_name", "symbol")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Value cannot be blank")
+        return normalized
 
 
 class CurrencyUpdate(BaseModel):
@@ -33,6 +45,16 @@ class CurrencyUpdate(BaseModel):
     card_accepted: bool | None = None
     mobile_accepted: bool | None = None
     display_order: int | None = None
+
+    @field_validator("display_name", "symbol")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Value cannot be blank")
+        return normalized
 
 
 class MultiCurrencyUpdate(BaseModel):
