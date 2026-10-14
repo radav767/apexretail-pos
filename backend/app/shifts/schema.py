@@ -48,6 +48,7 @@ class ShiftCurrencyOut(BaseModel):
     cash_refunds: Decimal
     cash_settlements: Decimal
     cash_expenses: Decimal
+    cash_paid_out: Decimal
     expected_cash: Decimal
     counted_cash: Decimal | None
     variance: Decimal | None
@@ -61,13 +62,18 @@ class ShiftOut(BaseModel):
     branch_id: UUID
     device_id: UUID
     employee_id: UUID
+    cashier_name: str | None = None
+    cashier_role: str | None = None
+    shop_name: str | None = None
+    branch_name: str | None = None
+    register_name: str | None = None
     status: str
     opened_at: datetime
     closed_at: datetime | None
     opening_note: str | None
     closing_note: str | None
     currencies: list[ShiftCurrencyOut]
-    summary: dict[str, Decimal | None]
+    summary: dict
 
 
 class ShiftPage(BaseModel):
@@ -76,3 +82,10 @@ class ShiftPage(BaseModel):
     page_size: int
     total: int
     total_pages: int
+    summary: dict = Field(default_factory=dict)
+
+
+class ShiftFilterOptions(BaseModel):
+    cashiers: list[dict]
+    branches: list[dict]
+    devices: list[dict]

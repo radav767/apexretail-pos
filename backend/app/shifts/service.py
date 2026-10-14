@@ -36,29 +36,66 @@ class ShiftService:
             raise HTTPException(403, "POS session identity mismatch")
         return session
 
-    async def view(self, shift):
+    async def view(self, shift, *, detailed=False, identity=None):
         snapshots = await self.repo.snapshots(shift.id)
-        currencies = [{
-            "currency_code": row.currency_code,
-            "currency_name": row.currency_name_snapshot,
-            "symbol": row.currency_symbol_snapshot,
-            "decimal_places": row.decimal_places_snapshot,
-            "opening_float": row.opening_float,
-            "cash_sales": row.cash_sales or Decimal("0"),
-            "cash_refunds": row.cash_refunds or Decimal("0"),
-            "cash_settlements": row.cash_settlements or Decimal("0"),
-            "cash_expenses": row.cash_expenses or Decimal("0"),
-            "expected_cash": row.expected_cash if row.expected_cash is not None else row.opening_float,
-            "counted_cash": row.counted_cash,
-            "variance": row.variance,
-        } for row in snapshots]
+        currencies = []
+        for row in snapshots:
+            if shift.status == "open":
+                cash_sales, cash_refunds, cash_settlements, cash_expenses = await self._currency_activity(
+                    shift.id, row.currency_code
+                )
+                expected_cash = row.opening_float + cash_sales + cash_settlements - cash_refunds - cash_expenses
+                counted_cash = None
+                variance = None
+            else:
+                cash_sales = row.cash_sales or Decimal("0")
+                cash_refunds = row.cash_refunds or Decimal("0")
+                cash_settlements = row.cash_settlements or Decimal("0")
+                cash_expenses = row.cash_expenses or Decimal("0")
+                expected_cash = row.expected_cash if row.expected_cash is not None else row.opening_float
+                counted_cash = row.counted_cash
+                variance = row.variance
+            currencies.append({
+                "currency_code": row.currency_code,
+                "currency_name": row.currency_name_snapshot,
+                "symbol": row.currency_symbol_snapshot,
+                "decimal_places": row.decimal_places_snapshot,
+                "opening_float": row.opening_float,
+                "cash_sales": cash_sales,
+                "cash_refunds": cash_refunds,
+                "cash_settlements": cash_settlements,
+                "cash_expenses": cash_expenses,
+                "cash_paid_out": cash_refunds + cash_expenses,
+                "expected_cash": quantize_currency(expected_cash, row.decimal_places_snapshot),
+                "counted_cash": counted_cash,
+                "variance": variance,
+            })
+        summary = {name: getattr(shift, name) for name in SUMMARY_FIELDS}
+        summary["total_sales_base"] = summary["net_sales_base"]
+        calculated_summary = None
+        if detailed or shift.status == "open":
+            calculated_summary = await self._base_summary(shift.id)
+            if shift.status == "open":
+                summary.update({name: calculated_summary[name] for name in SUMMARY_FIELDS})
+                summary["total_sales_base"] = summary["net_sales_base"]
+        if detailed:
+            summary.update({
+                "total_sales_base": summary["net_sales_base"],
+                "cash_received_base": calculated_summary["cash_received_base"],
+                "cash_paid_out_base": calculated_summary["cash_paid_out_base"],
+                "refunds_base": calculated_summary["refunds_base"],
+                "base_currency_code": await self.repo.base_currency_code(shift.company_id),
+            })
+        if identity is None:
+            identity = await self.repo.identity(shift)
         return {
             **{name: getattr(shift, name) for name in (
                 "id", "shift_number", "company_id", "shop_id", "branch_id", "device_id",
                 "employee_id", "status", "opened_at", "closed_at", "opening_note", "closing_note",
             )},
+            **identity,
             "currencies": currencies,
-            "summary": {name: getattr(shift, name) for name in SUMMARY_FIELDS},
+            "summary": summary,
         }
 
     async def open(self, data, actor):
@@ -150,6 +187,9 @@ class ShiftService:
         settlements = {name: Decimal((await db.execute(select(func.coalesce(func.sum(CreditSettlement.amount), 0)).where(CreditSettlement.shift_id == shift_id, CreditSettlement.payment_method == name))).scalar_one() or 0) for name in ("cash", "card", "mobile")}
         cash_expenses = Decimal((await db.execute(select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.shift_id == shift_id, Expense.payment_method == "cash"))).scalar_one() or 0)
         noncash_expenses = Decimal((await db.execute(select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.shift_id == shift_id, Expense.payment_method.in_(("card", "mobile"))))).scalar_one() or 0)
+        cash_received = sum((Decimal(row.total_amount or 0) for row in sales if row.payment_method == "cash" and Decimal(row.total_amount or 0) > 0), Decimal("0")) + settlements["cash"]
+        refunds = sum((abs(Decimal(row.total_amount or 0)) for row in sales if row.original_sale_id is not None and Decimal(row.total_amount or 0) < 0), Decimal("0"))
+        cash_refunds = sum((abs(Decimal(row.total_amount or 0)) for row in sales if row.original_sale_id is not None and row.payment_method == "cash" and Decimal(row.total_amount or 0) < 0), Decimal("0"))
         return {
             "gross_sales_base": gross, "net_sales_base": net, "cost_of_sales_base": cost,
             "gross_profit_base": net - cost, "discounts_base": discounts,
@@ -158,6 +198,9 @@ class ShiftService:
             "cash_settlements_base": settlements["cash"], "card_settlements_base": settlements["card"],
             "mobile_settlements_base": settlements["mobile"], "cash_expenses_base": cash_expenses,
             "noncash_expenses_base": noncash_expenses,
+            "cash_received_base": cash_received,
+            "cash_paid_out_base": cash_refunds + cash_expenses,
+            "refunds_base": refunds,
         }
 
     async def close(self, shift_id, data, actor):
@@ -192,7 +235,9 @@ class ShiftService:
         # Persist closing currency figures while the parent is still open;
         # the database trigger rejects any snapshot mutation after closure.
         await self.repo.db.flush(snapshots)
-        for name, value in (await self._base_summary(shift.id)).items():
+        base_summary = await self._base_summary(shift.id)
+        for name in SUMMARY_FIELDS:
+            value = base_summary[name]
             setattr(shift, name, value.quantize(Decimal("0.01")))
         shift.status = "closed"
         shift.closed_at = datetime.now(timezone.utc)
@@ -212,4 +257,50 @@ class ShiftService:
                 enforce_actor_branch(actor, filters["branch_id"])
             filters["branch_id"] = actor.employee.branch_id
         rows, total = await self.repo.list(company_id, **filters)
-        return [await self.view(row) for row in rows], total
+        identities = await self.repo.identities(rows)
+        return [await self.view(row, identity=identities.get(row.id)) for row in rows], total
+
+    async def report_summary(self, company_id, actor, **filters):
+        filters = self._report_scope(company_id, actor, filters)
+        return await self.repo.report_summary(company_id, **filters)
+
+    async def filter_options(self, company_id, actor):
+        branch_id = None
+        enforce_actor_company(actor, company_id)
+        if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+            if actor.employee is None:
+                raise HTTPException(403, "Branch access denied")
+            branch_id = actor.employee.branch_id
+        return await self.repo.filter_options(company_id, branch_id=branch_id)
+
+    async def detail(self, company_id, shift_id, actor):
+        enforce_actor_company(actor, company_id)
+        shift = await self.repo.by_id(company_id, shift_id)
+        if shift is None:
+            raise HTTPException(404, "Shift not found")
+        if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+            if actor.employee is None or shift.branch_id != actor.employee.branch_id:
+                raise HTTPException(403, "Branch access denied")
+        return await self.view(shift, detailed=True)
+
+    def _report_scope(self, company_id, actor, filters):
+        enforce_actor_company(actor, company_id)
+        scoped = dict(filters)
+        if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+            if actor.employee is None:
+                raise HTTPException(403, "Branch access denied")
+            if scoped.get("branch_id") is not None:
+                enforce_actor_branch(actor, scoped["branch_id"])
+            scoped["branch_id"] = actor.employee.branch_id
+        return scoped
+
+    async def export_history(self, company_id, actor, **filters):
+        filters = self._report_scope(company_id, actor, filters)
+        rows, total = await self.repo.list(company_id, limit=10001, offset=0, **filters)
+        if total > 10000:
+            raise HTTPException(413, "Narrow the filters to export at most 10,000 shifts at a time")
+        identities = await self.repo.identities(rows)
+        return [
+            await self.view(row, identity=identities.get(row.id))
+            for row in rows
+        ], total

@@ -19,6 +19,7 @@ import SettingsPage from "./pages/SettingsPage";
 import CustomersPage from "./pages/CustomersPage";
 import CreditSettlementsPage from "./pages/CreditSettlementsPage";
 import ExpensesPage from "./pages/ExpensesPage";
+import ShiftReportsPage from "./pages/ShiftReportsPage";
 
 type BackofficePage =
   | "dashboard"
@@ -31,11 +32,12 @@ type BackofficePage =
   | "customers"
   | "credit-settlements"
   | "expenses"
+  | "shift-reports"
   | "settings";
 
 function initialBackofficePage(): BackofficePage {
   const requested = new URLSearchParams(window.location.search).get("page");
-  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "settings"] as BackofficePage[])
+  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "shift-reports", "settings"] as BackofficePage[])
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
@@ -472,6 +474,12 @@ function App() {
             Reports
           </button>
           <button
+            className={page === "shift-reports" ? "active" : ""}
+            onClick={() => navigateTo("shift-reports")}
+          >
+            Shift Reports
+          </button>
+          <button
             className={page === "devices" ? "active" : ""}
             onClick={() => navigateTo("devices")}
           >
@@ -537,6 +545,8 @@ function App() {
                               ? "Outstanding Credit & Settlements"
                               : page === "expenses"
                                 ? "Expense Reports & Categories"
+                                : page === "shift-reports"
+                                  ? "Cashier Shift Reports"
                           : page === "settings"
                             ? "Business Settings"
                             : "Shops & Devices"}
@@ -624,6 +634,10 @@ function App() {
 
         {page === "expenses" && (
           <ExpensesPage companyId={companyId} />
+        )}
+
+        {page === "shift-reports" && (
+          <ShiftReportsPage companyId={companyId} />
         )}
 
         {page === "settings" && (

@@ -453,6 +453,85 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(legacy.exchange_rate_snapshot)
             self.assertIsNone(legacy.payment_currency_code)
 
+    async def test_shift_report_filters_tenant_names_and_currency_variance(self):
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = ShiftService(ShiftRepository(session))
+            opened = await service.open(ShiftOpen(
+                opening_balances=[
+                    ShiftOpeningBalance(currency_code="USD", amount="20"),
+                    ShiftOpeningBalance(currency_code="ZAR", amount="500"),
+                ],
+                idempotency_key="report-open-company-1",
+            ), self.actor)
+            closed = await service.close(opened["id"], ShiftClose(
+                counted_balances=[
+                    ShiftClosingCount(currency_code="USD", amount="19"),
+                    ShiftClosingCount(currency_code="ZAR", amount="505"),
+                ],
+                idempotency_key="report-close-company-1",
+                confirmed=True,
+            ), self.actor)
+            self.assertEqual(closed["cashier_name"], "Cashier")
+            self.assertEqual(closed["branch_name"], "Main")
+            self.assertEqual(closed["register_name"], "POS 1")
+
+            other_open = await service.open(ShiftOpen(
+                opening_balances=[ShiftOpeningBalance(currency_code="USD", amount="7")],
+                idempotency_key="report-open-company-2",
+            ), self.other_actor)
+            await service.close(other_open["id"], ShiftClose(
+                counted_balances=[ShiftClosingCount(currency_code="USD", amount="9")],
+                idempotency_key="report-close-company-2",
+                confirmed=True,
+            ), self.other_actor)
+
+            owner = AuthActor("user", COMPANY, "owner", user=SimpleNamespace(id=USER))
+            items, total = await service.history(
+                COMPANY, owner, employee_id=EMPLOYEE, branch_id=BRANCH,
+                device_id=DEVICE, status="closed", limit=25, offset=0,
+            )
+            self.assertEqual(total, 1)
+            self.assertEqual(items[0]["shift_number"], closed["shift_number"])
+            self.assertEqual(items[0]["shop_name"], "Main")
+            self.assertEqual(items[0]["summary"]["gross_sales_base"], Decimal("0.00"))
+
+            report = await service.report_summary(
+                COMPANY, owner, employee_id=EMPLOYEE, branch_id=BRANCH,
+                device_id=DEVICE, status="closed",
+                start_at=datetime.now(timezone.utc) - timedelta(days=1),
+                end_at=datetime.now(timezone.utc) + timedelta(days=1),
+            )
+            self.assertEqual(report["total_shifts"], 1)
+            self.assertEqual(report["closed_shifts"], 1)
+            self.assertEqual(report["base_currency_code"], "USD")
+            self.assertEqual(
+                {row["currency_code"]: Decimal(row["amount"]) for row in report["variance_by_currency"]},
+                {"USD": Decimal("-1.0000"), "ZAR": Decimal("5.0000")},
+            )
+            no_date_matches = await service.report_summary(
+                COMPANY, owner,
+                start_at=datetime.now(timezone.utc) + timedelta(days=2),
+            )
+            self.assertEqual(no_date_matches["total_shifts"], 0)
+            options = await service.filter_options(COMPANY, owner)
+            self.assertEqual({row["id"] for row in options["devices"]}, {DEVICE})
+            detail = await service.detail(COMPANY, closed["id"], owner)
+            self.assertEqual(detail["currencies"][0]["expected_cash"], Decimal("19.0000"))
+
+            cashier_items, cashier_total = await service.history(
+                COMPANY, self.actor, limit=25, offset=0,
+            )
+            self.assertEqual(cashier_total, 1)
+            self.assertEqual(cashier_items[0]["branch_id"], BRANCH)
+            with self.assertRaisesRegex(HTTPException, "Branch access denied"):
+                await service.history(COMPANY, self.actor, branch_id=OTHER_BRANCH)
+
+            other_owner = AuthActor("user", OTHER_COMPANY, "owner", user=SimpleNamespace(id=uuid4()))
+            other_report = await service.report_summary(OTHER_COMPANY, other_owner)
+            self.assertEqual(other_report["total_shifts"], 1)
+            with self.assertRaisesRegex(HTTPException, "Forbidden"):
+                await service.report_summary(OTHER_COMPANY, owner)
+
 
 if __name__ == "__main__":
     unittest.main()
