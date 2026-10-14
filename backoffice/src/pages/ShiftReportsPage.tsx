@@ -14,6 +14,8 @@ type CurrencyCash = {
   cash_refunds: string | number;
   cash_settlements: string | number;
   cash_expenses: string | number;
+  cash_in: string | number;
+  cash_out: string | number;
   cash_paid_out: string | number;
   expected_cash: string | number;
   counted_cash: string | number | null;
@@ -345,9 +347,9 @@ export default function ShiftReportsPage({ companyId }: { companyId: string }) {
           <span>Cash expenses <b>{money(selected.summary.cash_expenses_base, selected.summary.base_currency_code || summaryCurrency)}</b></span>
         </div>
         <h3>Cash reconciliation by physical currency</h3>
-        <div className="shift-currency-detail-scroll"><table className="shift-currency-detail"><thead><tr><th>Currency</th><th>Opening</th><th>Cash sales</th><th>Cash settlements</th><th>Refunds</th><th>Cash paid out</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
-          {selected.currencies.map((row) => <tr key={row.currency_code}><td>{row.currency_name} ({row.currency_code})</td><td>{money(row.opening_float, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_sales, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_settlements, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_refunds, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_paid_out, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.expected_cash, row.currency_code, row.symbol, row.decimal_places)}</td><td>{row.counted_cash === null ? "Not counted" : money(row.counted_cash, row.currency_code, row.symbol, row.decimal_places)}</td><td>{row.variance === null ? "Open" : money(row.variance, row.currency_code, row.symbol, row.decimal_places)}</td></tr>)}
-          {!selected.currencies.length && <tr><td colSpan={9}>No currency snapshots available for this shift.</td></tr>}
+        <div className="shift-currency-detail-scroll"><table className="shift-currency-detail"><thead><tr><th>Currency</th><th>Opening</th><th>Cash sales</th><th>Cash settlements</th><th>Cash in</th><th>Cash out</th><th>Refunds</th><th>Cash expenses</th><th>Expected</th><th>Counted</th><th>Variance</th></tr></thead><tbody>
+          {selected.currencies.map((row) => <tr key={row.currency_code}><td>{row.currency_name} ({row.currency_code})</td><td>{money(row.opening_float, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_sales, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_settlements, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_in, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_out, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_refunds, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.cash_expenses, row.currency_code, row.symbol, row.decimal_places)}</td><td>{money(row.expected_cash, row.currency_code, row.symbol, row.decimal_places)}</td><td>{row.counted_cash === null ? "Not counted" : money(row.counted_cash, row.currency_code, row.symbol, row.decimal_places)}</td><td>{row.variance === null ? "Open" : money(row.variance, row.currency_code, row.symbol, row.decimal_places)}</td></tr>)}
+          {!selected.currencies.length && <tr><td colSpan={11}>No currency snapshots available for this shift.</td></tr>}
         </tbody></table></div>
         <p className="shift-base-note">Accounting totals are in the company base currency. Physical drawer amounts and variance above are never combined or revalued.</p>
       </section>

@@ -42,9 +42,10 @@ def shift_row():
         "closing_note": None,
         "currencies": [{
             "currency_code": "USD", "currency_name": "US Dollar", "symbol": "$",
-            "decimal_places": 2, "opening_float": Decimal("20.00"),
+            "decimal_places": 2, "cash_accepted": True, "opening_float": Decimal("20.00"),
             "cash_sales": Decimal("50.00"), "cash_refunds": Decimal("2.00"),
             "cash_settlements": Decimal("5.00"), "cash_expenses": Decimal("3.00"),
+            "cash_in": Decimal("0.00"), "cash_out": Decimal("0.00"),
             "cash_paid_out": Decimal("5.00"), "expected_cash": Decimal("70.00"),
             "counted_cash": Decimal("69.00"), "variance": Decimal("-1.00"),
         }],
@@ -98,6 +99,22 @@ class FakeShiftService:
     async def export_history(self, company_id, actor, **filters):
         self.export_call = (company_id, filters)
         return [shift_row()], 1
+
+    async def my_history(self, actor, *, page, page_size):
+        return [shift_row()], 1
+
+    async def my_detail(self, shift_id, actor):
+        return shift_row()
+
+    async def create_cash_movement(self, shift_id, data, actor):
+        return {
+            "id": uuid4(), "company_id": COMPANY_ID, "shift_id": shift_id,
+            "branch_id": BRANCH_ID, "device_id": DEVICE_ID, "employee_id": EMPLOYEE_ID,
+            "actor_name": "Test Cashier", "movement_type": data.movement_type,
+            "currency_code": data.currency_code, "amount": data.amount,
+            "reason": data.reason, "idempotency_key": data.idempotency_key,
+            "created_at": datetime.now(timezone.utc),
+        }
 
 
 class ShiftReportsApiTest(unittest.IsolatedAsyncioTestCase):
@@ -173,18 +190,52 @@ class ShiftReportsApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("'=HYPERLINK", response.text)
 
+    async def test_cashier_history_and_cash_movement_routes_are_registered(self):
+        history = await self.request("GET", "/api/shifts/my-history", params={"page": 1, "page_size": 10})
+        detail = await self.request("GET", f"/api/shifts/mine/{SHIFT_ID}")
+        movement = await self.request("POST", f"/api/shifts/{SHIFT_ID}/cash-movements", json={
+            "movement_type": "cash_in", "currency_code": "usd", "amount": "2.00",
+            "reason": "Float top-up", "idempotency_key": "api-cash-in-0001",
+        })
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(history.json()["total"], 1)
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(movement.status_code, 200)
+        self.assertEqual(movement.json()["currency_code"], "USD")
+        self.assertEqual(movement.json()["actor_name"], "Test Cashier")
+
+
+class CashMovementSchemaTest(unittest.TestCase):
+    def test_cash_movement_requires_positive_amount_reason_and_currency(self):
+        from pydantic import ValidationError
+        from app.shifts.schema import CashMovementCreate
+
+        parsed = CashMovementCreate(
+            movement_type="cash_out", currency_code=" zar ", amount="5.25",
+            reason="Petty cash", idempotency_key="cash-out-schema-1",
+        )
+        self.assertEqual(parsed.currency_code, "ZAR")
+        self.assertEqual(parsed.reason, "Petty cash")
+        for values in (
+            {"movement_type": "cash_in", "currency_code": "USD", "amount": "0", "reason": "x", "idempotency_key": "schema-key-000"},
+            {"movement_type": "cash_in", "currency_code": "USD", "amount": "-1", "reason": "x", "idempotency_key": "schema-key-001"},
+            {"movement_type": "cash_in", "currency_code": "USD", "amount": "1", "reason": "  ", "idempotency_key": "schema-key-002"},
+        ):
+            with self.assertRaises(ValidationError):
+                CashMovementCreate(**values)
+
 
 class ShiftReportCashCalculationTest(unittest.IsolatedAsyncioTestCase):
     async def test_open_shift_expected_cash_stays_separate_by_physical_currency(self):
         usd = SimpleNamespace(
             currency_code="USD", currency_name_snapshot="US Dollar", currency_symbol_snapshot="$",
-            decimal_places_snapshot=2, opening_float=Decimal("20.00"), cash_sales=None,
+            decimal_places_snapshot=2, cash_accepted_snapshot=True, opening_float=Decimal("20.00"), cash_sales=None,
             cash_refunds=None, cash_settlements=None, cash_expenses=None,
             expected_cash=None, counted_cash=None, variance=None,
         )
         zar = SimpleNamespace(
             currency_code="ZAR", currency_name_snapshot="South African Rand", currency_symbol_snapshot="R",
-            decimal_places_snapshot=2, opening_float=Decimal("500.00"), cash_sales=None,
+            decimal_places_snapshot=2, cash_accepted_snapshot=True, opening_float=Decimal("500.00"), cash_sales=None,
             cash_refunds=None, cash_settlements=None, cash_expenses=None,
             expected_cash=None, counted_cash=None, variance=None,
         )
@@ -198,8 +249,8 @@ class ShiftReportCashCalculationTest(unittest.IsolatedAsyncioTestCase):
 
         service = ShiftService(ReportRepo())
         service._currency_activity = AsyncMock(side_effect=[
-            (Decimal("40"), Decimal("5"), Decimal("2"), Decimal("3")),
-            (Decimal("100"), Decimal("0"), Decimal("20"), Decimal("15")),
+            (Decimal("40"), Decimal("5"), Decimal("2"), Decimal("3"), Decimal("4"), Decimal("1")),
+            (Decimal("100"), Decimal("0"), Decimal("20"), Decimal("15"), Decimal("0"), Decimal("0")),
         ])
         service._base_summary = AsyncMock(return_value={
             "gross_sales_base": Decimal("140"), "net_sales_base": Decimal("140"),
@@ -226,10 +277,10 @@ class ShiftReportCashCalculationTest(unittest.IsolatedAsyncioTestCase):
         view = await service.view(shift)
 
         expected = {row["currency_code"]: row["expected_cash"] for row in view["currencies"]}
-        self.assertEqual(expected, {"USD": Decimal("54.00"), "ZAR": Decimal("605.00")})
+        self.assertEqual(expected, {"USD": Decimal("57.00"), "ZAR": Decimal("605.00")})
         self.assertEqual(
             {row["currency_code"]: row["cash_paid_out"] for row in view["currencies"]},
-            {"USD": Decimal("8.00"), "ZAR": Decimal("15.00")},
+            {"USD": Decimal("9.00"), "ZAR": Decimal("15.00")},
         )
         self.assertEqual(view["summary"]["total_sales_base"], Decimal("140"))
 

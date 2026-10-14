@@ -6,6 +6,7 @@ import {
   getApiErrorMessage,
 } from "./api/client";
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
+import type { ShiftRecord } from "./ShiftManagementPage";
 import {
   projectCreditSale,
   type CreditCustomer,
@@ -244,7 +245,7 @@ function roundMoneyValue(value: string | number): number {
 
 function initialPosModule(): PosModuleName {
   const requested = new URLSearchParams(window.location.search).get("module");
-  return (["Sales", "Sales Management", "Customers", "Credit Settlements", "Expenses", "Products", "Inventory", "Reports", "Settings"] as PosModuleName[])
+  return (["Sales", "Sales Management", "Customers", "Credit Settlements", "Expenses", "Shift Management", "Products", "Inventory", "Reports", "Settings"] as PosModuleName[])
     .includes(requested as PosModuleName) ? requested as PosModuleName : "Sales";
 }
 
@@ -1201,6 +1202,50 @@ const [loggedIn, setLoggedIn] = useState(
       rawDataBase64,
       jobName: snapshot.receipt_number,
     });
+  }
+
+  async function handlePrintShiftSummary(shift: ShiftRecord) {
+    const shiftMoney = (value: string | number | null | undefined, currency: ShiftRecord["currencies"][number]) => {
+      const numeric = Number(value ?? 0);
+      try {
+        return new Intl.NumberFormat(undefined, {
+          style: "currency", currency: currency.currency_code,
+          minimumFractionDigits: currency.decimal_places,
+          maximumFractionDigits: currency.decimal_places,
+        }).format(numeric);
+      } catch {
+        return `${currency.symbol}${numeric.toFixed(currency.decimal_places)} ${currency.currency_code}`;
+      }
+    };
+    const lines = [
+      { label: "Status", value: shift.status.toUpperCase() },
+      { label: "Opened", value: new Date(shift.opened_at).toLocaleString() },
+      { label: "Closed", value: shift.closed_at ? new Date(shift.closed_at).toLocaleString() : "Still open" },
+      ...(shift.summary.base_currency_code ? [{ label: `Sales (${shift.summary.base_currency_code})`, value: String(shift.summary.total_sales_base || "0.00") }] : []),
+      ...shift.currencies.filter((currency) => currency.cash_accepted).flatMap((currency) => [
+        { label: `${currency.currency_code} opening`, value: shiftMoney(currency.opening_float, currency) },
+        { label: `${currency.currency_code} cash sales`, value: shiftMoney(currency.cash_sales, currency) },
+        { label: `${currency.currency_code} settlements`, value: shiftMoney(currency.cash_settlements, currency) },
+        { label: `${currency.currency_code} cash in`, value: shiftMoney(currency.cash_in, currency) },
+        { label: `${currency.currency_code} cash out`, value: shiftMoney(currency.cash_out, currency) },
+        { label: `${currency.currency_code} refunds`, value: shiftMoney(currency.cash_refunds, currency) },
+        { label: `${currency.currency_code} expenses`, value: shiftMoney(currency.cash_expenses, currency) },
+        { label: `${currency.currency_code} expected`, value: shiftMoney(currency.expected_cash, currency) },
+        { label: `${currency.currency_code} counted`, value: currency.counted_cash === null ? "Not counted" : shiftMoney(currency.counted_cash, currency) },
+        { label: `${currency.currency_code} variance`, value: currency.variance === null ? "Open" : shiftMoney(currency.variance, currency) },
+      ]),
+    ];
+    await printReceiptSnapshot({
+      id: shift.id, receipt_number: shift.shift_number, company_id: shift.company_id,
+      business_name: businessSettings?.name || "ApexRetail POS", shop_name: shift.shop_name,
+      branch_name: shift.branch_name, pos_name: shift.register_name,
+      created_at: new Date().toISOString(), cashier_name: shift.cashier_name || cashier?.name || null,
+      total_amount: "0", amount_received: "0", change_due: "0",
+      payment_method: "shift_summary", status: "informational", items: [],
+      document_type: "shift_summary", shift_summary_lines: lines,
+      receipt_footer: "SHIFT SUMMARY - NOT A SALES RECEIPT",
+    });
+    setPrinterNotice(`Printed shift summary ${shift.shift_number}`);
   }
 
   async function archiveAndMaybePrintReceipt(
@@ -3222,6 +3267,16 @@ const [loggedIn, setLoggedIn] = useState(
 
                         </button>
 
+                        {cashier && (
+                          <button
+                            type="button"
+                            style={posMenuButton}
+                            onClick={() => showPosModule("Shift Management")}
+                          >
+                            Shift Management
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           style={posMenuButton}
@@ -3373,6 +3428,7 @@ const [loggedIn, setLoggedIn] = useState(
           onOpenPrintSettings={handleOpenPrintSettings}
           onTestPrint={handleTestPrint}
           onReprintSale={handleReprintSale}
+          onPrintShiftSummary={handlePrintShiftSummary}
           onProductsChanged={() =>
             void loadProducts(
               companyId,

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -24,12 +24,12 @@ from app.expenses.repository import ExpenseRepository
 from app.expenses.schema import ExpenseCreate
 from app.expenses.service import ExpenseService
 from app.financial_context import resolve_shift_for_write
-from app.models import CashierShift, CashierShiftCurrencySnapshot, CreditReceivable, CurrencyExchangeRate, Expense, Sale
+from app.models import CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot, CreditReceivable, CurrencyExchangeRate, Expense, Sale
 from app.sales.repository import SalesRepository
 from app.sales.schema import SaleCreate, SaleItemCreate
 from app.sales.service import SalesService
 from app.shifts.repository import ShiftRepository
-from app.shifts.schema import ShiftClose, ShiftClosingCount, ShiftOpen, ShiftOpeningBalance
+from app.shifts.schema import CashMovementCreate, ShiftClose, ShiftClosingCount, ShiftOpen, ShiftOpeningBalance
 from app.shifts.service import ShiftService
 
 
@@ -71,7 +71,7 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
         self.engine = create_async_engine(database_url)
         async with self.engine.begin() as connection:
             await connection.execute(text("""
-                TRUNCATE audit_events, cashier_shift_currency_snapshots, cashier_shifts,
+                TRUNCATE audit_events, cashier_shift_cash_movements, cashier_shift_currency_snapshots, cashier_shifts,
                 expenses, expense_categories, credit_settlements, credit_receivables,
                 inventory_movements, sale_items, sales, inventory_balances, products,
                 categories, pos_sessions, employees, devices, users, company_settings,
@@ -531,6 +531,79 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(other_report["total_shifts"], 1)
             with self.assertRaisesRegex(HTTPException, "Forbidden"):
                 await service.report_summary(OTHER_COMPANY, owner)
+
+    async def test_cash_movements_are_idempotent_scoped_immutable_and_reconciled_by_currency(self):
+        shift = await self.open_shift("cash-move-open-0001")
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = ShiftService(ShiftRepository(session))
+            cash_in_usd = CashMovementCreate(
+                movement_type="cash_in", currency_code=" usd ", amount="10.00",
+                reason="Float top-up", idempotency_key="cash-in-usd-0001",
+            )
+            first = await service.create_cash_movement(shift["id"], cash_in_usd, self.actor)
+            repeated = await service.create_cash_movement(shift["id"], cash_in_usd, self.actor)
+            self.assertEqual(first["id"], repeated["id"])
+            self.assertEqual(first["actor_name"], "Cashier")
+
+            await service.create_cash_movement(shift["id"], CashMovementCreate(
+                movement_type="cash_out", currency_code="USD", amount="5.00",
+                reason="Petty cash payout", idempotency_key="cash-out-usd-0001",
+            ), self.actor)
+            await service.create_cash_movement(shift["id"], CashMovementCreate(
+                movement_type="cash_in", currency_code="ZAR", amount="40.00",
+                reason="Float top-up", idempotency_key="cash-in-zar-0001",
+            ), self.actor)
+            with self.assertRaisesRegex(HTTPException, "decimal places"):
+                await service.create_cash_movement(shift["id"], CashMovementCreate(
+                    movement_type="cash_in", currency_code="USD", amount="1.001",
+                    reason="Invalid precision", idempotency_key="cash-precision-0001",
+                ), self.actor)
+            with self.assertRaisesRegex(HTTPException, "exceeds"):
+                await service.create_cash_movement(shift["id"], CashMovementCreate(
+                    movement_type="cash_out", currency_code="USD", amount="26.00",
+                    reason="Overdraw attempt", idempotency_key="cash-overdraw-0001",
+                ), self.actor)
+
+            foreign_actor = self.make_actor(OTHER_EMPLOYEE, OTHER_DEVICE, OTHER_POS_SESSION, COMPANY, SHOP, BRANCH)
+            with self.assertRaisesRegex(HTTPException, "Only the cashier"):
+                await service.create_cash_movement(shift["id"], CashMovementCreate(
+                    movement_type="cash_in", currency_code="USD", amount="1.00",
+                    reason="Wrong cashier", idempotency_key="cash-wrong-actor-001",
+                ), foreign_actor)
+            with self.assertRaisesRegex(HTTPException, "Shift not found"):
+                await service.create_cash_movement(shift["id"], CashMovementCreate(
+                    movement_type="cash_in", currency_code="USD", amount="1.00",
+                    reason="Wrong company", idempotency_key="cash-wrong-company-1",
+                ), self.other_actor)
+
+            current = await service.current(self.actor)
+            cash_by_code = {row["currency_code"]: row for row in current["currencies"]}
+            self.assertEqual(cash_by_code["USD"]["cash_in"], Decimal("10.0000"))
+            self.assertEqual(cash_by_code["USD"]["cash_out"], Decimal("5.0000"))
+            self.assertEqual(cash_by_code["USD"]["expected_cash"], Decimal("25.0000"))
+            self.assertEqual(cash_by_code["ZAR"]["expected_cash"], Decimal("540.0000"))
+            self.assertEqual(len(current["cash_movements"]), 3)
+
+            closed = await service.close(shift["id"], ShiftClose(
+                counted_balances=[
+                    ShiftClosingCount(currency_code="USD", amount="24.00"),
+                    ShiftClosingCount(currency_code="ZAR", amount="540.00"),
+                ], idempotency_key="cash-move-close-0001", confirmed=True,
+            ), self.actor)
+            closed_currency = {row["currency_code"]: row for row in closed["currencies"]}
+            self.assertEqual(closed_currency["USD"]["expected_cash"], Decimal("25.0000"))
+            self.assertEqual(closed_currency["USD"]["variance"], Decimal("-1.0000"))
+            self.assertEqual(closed_currency["ZAR"]["variance"], Decimal("0.0000"))
+            self.assertEqual(closed_currency["USD"]["cash_in"], Decimal("10.0000"))
+            self.assertEqual(closed_currency["USD"]["cash_out"], Decimal("5.0000"))
+            self.assertEqual(len(closed["cash_movements"]), 3)
+            with self.assertRaises(HTTPException):
+                await service.create_cash_movement(shift["id"], CashMovementCreate(
+                    movement_type="cash_in", currency_code="USD", amount="1.00",
+                    reason="After close", idempotency_key="cash-after-close-001",
+                ), self.actor)
+            count = (await session.execute(select(func.count()).select_from(CashierShiftCashMovement))).scalar_one()
+            self.assertEqual(count, 3)
 
 
 if __name__ == "__main__":

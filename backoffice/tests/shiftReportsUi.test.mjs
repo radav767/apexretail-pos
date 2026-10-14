@@ -43,7 +43,7 @@ test("cash reconciliation keeps each physical currency separate", () => {
 });
 
 test("shift detail and summary include payment totals and cash movements", () => {
-  for (const label of ["Total shifts", "Open shifts", "Closed shifts", "Total sales", "Cash received", "Gross sales", "Net sales", "Cash sales", "Card sales", "Mobile sales", "Credit sales", "Cash settlements", "Cash paid out", "Refunds", "Cash expenses"]) {
+  for (const label of ["Total shifts", "Open shifts", "Closed shifts", "Total sales", "Cash received", "Gross sales", "Net sales", "Cash sales", "Card sales", "Mobile sales", "Credit sales", "Cash settlements", "Cash in", "Cash out", "Cash paid out", "Refunds", "Cash expenses"]) {
     assert.ok(page.includes(label), `missing ${label}`);
   }
   assert.match(page, /View/);

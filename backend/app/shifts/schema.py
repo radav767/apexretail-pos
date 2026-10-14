@@ -12,7 +12,10 @@ class ShiftOpeningBalance(BaseModel):
     @field_validator("currency_code")
     @classmethod
     def normalize_code(cls, value: str) -> str:
-        return value.strip().upper()
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("A currency code is required")
+        return normalized
 
 
 class ShiftOpen(BaseModel):
@@ -28,7 +31,10 @@ class ShiftClosingCount(BaseModel):
     @field_validator("currency_code")
     @classmethod
     def normalize_code(cls, value: str) -> str:
-        return value.strip().upper()
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("A currency code is required")
+        return normalized
 
 
 class ShiftClose(BaseModel):
@@ -38,20 +44,71 @@ class ShiftClose(BaseModel):
     confirmed: bool
 
 
+class CashMovementCreate(BaseModel):
+    movement_type: str = Field(pattern="^(cash_in|cash_out)$")
+    currency_code: str = Field(min_length=1, max_length=8)
+    amount: Decimal = Field(gt=0, max_digits=18, decimal_places=4)
+    reason: str = Field(min_length=1, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+
+    @field_validator("currency_code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("A currency code is required")
+        return normalized
+
+    @field_validator("reason")
+    @classmethod
+    def normalize_reason(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("A reason is required")
+        return normalized
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def normalize_key(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) < 8:
+            raise ValueError("Idempotency key must contain at least 8 characters")
+        return normalized
+
+
 class ShiftCurrencyOut(BaseModel):
     currency_code: str
     currency_name: str
     symbol: str
     decimal_places: int
+    cash_accepted: bool
     opening_float: Decimal
     cash_sales: Decimal
     cash_refunds: Decimal
     cash_settlements: Decimal
     cash_expenses: Decimal
+    cash_in: Decimal
+    cash_out: Decimal
     cash_paid_out: Decimal
     expected_cash: Decimal
     counted_cash: Decimal | None
     variance: Decimal | None
+
+
+class CashMovementOut(BaseModel):
+    id: UUID
+    company_id: UUID
+    shift_id: UUID
+    branch_id: UUID
+    device_id: UUID
+    employee_id: UUID
+    actor_name: str | None = None
+    movement_type: str
+    currency_code: str
+    amount: Decimal
+    reason: str
+    idempotency_key: str
+    created_at: datetime
 
 
 class ShiftOut(BaseModel):
@@ -73,6 +130,7 @@ class ShiftOut(BaseModel):
     opening_note: str | None
     closing_note: str | None
     currencies: list[ShiftCurrencyOut]
+    cash_movements: list[CashMovementOut] = Field(default_factory=list)
     summary: dict
 
 

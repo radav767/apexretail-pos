@@ -78,7 +78,32 @@ class CashierShiftCurrencySnapshot(Base):
     cash_refunds: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     cash_settlements: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     cash_expenses: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    cash_in: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    cash_out: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     expected_cash: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     counted_cash: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     variance: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CashierShiftCashMovement(Base):
+    __tablename__ = "cashier_shift_cash_movements"
+    __table_args__ = (
+        CheckConstraint("movement_type IN ('cash_in','cash_out')", name="ck_shift_cash_movement_type"),
+        CheckConstraint("amount > 0", name="ck_shift_cash_movement_positive_amount"),
+        UniqueConstraint("company_id", "idempotency_key", name="uq_shift_cash_movement_idempotency"),
+        Index("ix_shift_cash_movements_shift_created", "shift_id", "created_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    shift_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("cashier_shifts.id", ondelete="RESTRICT"), nullable=False)
+    branch_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("branches.id", ondelete="RESTRICT"), nullable=False)
+    device_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="RESTRICT"), nullable=False)
+    employee_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False)
+    movement_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    currency_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -10,6 +10,7 @@ import {
 import { useKeyboardWedge } from "./barcode/useKeyboardWedge";
 import { KeyboardWedgeDetector } from "./barcode/keyboardWedge";
 import FinancialModules, { type FinancialModuleName } from "./FinancialModules";
+import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -31,6 +32,7 @@ export type PosModuleName =
   | "Products"
   | "Inventory"
   | FinancialModuleName
+  | "Shift Management"
   | "Reports"
   | "Settings";
 
@@ -187,6 +189,7 @@ type Props = {
   onOpenPrintSettings: () => Promise<void>;
   onTestPrint: (config: PrinterConfig) => Promise<void>;
   onReprintSale: (saleId: string, receiptNumber?: string) => Promise<void>;
+  onPrintShiftSummary: (shift: ShiftRecord) => Promise<void>;
   onProductsChanged?: () => void;
   onBackToSales: () => void;
 };
@@ -334,6 +337,7 @@ export default function PosModulePage({
   onOpenPrintSettings,
   onTestPrint,
   onReprintSale,
+  onPrintShiftSummary,
   onProductsChanged,
   onBackToSales,
 }: Props) {
@@ -810,6 +814,16 @@ export default function PosModulePage({
         onBackToSales={onBackToSales}
       />
     );
+  }
+
+  if (activeModule === "Shift Management") {
+    return <ShiftManagementPage
+      companyId={companyId}
+      branchId={branchId}
+      cashier={cashier}
+      onBackToSales={onBackToSales}
+      onPrintShiftSummary={onPrintShiftSummary}
+    />;
   }
 
   async function ensureOnline() {

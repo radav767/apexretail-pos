@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from app.auth.dependencies import AuthActor, get_auth_actor, require_path_permission
 from app.db.session import get_db
 from app.shifts.repository import ShiftRepository
-from app.shifts.schema import ShiftClose, ShiftFilterOptions, ShiftOpen, ShiftOut, ShiftPage
+from app.shifts.schema import CashMovementCreate, CashMovementOut, ShiftClose, ShiftFilterOptions, ShiftOpen, ShiftOut, ShiftPage
 from app.shifts.service import ShiftService
 
 
@@ -39,9 +39,31 @@ async def current_shift(service: ShiftService = Depends(get_service), actor: Aut
     return await service.current(actor)
 
 
+@router.get("/my-history", response_model=ShiftPage)
+async def my_shift_history(
+    page: int = Query(1, ge=1), page_size: int = Query(10, ge=1, le=100),
+    service: ShiftService = Depends(get_service), actor: AuthActor = Depends(get_auth_actor),
+):
+    items, total = await service.my_history(actor, page=page, page_size=page_size)
+    return {
+        "items": items, "page": page, "page_size": page_size,
+        "total": total, "total_pages": ceil(total / page_size) if total else 0,
+    }
+
+
+@router.get("/mine/{shift_id}", response_model=ShiftOut)
+async def my_shift_detail(shift_id: UUID, service: ShiftService = Depends(get_service), actor: AuthActor = Depends(get_auth_actor)):
+    return await service.my_detail(shift_id, actor)
+
+
 @router.post("/{shift_id}/close", response_model=ShiftOut)
 async def close_shift(shift_id: UUID, data: ShiftClose, service: ShiftService = Depends(get_service), actor: AuthActor = Depends(get_auth_actor)):
     return await service.close(shift_id, data, actor)
+
+
+@router.post("/{shift_id}/cash-movements", response_model=CashMovementOut)
+async def create_cash_movement(shift_id: UUID, data: CashMovementCreate, service: ShiftService = Depends(get_service), actor: AuthActor = Depends(get_auth_actor)):
+    return await service.create_cash_movement(shift_id, data, actor)
 
 
 @router.get("/company/{company_id}/filters", response_model=ShiftFilterOptions)

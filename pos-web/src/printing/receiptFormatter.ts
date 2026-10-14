@@ -80,8 +80,28 @@ function hasExplicitDiscountComponents(snapshot: ReceiptSnapshot): boolean {
     || snapshot.items.some((item) => item.line_discount_amount != null);
 }
 
+function buildShiftSummaryLines(snapshot: ReceiptSnapshot, width: number) {
+  const lines = [
+    snapshot.business_name || "ApexRetail POS",
+    ...(snapshot.shop_name ? [`Shop: ${snapshot.shop_name}`] : []),
+    ...(snapshot.branch_name ? [`Branch: ${snapshot.branch_name}`] : []),
+    ...(snapshot.pos_name ? [`Register: ${snapshot.pos_name}`] : []),
+    `Shift: ${snapshot.receipt_number}`,
+    `Printed: ${new Date(snapshot.created_at).toLocaleString()}`,
+    ...(snapshot.cashier_name ? [`Cashier: ${snapshot.cashier_name}`] : []),
+    "-".repeat(width),
+    ...(snapshot.shift_summary_lines || []).map((row) => alignLine(row.label, row.value, width)),
+    "-".repeat(width),
+    "SHIFT SUMMARY - NOT A SALES RECEIPT",
+  ];
+  return lines.map((line) => line.slice(0, width));
+}
+
 function buildEscPosLines(snapshot: ReceiptSnapshot, config: PrinterConfig) {
   const width = config.paperWidth === "58mm" ? 32 : 48;
+  if (snapshot.document_type === "shift_summary") {
+    return buildShiftSummaryLines(snapshot, width);
+  }
   const createdAt = new Date(snapshot.created_at).toLocaleString();
   const lines: string[] = [];
   const addressLines = [
@@ -257,6 +277,13 @@ export function encodeBase64(bytes: Uint8Array) {
 export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfig) {
   const paperWidth = config.paperWidth === "58mm" ? 224 : 302;
   const createdAt = new Date(snapshot.created_at).toLocaleString();
+
+  if (snapshot.document_type === "shift_summary") {
+    const rows = (snapshot.shift_summary_lines || []).map((row) => `
+      <div class="summary-row"><span>${escapeHtml(row.label)}</span><span>${escapeHtml(row.value)}</span></div>
+    `).join("");
+    return `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(snapshot.receipt_number)}</title><style>body{margin:0;padding:16px;font-family:"Courier New",monospace;color:#111}.receipt{width:${paperWidth}px;margin:0 auto}h1,h2,p{text-align:center;margin:0}.meta{margin-top:4px;font-size:12px}.summary{margin-top:14px;font-size:12px}.summary-row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed #aaa}.notice{margin-top:14px;text-align:center;font-weight:bold}@media print{body{padding:0}}</style></head><body><div class="receipt"><h1>${escapeHtml(snapshot.business_name || "ApexRetail POS")}</h1>${snapshot.shop_name ? `<p class="meta">Shop: ${escapeHtml(snapshot.shop_name)}</p>` : ""}${snapshot.branch_name ? `<p class="meta">Branch: ${escapeHtml(snapshot.branch_name)}</p>` : ""}${snapshot.pos_name ? `<p class="meta">Register: ${escapeHtml(snapshot.pos_name)}</p>` : ""}<p class="meta">Shift: ${escapeHtml(snapshot.receipt_number)}</p><p class="meta">Printed: ${escapeHtml(createdAt)}</p>${snapshot.cashier_name ? `<p class="meta">Cashier: ${escapeHtml(snapshot.cashier_name)}</p>` : ""}<div class="summary">${rows}</div><p class="notice">SHIFT SUMMARY - NOT A SALES RECEIPT</p></div></body></html>`;
+  }
 
   const itemRows = snapshot.items
     .map(

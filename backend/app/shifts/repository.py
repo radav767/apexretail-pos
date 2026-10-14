@@ -1,8 +1,8 @@
 from sqlalchemy import and_, func, select
 
 from app.models import (
-    Branch, CashierShift, CashierShiftCurrencySnapshot, CompanyCurrency,
-    CompanySetting, CreditSettlement, Device, Employee, Sale, Shop,
+    Branch, CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot,
+    CompanyCurrency, CompanySetting, CreditSettlement, Device, Employee, Sale, Shop,
 )
 
 
@@ -10,12 +10,14 @@ class ShiftRepository:
     def __init__(self, db):
         self.db = db
 
-    async def current(self, employee_id, device_id, *, for_update=False):
+    async def current(self, employee_id, device_id, *, company_id=None, for_update=False):
         query = select(CashierShift).where(
             CashierShift.employee_id == employee_id,
             CashierShift.device_id == device_id,
             CashierShift.status == "open",
         )
+        if company_id is not None:
+            query = query.where(CashierShift.company_id == company_id)
         if for_update:
             query = query.with_for_update()
         return (await self.db.execute(query)).scalar_one_or_none()
@@ -48,6 +50,41 @@ class ShiftRepository:
         if for_update:
             query = query.with_for_update()
         return list((await self.db.execute(query)).scalars())
+
+    async def cash_movement_by_key(self, company_id, key):
+        return (await self.db.execute(select(CashierShiftCashMovement).where(
+            CashierShiftCashMovement.company_id == company_id,
+            CashierShiftCashMovement.idempotency_key == key,
+        ))).scalar_one_or_none()
+
+    async def cash_movement_totals(self, shift_id, currency_code):
+        rows = (await self.db.execute(select(
+            CashierShiftCashMovement.movement_type,
+            func.coalesce(func.sum(CashierShiftCashMovement.amount), 0),
+        ).where(
+            CashierShiftCashMovement.shift_id == shift_id,
+            CashierShiftCashMovement.currency_code == currency_code,
+        ).group_by(CashierShiftCashMovement.movement_type))).all()
+        totals = {"cash_in": 0, "cash_out": 0}
+        for movement_type, amount in rows:
+            totals[movement_type] = amount
+        return totals
+
+    async def cash_movements(self, shift_id):
+        rows = (await self.db.execute(
+            select(CashierShiftCashMovement, Employee.name.label("actor_name"))
+            .outerjoin(Employee, and_(
+                Employee.id == CashierShiftCashMovement.employee_id,
+                Employee.company_id == CashierShiftCashMovement.company_id,
+            ))
+            .where(CashierShiftCashMovement.shift_id == shift_id)
+            .order_by(CashierShiftCashMovement.created_at.desc(), CashierShiftCashMovement.id.desc())
+        )).all()
+        return [
+            {column.name: getattr(movement, column.name) for column in movement.__table__.columns}
+            | {"actor_name": actor_name}
+            for movement, actor_name in rows
+        ]
 
     async def list(self, company_id, *, branch_id=None, employee_id=None, device_id=None, status=None, start_at=None, end_at=None, limit=25, offset=0):
         query = self.filtered_query(

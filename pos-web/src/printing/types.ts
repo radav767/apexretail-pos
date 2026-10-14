@@ -88,6 +88,8 @@ export type ReceiptSnapshot = {
   payment_method: string;
   status: string;
   items: ReceiptLineItem[];
+  document_type?: "shift_summary";
+  shift_summary_lines?: Array<{ label: string; value: string }>;
 };
 
 export type PrinterError = {
