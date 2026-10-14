@@ -183,6 +183,20 @@ class FinancialFoundationPostgresTest(unittest.IsolatedAsyncioTestCase):
             INSERT INTO company_settings (id,company_id,currency_code,currency_symbol,decimal_places,tax_name,tax_rate,tax_inclusive,paper_size,auto_print,payment_methods,active,deleted)
             VALUES (:id,:company,'USD','$',2,'Tax',0,false,'80mm',false,'["cash","card","mobile","credit"]'::jsonb,true,false)
         """), {"id": uuid4(), "company": COMPANY})
+        await connection.execute(text("""
+            INSERT INTO company_currencies
+                (id,company_id,code,display_name,symbol,decimal_places,active,is_base,
+                 cash_accepted,card_accepted,mobile_accepted,display_order)
+            VALUES
+                (:base,:company,'USD','US Dollar','$',2,true,true,true,true,true,0),
+                (:other_base,:other,'USD','US Dollar','$',2,true,true,true,true,true,0)
+        """), {"base": uuid4(), "other_base": uuid4(), "company": COMPANY, "other": OTHER_COMPANY})
+        await connection.execute(text("""
+            UPDATE company_settings settings
+            SET base_currency_id=currency.id
+            FROM company_currencies currency
+            WHERE currency.company_id=settings.company_id AND currency.is_base=true
+        """))
 
     async def create_customer(self, *, code="CUST", enabled=True, limit="100.00", unlimited=False, active=True):
         async with AsyncSession(self.engine, expire_on_commit=False) as session:

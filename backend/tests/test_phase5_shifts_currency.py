@@ -121,7 +121,7 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
         """, dict(company=COMPANY, other=OTHER_COMPANY, shop=SHOP, other_shop=OTHER_SHOP, branch=BRANCH, other_branch=OTHER_BRANCH, user=USER, employee=EMPLOYEE, other_employee=OTHER_EMPLOYEE, device=DEVICE, other_device=OTHER_DEVICE, session=POS_SESSION, other_session=OTHER_POS_SESSION))
         await self.execute_script(connection, """
             INSERT INTO company_settings (id,company_id,currency_code,currency_symbol,decimal_places,tax_name,tax_rate,tax_inclusive,paper_size,auto_print,payment_methods,multi_currency_enabled,shift_enforcement_enabled,active,deleted)
-            VALUES (:one,:company,'USD','$',2,'Tax',0,false,'80mm',false,'["cash","card","mobile","credit"]'::jsonb,true,true,true,false),
+            VALUES (:one,:company,'USD','$',2,'Tax',0,false,'80mm',false,'["cash","card","mobile","credit"]'::jsonb,true,false,true,false),
                    (:two,:other,'USD','$',2,'Tax',0,false,'80mm',false,'["cash"]'::jsonb,false,false,true,false);
             INSERT INTO categories (id,company_id,name,active,deleted) VALUES (:category,:company,'Goods',true,false);
             INSERT INTO products (id,company_id,category_id,name,sku,unit,cost_price,selling_price,stock_qty,reorder_level,active,deleted)
@@ -465,7 +465,7 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             cutoff = datetime.now(timezone.utc).replace(microsecond=0)
             await session.execute(text(
-                "UPDATE company_settings SET shift_required_from=:cutoff WHERE company_id=:company"
+                "UPDATE company_settings SET shift_enforcement_enabled=true, shift_required_from=:cutoff WHERE company_id=:company"
             ), {"cutoff": cutoff, "company": COMPANY})
             self.assertIsNone(await resolve_shift_for_write(
                 session, None, COMPANY, BRANCH, occurred_at=cutoff.replace(year=cutoff.year - 1),
@@ -477,7 +477,11 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             )
             with self.assertRaisesRegex(HTTPException, "opaque POS session"):
                 await resolve_shift_for_write(
-                    session, jwt_fallback, COMPANY, BRANCH, occurred_at=cutoff,
+                    session, jwt_fallback, COMPANY, BRANCH,
+                )
+            with self.assertRaisesRegex(HTTPException, "verified shift snapshot"):
+                await resolve_shift_for_write(
+                    session, self.actor, COMPANY, BRANCH, occurred_at=cutoff,
                 )
             legacy = Sale(
                 id=uuid4(), company_id=COMPANY, receipt_number=f"LEG-{uuid4().hex[:8]}",
@@ -602,7 +606,9 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             options = await service.filter_options(COMPANY, owner)
             self.assertEqual({row["id"] for row in options["devices"]}, {DEVICE})
             detail = await service.detail(COMPANY, closed["id"], owner)
-            self.assertEqual(detail["currencies"][0]["expected_cash"], Decimal("19.0000"))
+            self.assertEqual(detail["currencies"][0]["expected_cash"], Decimal("20.0000"))
+            self.assertEqual(detail["currencies"][0]["counted_cash"], Decimal("19.0000"))
+            self.assertEqual(detail["currencies"][0]["variance"], Decimal("-1.0000"))
 
             cashier_items, cashier_total = await service.history(
                 COMPANY, self.actor, limit=25, offset=0,
