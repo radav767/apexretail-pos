@@ -65,6 +65,7 @@ export type ReceiptSnapshot = {
   receipt_header?: string | null;
   receipt_footer?: string | null;
   created_at: string;
+  shift_id?: string | null;
   is_duplicate?: boolean;
   original_receipt_number?: string;
   original_sale_time?: string;

@@ -1,6 +1,5 @@
 from app.business_settings.service import BusinessSettingsService
 import uuid
-from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -40,14 +39,16 @@ class SalesService:
             return await CurrencyService(CurrencyRepository(self.repo.db)).resolve_from_base(
                 company_id, payment_method, currency_code, amount, at=at,
             )
-        # Lightweight service-unit repositories predate currency persistence.
-        # They exercise sale arithmetic only and therefore use deterministic
-        # base-currency semantics; foreign currency still requires a real DB.
-        code = (currency_code or "USD").strip().upper()
-        if code != "USD":
-            raise HTTPException(409, "Foreign currency validation requires configured company currencies")
-        value = Decimal(amount).quantize(Decimal("0.01"))
-        currency = SimpleNamespace(code="USD", decimal_places=2, is_base=True)
+        # Test and adapter repositories must name their base currency explicitly;
+        # never infer an accounting currency when no authoritative DB is present.
+        currency = getattr(self.repo, "base_currency", None)
+        if currency is None or not getattr(currency, "code", None):
+            raise HTTPException(409, "Company base currency configuration is required")
+        code = str(currency.code).strip().upper()
+        if currency_code and str(currency_code).strip().upper() != code:
+            raise HTTPException(409, "Currency validation requires configured company currencies")
+        decimal_places = int(getattr(currency, "decimal_places", 2))
+        value = quantize_currency(Decimal(amount), decimal_places)
         return {
             "base_currency": currency, "currency": currency,
             "exchange_rate_id": None, "exchange_rate_snapshot": Decimal("1"),
@@ -119,8 +120,11 @@ class SalesService:
         shift = await resolve_shift_for_write(
             self.repo.db, actor, data.company_id, branch.id, data.shift_id,
             occurred_at=data.client_created_at,
+            attach_active=True,
         )
         if shift is not None:
+            if data.device_id is not None and data.device_id != shift.device_id:
+                raise HTTPException(403, "POS device does not match the active shift register")
             data.device_id = shift.device_id
             data.employee_id = shift.employee_id
 
@@ -772,6 +776,7 @@ class SalesService:
             data.company_id,
             getattr(branch, "id", data.branch_id or original_sale.branch_id),
             data.shift_id,
+            attach_active=True,
         )
         refund_id = uuid.uuid4()
         receipt_number = (

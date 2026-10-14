@@ -796,6 +796,7 @@ class DeviceServicePhase1Test(unittest.IsolatedAsyncioTestCase):
 class FakeSalesRepo:
     def __init__(self, blocked_at=None):
         self.db = None
+        self.base_currency = SimpleNamespace(code="EUR", decimal_places=2, is_base=True)
         self.blocked_at = blocked_at
         self.saved_sale = None
         self.saved_sales = []

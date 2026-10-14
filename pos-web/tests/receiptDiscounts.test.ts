@@ -23,6 +23,7 @@ const base: ReceiptSnapshot = {
   amount_received: "7.00",
   change_due: "0.00",
   payment_method: "cash",
+  shift_id: "phase3-test-shift",
   status: "completed",
   items: [{
     name: "Coffee",
@@ -49,6 +50,7 @@ for (const rendered of [
   assert.match(rendered, /Items before discounts/);
   assert.match(rendered, /10\.00/);
   assert.match(rendered, /7\.00/);
+  assert.match(rendered, /Shift: phase3-test-shift/);
 }
 
 const lineOnly = { ...base, total_amount: "8.00", discount_amount: "2.00", sale_discount_amount: "0.00" };

@@ -25,6 +25,7 @@ UTC = timezone.utc
 class FakeSalesRepo:
     def __init__(self):
         self.db = object()
+        self.base_currency = SimpleNamespace(code="EUR", decimal_places=2, is_base=True)
         self.product = SimpleNamespace(
             id=uuid4(),
             name="Beef",
@@ -109,6 +110,9 @@ class WeightedSalesTest(unittest.IsolatedAsyncioTestCase):
             sale = await service.create_sale(payload, actor=None)
 
         self.assertEqual(sale.total_amount, Decimal("1.00"))
+        self.assertEqual(sale.base_currency_code, "EUR")
+        self.assertEqual(sale.payment_currency_code, "EUR")
+        self.assertEqual(sale.exchange_rate_snapshot, Decimal("1"))
         self.assertEqual(repo.balance.quantity, Decimal("0.750"))
         saved_item = repo.saved["items"][0]
         self.assertEqual(saved_item.quantity, Decimal("0.250"))

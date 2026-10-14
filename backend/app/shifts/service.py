@@ -173,7 +173,11 @@ class ShiftService:
             Sale.shift_id == shift_id, Sale.payment_currency_code == code,
             Sale.payment_method == "cash",
         ))).scalars())
-        cash_sales = sum((Decimal(row.payment_amount_original or row.total_amount or 0) for row in sales if Decimal(row.total_amount or 0) >= 0), Decimal("0"))
+        cash_sales = sum((
+            Decimal(row.tendered_amount_original or row.payment_amount_original or row.total_amount or 0)
+            - Decimal(row.change_amount_original or 0)
+            for row in sales if Decimal(row.total_amount or 0) >= 0
+        ), Decimal("0"))
         cash_refunds = sum((abs(Decimal(row.payment_amount_original or row.total_amount or 0)) for row in sales if Decimal(row.total_amount or 0) < 0), Decimal("0"))
         settlements = (await db.execute(select(func.coalesce(func.sum(CreditSettlement.original_amount), 0)).where(
             CreditSettlement.shift_id == shift_id, CreditSettlement.payment_currency_code == code,

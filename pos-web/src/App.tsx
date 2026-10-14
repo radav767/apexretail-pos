@@ -113,6 +113,7 @@ type CartItem = Product & {
 type Receipt = {
   id: string;
   receipt_number: string;
+  shift_id?: string | null;
   shop_id?: string | null;
   shop_name_snapshot?: string | null;
   shop_address_snapshot?: {
@@ -959,6 +960,7 @@ const [loggedIn, setLoggedIn] = useState(
         businessSettings?.receipt_footer ||
         null,
       created_at: sale.created_at,
+      shift_id: sale.shift_id || null,
       cashier_name: cashierName || cashier?.name || null,
       customer_name: sale.customer_name_snapshot || null,
       customer_code: sale.customer_code_snapshot || null,
@@ -2325,7 +2327,13 @@ const [loggedIn, setLoggedIn] = useState(
         return;
       }
 
-      await queueOfflineSale(payload);
+      // This timestamp marks an offline-originated sale so the backend
+      // preserves it as a legacy/unassigned shift transaction on sync.
+      const queuedPayload = {
+        ...payload,
+        client_created_at: new Date().toISOString(),
+      };
+      await queueOfflineSale(queuedPayload);
 
       const rate =
         Math.max(0, configuredTaxRate);

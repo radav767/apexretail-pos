@@ -24,7 +24,7 @@ from app.expenses.repository import ExpenseRepository
 from app.expenses.schema import ExpenseCreate
 from app.expenses.service import ExpenseService
 from app.financial_context import resolve_shift_for_write
-from app.models import CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot, CreditReceivable, CurrencyExchangeRate, Expense, Sale
+from app.models import CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot, CreditReceivable, CurrencyExchangeRate, Expense, InventoryBalance, Sale
 from app.sales.repository import SalesRepository
 from app.sales.schema import SaleCreate, SaleItemCreate
 from app.sales.service import SalesService
@@ -362,27 +362,31 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
         shift = await self.open_shift()
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             sale = await SalesService(SalesRepository(session)).create_sale(SaleCreate(
-                company_id=COMPANY, branch_id=BRANCH, shift_id=shift["id"], payment_method="cash",
+                company_id=COMPANY, branch_id=BRANCH, payment_method="cash",
                 payment_currency_code="ZAR", tendered_amount_original="200.00",
                 items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
             ), actor=self.actor)
+            self.assertEqual(sale.shift_id, shift["id"])
+            self.assertEqual(sale.device_id, DEVICE)
             self.assertEqual(sale.total_amount, Decimal("10.00"))
             self.assertEqual(sale.payment_amount_original, Decimal("185.0000"))
             self.assertEqual(sale.change_amount_original, Decimal("15.0000"))
             self.assertEqual(sale.exchange_rate_snapshot, Decimal("18.5000000000"))
             for method in ("card", "mobile"):
                 converted = await SalesService(SalesRepository(session)).create_sale(SaleCreate(
-                    company_id=COMPANY, branch_id=BRANCH, shift_id=shift["id"], payment_method=method,
+                    company_id=COMPANY, branch_id=BRANCH, payment_method=method,
                     payment_currency_code="ZAR",
                     items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
                 ), actor=self.actor)
+                self.assertEqual(converted.shift_id, shift["id"])
                 self.assertEqual(converted.total_amount, Decimal("10.00"))
                 self.assertEqual(converted.payment_amount_original, Decimal("185.0000"))
                 self.assertEqual(converted.payment_currency_code, "ZAR")
             credit_sale = await SalesService(SalesRepository(session)).create_sale(SaleCreate(
-                company_id=COMPANY, branch_id=BRANCH, shift_id=shift["id"], customer_id=CUSTOMER,
+                company_id=COMPANY, branch_id=BRANCH, customer_id=CUSTOMER,
                 payment_method="credit", items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
             ), actor=self.actor)
+            self.assertEqual(credit_sale.shift_id, shift["id"])
             receivable = (await session.execute(select(CreditReceivable).where(CreditReceivable.sale_id == credit_sale.id))).scalar_one()
             settlement = await CreditService(CreditRepository(session)).create_settlement(SettlementCreate(
                 company_id=COMPANY, receivable_id=receivable.id, branch_id=BRANCH, shift_id=shift["id"],
@@ -452,6 +456,54 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(legacy.shift_id)
             self.assertIsNone(legacy.exchange_rate_snapshot)
             self.assertIsNone(legacy.payment_currency_code)
+
+    async def test_offline_sales_remain_unassigned_while_online_sales_auto_attach(self):
+        shift = await self.open_shift()
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            offline_payload = SaleCreate(
+                company_id=COMPANY, branch_id=BRANCH, client_sale_id=uuid4(),
+                client_created_at=datetime.now(timezone.utc), payment_method="cash",
+                amount_received="10", items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
+            )
+            offline_sale = await SalesService(SalesRepository(session)).create_sale(offline_payload, actor=self.actor)
+            self.assertIsNone(offline_sale.shift_id)
+            offline_balance = (await session.execute(select(InventoryBalance).where(
+                InventoryBalance.company_id == COMPANY, InventoryBalance.product_id == PRODUCT,
+                InventoryBalance.branch_id == BRANCH,
+            ))).scalar_one()
+            after_first_sync = Decimal(offline_balance.quantity)
+            replay = await SalesService(SalesRepository(session)).create_sale(offline_payload, actor=self.actor)
+            self.assertEqual(replay.id, offline_sale.id)
+            self.assertEqual(Decimal(offline_balance.quantity), after_first_sync)
+
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            online_sale = await SalesService(SalesRepository(session)).create_sale(SaleCreate(
+                company_id=COMPANY, branch_id=BRANCH, payment_method="card",
+                items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
+            ), actor=self.actor)
+            self.assertEqual(online_sale.shift_id, shift["id"])
+            self.assertEqual(online_sale.base_currency_code, "USD")
+            self.assertEqual(online_sale.exchange_rate_snapshot, Decimal("1"))
+
+    async def test_online_sale_without_an_open_shift_remains_allowed(self):
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            sale = await SalesService(SalesRepository(session)).create_sale(SaleCreate(
+                company_id=COMPANY, branch_id=BRANCH, payment_method="card",
+                items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
+            ), actor=self.actor)
+            self.assertIsNone(sale.shift_id)
+            self.assertEqual(sale.base_currency_code, "USD")
+            self.assertEqual(sale.exchange_rate_snapshot, Decimal("1"))
+
+    async def test_online_sale_rejects_client_device_that_differs_from_active_shift(self):
+        await self.open_shift()
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            with self.assertRaisesRegex(HTTPException, "does not match"):
+                await SalesService(SalesRepository(session)).create_sale(SaleCreate(
+                    company_id=COMPANY, branch_id=BRANCH, device_id=OTHER_DEVICE,
+                    payment_method="cash", amount_received="10",
+                    items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
+                ), actor=self.actor)
 
     async def test_shift_report_filters_tenant_names_and_currency_variance(self):
         async with AsyncSession(self.engine, expire_on_commit=False) as session:

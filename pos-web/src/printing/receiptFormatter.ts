@@ -147,6 +147,9 @@ function buildEscPosLines(snapshot: ReceiptSnapshot, config: PrinterConfig) {
 
   lines.push(`Receipt: ${snapshot.receipt_number}`);
   lines.push(`Date: ${createdAt}`);
+  if (snapshot.shift_id) {
+    lines.push(`Shift: ${snapshot.shift_id}`);
+  }
   if (snapshot.is_duplicate) {
     lines.push("*** DUPLICATE ***");
     lines.push(`Original receipt: ${snapshot.original_receipt_number || snapshot.receipt_number}`);
@@ -423,6 +426,7 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
           ${snapshot.receipt_header ? `<p class="meta">${escapeHtml(snapshot.receipt_header)}</p>` : ""}
           <p class="meta">Receipt: ${escapeHtml(snapshot.receipt_number)}</p>
           <p class="meta">${escapeHtml(createdAt)}</p>
+          ${snapshot.shift_id ? `<p class="meta">Shift: ${escapeHtml(snapshot.shift_id)}</p>` : ""}
           ${snapshot.is_duplicate ? `<h2 style="font-size:24px;margin:10px 0">DUPLICATE</h2><p class="meta">Original receipt: ${escapeHtml(snapshot.original_receipt_number || snapshot.receipt_number)}</p><p class="meta">Original sale time: ${escapeHtml(new Date(snapshot.original_sale_time || snapshot.created_at).toLocaleString())}</p><p class="meta">Reprint date/time: ${escapeHtml(new Date(snapshot.reprint_at || Date.now()).toLocaleString())}</p><p class="meta">Reprint count: ${snapshot.reprint_count || 1}</p>` : ""}
           ${snapshot.cashier_name ? `<p class="meta">Cashier: ${escapeHtml(snapshot.cashier_name)}</p>` : ""}
           ${snapshot.payment_method.toLowerCase() === "credit" && (snapshot.customer_name || snapshot.customer_code) ? `<p class="meta">Customer: ${escapeHtml([snapshot.customer_name, snapshot.customer_code].filter(Boolean).join(" / "))}</p>` : ""}

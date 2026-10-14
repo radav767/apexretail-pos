@@ -16,6 +16,7 @@ const RECEIPT_ARCHIVE_STORAGE_KEY = "apexretail_receipt_archive_v1";
 
 export type OfflineSalePayload = {
   client_sale_id: string;
+  client_created_at?: string;
   company_id: string;
   branch_id?: string | null;
   employee_id?: string | null;
