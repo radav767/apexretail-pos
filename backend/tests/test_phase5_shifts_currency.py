@@ -344,6 +344,12 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             )
             with self.assertRaisesRegex(HTTPException, "branch mismatch"):
                 await resolve_shift_for_write(session, wrong_branch_session, COMPANY, BRANCH, shift["id"])
+            wrong_cashier_session = self.make_actor(
+                EMPLOYEE, DEVICE, POS_SESSION, COMPANY, SHOP, BRANCH,
+            )
+            wrong_cashier_session.pos_session.employee_id = OTHER_EMPLOYEE
+            with self.assertRaisesRegex(HTTPException, "cashier mismatch"):
+                await resolve_shift_for_write(session, wrong_cashier_session, COMPANY, BRANCH, shift["id"])
         async with AsyncSession(self.engine) as session:
             wrong_identity = self.make_actor(
                 OTHER_EMPLOYEE, OTHER_DEVICE, OTHER_POS_SESSION,
@@ -389,11 +395,26 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(credit_sale.shift_id, shift["id"])
             receivable = (await session.execute(select(CreditReceivable).where(CreditReceivable.sale_id == credit_sale.id))).scalar_one()
             settlement = await CreditService(CreditRepository(session)).create_settlement(SettlementCreate(
-                company_id=COMPANY, receivable_id=receivable.id, branch_id=BRANCH, shift_id=shift["id"],
-                original_amount="92.50", payment_currency_code="ZAR", payment_method="cash", idempotency_key="phase5-settle-001",
+                company_id=COMPANY, receivable_id=receivable.id, branch_id=BRANCH,
+                original_amount="92.50", tendered_amount_original="100.00",
+                payment_currency_code="ZAR", payment_method="cash", idempotency_key="phase5-settle-001",
             ), self.actor)
             self.assertEqual(settlement["amount"], Decimal("5.00"))
             self.assertEqual(settlement["original_amount"], Decimal("92.5000"))
+            self.assertEqual(settlement["shift_id"], shift["id"])
+            self.assertEqual(settlement["device_id"], DEVICE)
+            self.assertEqual(settlement["cashier_employee_id"], EMPLOYEE)
+            self.assertEqual(settlement["tendered_amount_original"], Decimal("100.0000"))
+            self.assertEqual(settlement["change_amount_original"], Decimal("7.5000"))
+            for method, currency_code, original in (("card", "USD", "1.00"), ("mobile", "ZAR", "18.50")):
+                other_settlement = await CreditService(CreditRepository(session)).create_settlement(SettlementCreate(
+                    company_id=COMPANY, receivable_id=receivable.id, branch_id=BRANCH,
+                    original_amount=original, payment_currency_code=currency_code,
+                    payment_method=method, idempotency_key=f"phase5-settle-{method}-001",
+                ), self.actor)
+                self.assertEqual(other_settlement["shift_id"], shift["id"])
+                self.assertEqual(other_settlement["amount"], Decimal("1.00"))
+                self.assertEqual(other_settlement["change_amount_original"], Decimal("0.00"))
             with self.assertRaisesRegex(HTTPException, "exceeds"):
                 await CreditService(CreditRepository(session)).create_settlement(SettlementCreate(
                     company_id=COMPANY, receivable_id=receivable.id, branch_id=BRANCH, shift_id=shift["id"],
@@ -401,12 +422,23 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
                 ), self.actor)
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             expense = await ExpenseService(ExpenseRepository(session)).create_expense(ExpenseCreate(
-                company_id=COMPANY, category_id=EXPENSE_CATEGORY, branch_id=BRANCH, shift_id=shift["id"],
+                company_id=COMPANY, category_id=EXPENSE_CATEGORY, branch_id=BRANCH,
                 original_amount="37.00", currency_code="ZAR", occurred_at=datetime.now(timezone.utc),
                 payment_method="cash", description="Foreign cash expense", idempotency_key="phase5-expense-001",
             ), self.actor)
             self.assertEqual(expense.amount, Decimal("2.00"))
             self.assertEqual(expense.original_amount, Decimal("37.0000"))
+            self.assertEqual(expense.shift_id, shift["id"])
+            self.assertEqual(expense.device_id, DEVICE)
+            self.assertEqual(expense.employee_id, EMPLOYEE)
+            for method in ("card", "mobile"):
+                noncash_expense = await ExpenseService(ExpenseRepository(session)).create_expense(ExpenseCreate(
+                    company_id=COMPANY, category_id=EXPENSE_CATEGORY, branch_id=BRANCH,
+                    original_amount="18.50", currency_code="ZAR", occurred_at=datetime.now(timezone.utc),
+                    payment_method=method, description=f"{method} foreign expense", idempotency_key=f"phase5-expense-{method}-001",
+                ), self.actor)
+                self.assertEqual(noncash_expense.amount, Decimal("1.00"))
+                self.assertEqual(noncash_expense.shift_id, shift["id"])
         async with AsyncSession(self.engine, expire_on_commit=False) as session:
             closed = await ShiftService(ShiftRepository(session)).close(shift["id"], ShiftClose(
                 counted_balances=[ShiftClosingCount(currency_code="USD", amount="20"), ShiftClosingCount(currency_code="ZAR", amount="740.50")],
@@ -419,6 +451,8 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(closed["summary"]["card_sales_base"], Decimal("10.00"))
             self.assertEqual(closed["summary"]["mobile_sales_base"], Decimal("10.00"))
             self.assertEqual(closed["summary"]["credit_sales_base"], Decimal("10.00"))
+            self.assertEqual(closed["summary"]["cash_expenses_base"], Decimal("2.00"))
+            self.assertEqual(closed["summary"]["noncash_expenses_base"], Decimal("2.00"))
             with self.assertRaises(Exception):
                 await session.execute(text("UPDATE cashier_shifts SET closing_note='changed' WHERE id=:id"), {"id": shift["id"]})
         async with AsyncSession(self.engine) as session:

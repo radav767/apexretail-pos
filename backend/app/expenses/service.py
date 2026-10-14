@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -14,6 +15,15 @@ from app.financial_context import resolve_shift_for_write
 class ExpenseService:
     def __init__(self, repo: ExpenseRepository):
         self.repo = repo
+
+    @staticmethod
+    def validate_currency_quote(data, snapshot, current_version):
+        if data.currency_config_version is not None and current_version is not None and current_version != data.currency_config_version:
+            raise HTTPException(409, "Payment currency configuration changed. Refresh the expense quote and try again.")
+        if data.exchange_rate_id is not None and data.exchange_rate_id != snapshot["exchange_rate_id"]:
+            raise HTTPException(409, "Exchange rate changed. Refresh the expense quote and try again.")
+        if data.exchange_rate_snapshot is not None and Decimal(data.exchange_rate_snapshot) != Decimal(snapshot["exchange_rate_snapshot"]):
+            raise HTTPException(409, "Exchange rate snapshot changed. Refresh the expense quote and try again.")
 
     async def attach_actor(self, expense):
         actor_id, actor_name = await self.repo.actor_identity(
@@ -75,6 +85,7 @@ class ExpenseService:
                 or (data.amount is not None and existing.amount != data.amount)
                 or (data.original_amount is not None and existing.original_amount != data.original_amount)
                 or (data.currency_code is not None and existing.currency_code != data.currency_code.strip().upper())
+                or (data.exchange_rate_id is not None and existing.exchange_rate_id != data.exchange_rate_id)
                 or (data.shift_id is not None and existing.shift_id != data.shift_id)
                 or existing.payment_method != data.payment_method
             ):
@@ -90,15 +101,21 @@ class ExpenseService:
             raise HTTPException(400, "occurred_at must include a timezone")
         shift = await resolve_shift_for_write(
             self.repo.db, actor, data.company_id, branch.id, data.shift_id,
-            occurred_at=data.occurred_at,
+            attach_active=True,
         )
         original_input = data.original_amount if data.original_amount is not None else data.amount
         if original_input is None:
             raise HTTPException(400, "Expense amount is required")
-        snapshot = await CurrencyService(CurrencyRepository(self.repo.db)).resolve_snapshot(
+        currency_repository = CurrencyRepository(self.repo.db)
+        settings = await currency_repository.settings(data.company_id, for_update=True)
+        current_version = int(getattr(settings, "currency_config_version", 0) or 0) if settings is not None else None
+        snapshot = await CurrencyService(currency_repository).resolve_snapshot(
             data.company_id, data.payment_method, data.currency_code,
-            original_input, at=data.occurred_at,
+            original_input, at=datetime.now(timezone.utc),
         )
+        self.validate_currency_quote(data, snapshot, current_version)
+        if Decimal(original_input) != Decimal(snapshot["original_amount"]):
+            raise HTTPException(400, "Expense amount exceeds the selected currency precision")
         base_amount = Decimal(snapshot["base_amount"]).quantize(Decimal("0.01"))
         if data.amount is not None and data.original_amount is not None and Decimal(data.amount).quantize(Decimal("0.01")) != base_amount:
             raise HTTPException(409, "Expense base amount does not match the authoritative currency conversion")

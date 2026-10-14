@@ -41,7 +41,7 @@ class FinancialContextTest(unittest.IsolatedAsyncioTestCase):
             status="open",
         )
         self.session = SimpleNamespace(
-            company_id=self.company_id, branch_id=self.branch_id,
+            company_id=self.company_id, branch_id=self.branch_id, employee_id=self.employee_id,
             shop_id=self.shift.shop_id, device_id=self.device_id,
         )
         self.actor = SimpleNamespace(
@@ -87,6 +87,14 @@ class FinancialContextTest(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(HTTPException, "company or branch mismatch"):
             await resolve_shift_for_write(
                 db, self.actor, self.company_id, uuid4(), attach_active=True,
+            )
+
+    async def test_pos_session_cashier_mismatch_is_rejected(self):
+        db = _Database(self.settings, self.shift)
+        self.session.employee_id = uuid4()
+        with self.assertRaisesRegex(HTTPException, "cashier mismatch"):
+            await resolve_shift_for_write(
+                db, self.actor, self.company_id, self.branch_id, attach_active=True,
             )
 
     async def test_explicit_shift_requires_opaque_pos_session(self):

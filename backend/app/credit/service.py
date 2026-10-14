@@ -26,6 +26,15 @@ class CreditService:
         return values
 
     @staticmethod
+    def validate_currency_quote(data, snapshot, current_version):
+        if data.currency_config_version is not None and current_version is not None and current_version != data.currency_config_version:
+            raise HTTPException(409, "Payment currency configuration changed. Refresh the settlement quote and try again.")
+        if data.exchange_rate_id is not None and data.exchange_rate_id != snapshot["exchange_rate_id"]:
+            raise HTTPException(409, "Exchange rate changed. Refresh the settlement quote and try again.")
+        if data.exchange_rate_snapshot is not None and Decimal(data.exchange_rate_snapshot) != Decimal(snapshot["exchange_rate_snapshot"]):
+            raise HTTPException(409, "Exchange rate snapshot changed. Refresh the settlement quote and try again.")
+
+    @staticmethod
     def ensure_same_request(existing, data):
         requested_amount = data.amount
         if (
@@ -33,7 +42,9 @@ class CreditService:
             or existing.branch_id != data.branch_id
             or (requested_amount is not None and Decimal(existing.amount) != Decimal(requested_amount))
             or (data.original_amount is not None and Decimal(existing.original_amount or 0) != Decimal(data.original_amount))
+            or (data.tendered_amount_original is not None and Decimal(existing.tendered_amount_original or existing.original_amount or 0) != Decimal(data.tendered_amount_original))
             or (data.payment_currency_code is not None and existing.payment_currency_code != data.payment_currency_code.strip().upper())
+            or (data.exchange_rate_id is not None and existing.exchange_rate_id != data.exchange_rate_id)
             or (data.shift_id is not None and existing.shift_id != data.shift_id)
             or existing.payment_method != data.payment_method
         ):
@@ -76,7 +87,7 @@ class CreditService:
             raise HTTPException(404, "Branch not found")
         shift = await resolve_shift_for_write(
             self.repo.db, actor, data.company_id, branch.id, data.shift_id,
-            occurred_at=data.received_at,
+            attach_active=True,
         )
         receivable = await self.repo.get_receivable(data.company_id, data.receivable_id, for_update=True)
         if not receivable:
@@ -88,11 +99,14 @@ class CreditService:
             actor_id, actor_name = await self.repo.actor_identity(data.company_id, existing.cashier_employee_id, existing.actor_user_id)
             return self.settlement_view(existing, receivable.outstanding_balance, actor_id, actor_name)
         outstanding = Decimal(receivable.outstanding_balance)
-        currency_service = CurrencyService(CurrencyRepository(self.repo.db))
+        currency_repository = CurrencyRepository(self.repo.db)
+        currency_service = CurrencyService(currency_repository)
+        settings = await currency_repository.settings(data.company_id, for_update=True)
+        current_version = int(getattr(settings, "currency_config_version", 0) or 0) if settings is not None else None
         if data.settle_full:
             snapshot = await currency_service.resolve_from_base(
                 data.company_id, data.payment_method, data.payment_currency_code,
-                outstanding, at=data.received_at or datetime.now(timezone.utc),
+                outstanding, at=datetime.now(timezone.utc),
             )
             amount = outstanding
         else:
@@ -101,15 +115,35 @@ class CreditService:
                 raise HTTPException(400, "Settlement amount is required")
             snapshot = await currency_service.resolve_snapshot(
                 data.company_id, data.payment_method, data.payment_currency_code,
-                original_input, at=data.received_at or datetime.now(timezone.utc),
+                original_input, at=datetime.now(timezone.utc),
             )
             amount = Decimal(snapshot["base_amount"]).quantize(Decimal("0.01"))
             if data.amount is not None and data.original_amount is not None and Decimal(data.amount).quantize(Decimal("0.01")) != amount:
                 raise HTTPException(409, "Settlement base amount does not match the authoritative currency conversion")
+        self.validate_currency_quote(data, snapshot, current_version)
         if amount <= 0:
             raise HTTPException(400, "Settlement amount must be greater than zero")
         if amount > outstanding:
             raise HTTPException(409, "Settlement exceeds the outstanding balance")
+
+        payment_places = int(snapshot["currency"].decimal_places)
+        payment_quantum = Decimal(1).scaleb(-payment_places)
+        applied_original = Decimal(snapshot["original_amount"]).quantize(payment_quantum)
+        if not data.settle_full and Decimal(data.original_amount if data.original_amount is not None else data.amount) != applied_original:
+            raise HTTPException(400, "Settlement amount exceeds the selected currency precision")
+        if data.payment_method == "cash":
+            raw_tendered = Decimal(data.tendered_amount_original or applied_original)
+            tendered_original = raw_tendered.quantize(payment_quantum)
+            if raw_tendered != tendered_original:
+                raise HTTPException(400, "Tendered amount exceeds the selected currency precision")
+            if tendered_original < applied_original:
+                raise HTTPException(400, "Tendered amount is less than the settlement amount")
+            change_original = (tendered_original - applied_original).quantize(payment_quantum)
+        else:
+            if data.tendered_amount_original is not None and Decimal(data.tendered_amount_original).quantize(payment_quantum) != applied_original:
+                raise HTTPException(400, "Tendered amount must equal the settlement amount for non-cash payments")
+            tendered_original = applied_original
+            change_original = Decimal("0").quantize(payment_quantum)
 
         new_outstanding = (outstanding - amount).quantize(Decimal("0.01"))
         receivable.amount_settled = (Decimal(receivable.amount_settled) + amount).quantize(Decimal("0.01"))
@@ -131,6 +165,8 @@ class CreditService:
             exchange_rate_id=snapshot["exchange_rate_id"],
             exchange_rate_snapshot=snapshot["exchange_rate_snapshot"],
             original_amount=snapshot["original_amount"],
+            tendered_amount_original=tendered_original,
+            change_amount_original=change_original,
             amount=amount, payment_method=data.payment_method,
             reference=(data.reference or "").strip() or None, note=(data.note or "").strip() or None,
             received_at=received_at,
@@ -141,7 +177,7 @@ class CreditService:
             company_id=data.company_id, actor_user_id=settlement.actor_user_id,
             actor_employee_id=settlement.cashier_employee_id, action="credit_settlement_posted",
             device_id=settlement.device_id,
-            details={"settlement_id": str(settlement.id), "receivable_id": str(receivable.id), "amount": str(amount), "original_amount": str(settlement.original_amount), "currency": settlement.payment_currency_code, "rate": str(settlement.exchange_rate_snapshot), "payment_method": data.payment_method, "shift_id": str(settlement.shift_id) if settlement.shift_id else None},
+            details={"settlement_id": str(settlement.id), "receivable_id": str(receivable.id), "amount": str(amount), "original_amount": str(settlement.original_amount), "tendered_amount_original": str(settlement.tendered_amount_original), "change_amount_original": str(settlement.change_amount_original), "currency": settlement.payment_currency_code, "rate": str(settlement.exchange_rate_snapshot), "payment_method": data.payment_method, "shift_id": str(settlement.shift_id) if settlement.shift_id else None},
         )
         saved = await self.repo.save_settlement(receivable, settlement, audit)
         actor_id, actor_name = await self.repo.actor_identity(data.company_id, saved.cashier_employee_id, saved.actor_user_id)

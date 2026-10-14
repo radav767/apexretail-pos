@@ -15,6 +15,13 @@ class CreditSettlement(Base):
         UniqueConstraint("company_id", "idempotency_key", name="uq_credit_settlements_company_idempotency"),
         CheckConstraint("amount > 0", name="ck_credit_settlements_amount_positive"),
         CheckConstraint("payment_method IN ('cash','card','mobile')", name="ck_credit_settlements_method"),
+        CheckConstraint(
+            "(tendered_amount_original IS NULL AND change_amount_original IS NULL) OR "
+            "(tendered_amount_original IS NOT NULL AND change_amount_original IS NOT NULL "
+            "AND original_amount IS NOT NULL AND tendered_amount_original >= original_amount "
+            "AND tendered_amount_original - original_amount = change_amount_original)",
+            name="ck_credit_settlements_tender_change_consistent",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -32,6 +39,8 @@ class CreditSettlement(Base):
     exchange_rate_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("currency_exchange_rates.id", ondelete="RESTRICT"), nullable=True)
     exchange_rate_snapshot: Mapped[Decimal | None] = mapped_column(Numeric(20, 10), nullable=True)
     original_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    tendered_amount_original: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    change_amount_original: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     payment_method: Mapped[str] = mapped_column(String(40), nullable=False)
     reference: Mapped[str | None] = mapped_column(String(160), nullable=True)

@@ -111,6 +111,29 @@ export function convertBaseToForeign(
   return formatCurrencyUnits(divideRounded(numerator, denominator), foreignDecimalPlaces);
 }
 
+/** Convert a foreign-currency amount back to base currency using the same
+ * foreign-units-per-base rate convention as the backend. */
+export function convertForeignToBase(
+  foreignAmount: string,
+  foreignDecimalPlaces: number,
+  rate: string,
+  baseDecimalPlaces: number,
+): string {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(rate.trim())) {
+    throw new Error("Exchange rate is invalid");
+  }
+  const rateText = rate.trim();
+  const rateFractionDigits = rateText.split(".")[1]?.length || 0;
+  const rateNumerator = BigInt(rateText.replace(".", ""));
+  if (rateFractionDigits > 10 || rateNumerator <= 0n) {
+    throw new Error("Exchange rate is invalid");
+  }
+  const foreignUnits = parseCurrencyUnits(foreignAmount, foreignDecimalPlaces);
+  const numerator = foreignUnits * powerOfTen(rateFractionDigits) * powerOfTen(baseDecimalPlaces);
+  const denominator = powerOfTen(foreignDecimalPlaces) * rateNumerator;
+  return formatCurrencyUnits(divideRounded(numerator, denominator), baseDecimalPlaces);
+}
+
 export function subtractCurrencyAmounts(
   left: string,
   right: string,

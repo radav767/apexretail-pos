@@ -35,6 +35,8 @@ async def resolve_shift_for_write(
     session = actor.pos_session
     if session.company_id != company_id or session.branch_id != branch_id:
         raise HTTPException(403, "POS session company or branch mismatch")
+    if session.employee_id != actor.employee.id:
+        raise HTTPException(403, "POS session cashier mismatch")
     query = select(CashierShift).where(
         CashierShift.company_id == company_id,
         CashierShift.employee_id == actor.employee.id,

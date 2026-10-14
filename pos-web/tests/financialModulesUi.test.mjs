@@ -45,10 +45,29 @@ test("settlements are online, idempotent, validated and printable", () => {
   assert.match(page, /Balance after|After/);
 });
 
+test("settlements use configured method currencies, exact conversion and tender/change snapshots", () => {
+  assert.match(page, /\/currencies\/\$\{companyId\}\/pos-config/);
+  assert.match(page, /currenciesForMethod\(settlementMethod\)/);
+  assert.match(page, /convertBaseToForeign/);
+  assert.match(page, /convertForeignToBase/);
+  assert.match(page, /currency_config_version: currencyConfig\.version/);
+  assert.match(page, /tendered_amount_original:/);
+  assert.match(page, /settlement\.change_amount_original/);
+  assert.match(page, /Enter partial amount/);
+});
+
+test("expenses post original currency snapshots and display base-currency equivalents", () => {
+  assert.match(page, /currency_code: expenseCurrency\.code/);
+  assert.match(page, /exchange_rate_id: expenseCurrency\.current_rate_id/);
+  assert.match(page, /currency_config_version: currencyConfig\?\.version/);
+  assert.match(page, /Base-currency expense/);
+  assert.match(page, /matching open shift are recorded from this POS session/);
+});
+
 test("expenses use session branch and server-derived cashier", () => {
   assert.match(page, /branch_id: branchId/);
   assert.doesNotMatch(page, /employee_id:/);
-  assert.match(page, /Branch and cashier are recorded automatically/);
+  assert.match(page, /Branch, cashier, and a matching open shift are recorded from this POS session/);
   assert.match(page, /idempotency_key: expenseKey\.current/);
 });
 

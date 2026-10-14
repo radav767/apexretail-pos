@@ -38,11 +38,13 @@ class SettlementCreate(BaseModel):
     branch_id: UUID
     amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     original_amount: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=4)
+    tendered_amount_original: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=4)
     payment_currency_code: str | None = Field(default=None, max_length=8)
     shift_id: UUID | None = None
     settle_full: bool = False
     exchange_rate_id: UUID | None = None
     exchange_rate_snapshot: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=10)
+    currency_config_version: int | None = Field(default=None, ge=1)
     payment_method: PaymentMethod
     reference: str | None = Field(default=None, max_length=160)
     note: str | None = Field(default=None, max_length=1000)
@@ -68,6 +70,8 @@ class SettlementOut(BaseModel):
     exchange_rate_id: UUID | None = None
     exchange_rate_snapshot: Decimal | None = None
     original_amount: Decimal | None = None
+    tendered_amount_original: Decimal | None = None
+    change_amount_original: Decimal | None = None
     amount: Decimal
     payment_method: str
     reference: str | None

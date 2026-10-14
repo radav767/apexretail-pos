@@ -37,6 +37,7 @@ class ExpenseCreate(BaseModel):
     shift_id: UUID | None = None
     exchange_rate_id: UUID | None = None
     exchange_rate_snapshot: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=10)
+    currency_config_version: int | None = Field(default=None, ge=1)
     occurred_at: datetime
     payment_method: Literal["cash", "card", "mobile"]
     description: str = Field(min_length=1, max_length=1000)

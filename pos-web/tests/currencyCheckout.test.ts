@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   convertBaseToForeign,
+  convertForeignToBase,
   isCurrencyAmountAtLeast,
   subtractCurrencyAmounts,
 } from "../src/decimal.ts";
@@ -12,6 +13,8 @@ test("foreign conversion uses exact decimal arithmetic and configured precision"
   assert.equal(convertBaseToForeign("10.00", 2, "18.5000000000", 2), "185.00");
   assert.equal(convertBaseToForeign("0.05", 2, "1.5", 2), "0.08");
   assert.equal(convertBaseToForeign("10.000", 3, "0.3333333333", 0), "3");
+  assert.equal(convertForeignToBase("185.00", 2, "18.50", 2), "10.00");
+  assert.equal(convertForeignToBase("3", 0, "0.3333333333", 3), "9.000");
 });
 
 test("cash tender and change stay in their physical currency", () => {
