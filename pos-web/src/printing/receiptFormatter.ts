@@ -13,6 +13,34 @@ function money(value: string | number | undefined) {
   return Number(value || 0).toFixed(2);
 }
 
+function snapshotAmount(value: string | number | null | undefined) {
+  return value == null ? "0.00" : String(value);
+}
+
+function snapshotPaymentLines(snapshot: ReceiptSnapshot, width: number) {
+  const baseCode = snapshot.base_currency_code || "";
+  const paymentCode = snapshot.payment_currency_code || baseCode;
+  const foreign = Boolean(paymentCode && baseCode && paymentCode !== baseCode);
+  const paid = snapshot.payment_amount_original ?? snapshot.amount_received;
+  const tendered = snapshot.tendered_amount_original;
+  const change = foreign
+    ? snapshot.change_amount_original ?? "0"
+    : snapshot.change_amount_original ?? snapshot.change_due;
+  return [
+    alignLine(`TOTAL${baseCode ? ` (${baseCode})` : ""}`, money(snapshot.total_amount), width),
+    alignLine("Payment", snapshot.payment_method.toUpperCase(), width),
+    ...(paymentCode ? [alignLine("Payment currency", paymentCode, width)] : []),
+    ...(foreign && snapshot.exchange_rate_snapshot
+      ? [alignLine(`Rate 1 ${baseCode}`, `${snapshot.exchange_rate_snapshot} ${paymentCode}`, width)]
+      : []),
+    alignLine("Paid", `${snapshotAmount(paid)}${paymentCode ? ` ${paymentCode}` : ""}`, width),
+    ...(tendered != null
+      ? [alignLine("Tendered", `${snapshotAmount(tendered)}${paymentCode ? ` ${paymentCode}` : ""}`, width)]
+      : []),
+    alignLine("Change", `${snapshotAmount(change)}${paymentCode ? ` ${paymentCode}` : ""}`, width),
+  ];
+}
+
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => {
     const entities: Record<string, string> = {
@@ -220,10 +248,7 @@ function buildEscPosLines(snapshot: ReceiptSnapshot, config: PrinterConfig) {
     ));
   }
 
-  lines.push(alignLine("TOTAL", money(snapshot.total_amount), width));
-  lines.push(alignLine("Payment", snapshot.payment_method.toUpperCase(), width));
-  lines.push(alignLine("Paid", money(snapshot.amount_received), width));
-  lines.push(alignLine("Change", money(snapshot.change_due), width));
+  lines.push(...snapshotPaymentLines(snapshot, width));
 
   if (snapshot.receipt_footer) {
     lines.push("-".repeat(width));
@@ -454,20 +479,23 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
             ${discountRow}
             ${taxRow}
             <div class="summary-total">
-              <span>Total</span>
+              <span>Total${snapshot.base_currency_code ? ` (${escapeHtml(snapshot.base_currency_code)})` : ""}</span>
               <span>${money(snapshot.total_amount)}</span>
             </div>
             <div class="summary-row">
               <span>Payment</span>
               <span>${escapeHtml(snapshot.payment_method.toUpperCase())}</span>
             </div>
+            ${snapshot.payment_currency_code ? `<div class="summary-row"><span>Payment currency</span><span>${escapeHtml(snapshot.payment_currency_code)}</span></div>` : ""}
+            ${snapshot.base_currency_code && snapshot.payment_currency_code && snapshot.base_currency_code !== snapshot.payment_currency_code && snapshot.exchange_rate_snapshot ? `<div class="summary-row"><span>Rate (1 ${escapeHtml(snapshot.base_currency_code)})</span><span>${escapeHtml(snapshot.exchange_rate_snapshot)} ${escapeHtml(snapshot.payment_currency_code)}</span></div>` : ""}
             <div class="summary-row">
               <span>Paid</span>
-              <span>${money(snapshot.amount_received)}</span>
+              <span>${escapeHtml(snapshotAmount(snapshot.payment_amount_original ?? snapshot.amount_received))}${snapshot.payment_currency_code ? ` ${escapeHtml(snapshot.payment_currency_code)}` : ""}</span>
             </div>
+            ${snapshot.tendered_amount_original != null ? `<div class="summary-row"><span>Tendered</span><span>${escapeHtml(snapshotAmount(snapshot.tendered_amount_original))}${snapshot.payment_currency_code ? ` ${escapeHtml(snapshot.payment_currency_code)}` : ""}</span></div>` : ""}
             <div class="summary-row">
               <span>Change</span>
-              <span>${money(snapshot.change_due)}</span>
+              <span>${escapeHtml(snapshotAmount(snapshot.change_amount_original ?? snapshot.change_due))}${snapshot.payment_currency_code ? ` ${escapeHtml(snapshot.payment_currency_code)}` : ""}</span>
             </div>
             ${snapshot.payment_method.toLowerCase() === "credit" ? `<div class="summary-row"><span>Credit sale outstanding</span><span>${money(snapshot.credit_outstanding_balance || snapshot.total_amount)}</span></div>` : ""}
           </div>

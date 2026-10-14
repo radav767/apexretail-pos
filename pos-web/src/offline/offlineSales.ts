@@ -24,6 +24,10 @@ export type OfflineSalePayload = {
   device_key?: string | null;
   assignment_revision?: number | null;
   payment_method: string;
+  payment_currency_code?: string | null;
+  exchange_rate_id?: string | null;
+  currency_config_version?: number | null;
+  tendered_amount_original?: string | null;
   amount_received?: string;
   discount_amount?: string | null;
   sale_discount_amount?: string | null;

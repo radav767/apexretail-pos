@@ -34,6 +34,20 @@ class SalesService:
     def __init__(self, repo: SalesRepository):
         self.repo = repo
 
+    @staticmethod
+    def validate_currency_quote(data: SaleCreate, snapshot, current_version: int | None):
+        if (
+            data.currency_config_version is not None
+            and current_version is not None
+            and current_version != data.currency_config_version
+        ):
+            raise HTTPException(409, "Payment currency configuration changed. Refresh the quote and try again.")
+        if (
+            data.exchange_rate_id is not None
+            and data.exchange_rate_id != snapshot["exchange_rate_id"]
+        ):
+            raise HTTPException(409, "Exchange rate changed. Refresh the payment quote and try again.")
+
     async def currency_from_base(self, company_id, payment_method, currency_code, amount, *, at):
         if hasattr(self.repo.db, "execute"):
             return await CurrencyService(CurrencyRepository(self.repo.db)).resolve_from_base(
@@ -543,6 +557,13 @@ class SalesService:
             None if payment_method == "credit" else data.payment_currency_code, total,
             at=data.client_created_at or datetime.now(timezone.utc),
         )
+        current_version = None
+        if hasattr(self.repo.db, "execute") and data.currency_config_version is not None:
+            current_settings = await CurrencyRepository(self.repo.db).settings(
+                data.company_id, for_update=True,
+            )
+            current_version = int(getattr(current_settings, "currency_config_version", 0) or 0)
+        self.validate_currency_quote(data, currency_snapshot, current_version)
         base_currency = currency_snapshot["base_currency"]
         payment_currency = currency_snapshot["currency"]
         rate_snapshot = Decimal(currency_snapshot["exchange_rate_snapshot"])

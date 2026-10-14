@@ -87,6 +87,13 @@ export type ReceiptSnapshot = {
   amount_received: string;
   change_due: string;
   payment_method: string;
+  base_currency_code?: string | null;
+  payment_currency_code?: string | null;
+  exchange_rate_id?: string | null;
+  exchange_rate_snapshot?: string | null;
+  payment_amount_original?: string | null;
+  tendered_amount_original?: string | null;
+  change_amount_original?: string | null;
   status: string;
   items: ReceiptLineItem[];
   document_type?: "shift_summary";

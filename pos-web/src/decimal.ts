@@ -52,6 +52,84 @@ function divideRounded(
   return negative ? -rounded : rounded;
 }
 
+function powerOfTen(digits: number): bigint {
+  if (!Number.isInteger(digits) || digits < 0 || digits > 24) {
+    throw new Error("Unsupported currency precision");
+  }
+  return 10n ** BigInt(digits);
+}
+
+function parseCurrencyUnits(value: string, decimalPlaces: number): bigint {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+    throw new Error("Unsupported currency precision");
+  }
+  const normalized = value.trim();
+  if (!/^-?\d+(?:\.\d*)?$/.test(normalized)) {
+    throw new Error("Enter a valid amount");
+  }
+  const negative = normalized.startsWith("-");
+  const unsigned = negative ? normalized.slice(1) : normalized;
+  const [whole, fraction = ""] = unsigned.split(".");
+  if (fraction.length > decimalPlaces) {
+    throw new Error("Amount exceeds the currency decimal precision");
+  }
+  const units = BigInt(whole) * powerOfTen(decimalPlaces)
+    + BigInt((fraction + "0".repeat(decimalPlaces)).slice(0, decimalPlaces) || "0");
+  return negative ? -units : units;
+}
+
+function formatCurrencyUnits(value: bigint, decimalPlaces: number): string {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+    throw new Error("Unsupported currency precision");
+  }
+  const scale = powerOfTen(decimalPlaces);
+  const negative = value < 0n;
+  const absolute = negative ? -value : value;
+  if (decimalPlaces === 0) return `${negative ? "-" : ""}${absolute}`;
+  return `${negative ? "-" : ""}${absolute / scale}.${String(absolute % scale).padStart(decimalPlaces, "0")}`;
+}
+
+/** Convert a base-currency amount using foreign units per one base unit. */
+export function convertBaseToForeign(
+  baseAmount: string,
+  baseDecimalPlaces: number,
+  rate: string,
+  foreignDecimalPlaces: number,
+): string {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(rate.trim())) {
+    throw new Error("Exchange rate is invalid");
+  }
+  const rateText = rate.trim();
+  const rateFractionDigits = rateText.split(".")[1]?.length || 0;
+  if (rateFractionDigits > 10 || BigInt(rateText.replace(".", "")) <= 0n) {
+    throw new Error("Exchange rate is invalid");
+  }
+  const baseUnits = parseCurrencyUnits(baseAmount, baseDecimalPlaces);
+  const rateNumerator = BigInt(rateText.replace(".", ""));
+  const numerator = baseUnits * rateNumerator * powerOfTen(foreignDecimalPlaces);
+  const denominator = powerOfTen(baseDecimalPlaces) * powerOfTen(rateFractionDigits);
+  return formatCurrencyUnits(divideRounded(numerator, denominator), foreignDecimalPlaces);
+}
+
+export function subtractCurrencyAmounts(
+  left: string,
+  right: string,
+  decimalPlaces: number,
+): string {
+  return formatCurrencyUnits(
+    parseCurrencyUnits(left, decimalPlaces) - parseCurrencyUnits(right, decimalPlaces),
+    decimalPlaces,
+  );
+}
+
+export function isCurrencyAmountAtLeast(
+  left: string,
+  right: string,
+  decimalPlaces: number,
+): boolean {
+  return parseCurrencyUnits(left, decimalPlaces) >= parseCurrencyUnits(right, decimalPlaces);
+}
+
 export function parseMoneyToCents(value: string | number): bigint {
   return parseFixed(value, MONEY_SCALE);
 }

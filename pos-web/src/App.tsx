@@ -50,6 +50,9 @@ import {
   parseQuantityToMillis,
   quantityFromAmount,
   subtractQuantities,
+  convertBaseToForeign,
+  isCurrencyAmountAtLeast,
+  subtractCurrencyAmounts,
 } from "./decimal";
 import {
   entitlementReconnectMessage,
@@ -114,6 +117,14 @@ type Receipt = {
   id: string;
   receipt_number: string;
   shift_id?: string | null;
+  base_currency_code?: string | null;
+  payment_currency_code?: string | null;
+  exchange_rate_id?: string | null;
+  exchange_rate_snapshot?: string | null;
+  payment_amount_original?: string | null;
+  tendered_amount_original?: string | null;
+  change_amount_original?: string | null;
+  cashier_name?: string | null;
   shop_id?: string | null;
   shop_name_snapshot?: string | null;
   shop_address_snapshot?: {
@@ -166,6 +177,30 @@ type BusinessSettings = {
   paper_size?: string;
   auto_print?: boolean;
   payment_methods?: string[];
+};
+
+type PosCurrency = {
+  code: string;
+  display_name: string;
+  symbol: string;
+  decimal_places: number;
+  active: boolean;
+  is_base: boolean;
+  cash_accepted: boolean;
+  card_accepted: boolean;
+  mobile_accepted: boolean;
+  current_rate: string | null;
+  current_rate_id: string | null;
+  rate_effective_at: string | null;
+};
+
+type PosCurrencyConfig = {
+  company_id: string;
+  version: number;
+  generated_at: string;
+  multi_currency_enabled: boolean;
+  base_currency_code: string;
+  currencies: PosCurrency[];
 };
 
 type SubscriptionSnapshot = {
@@ -305,6 +340,9 @@ const [loggedIn, setLoggedIn] = useState(
 
   const [showTender, setShowTender] = useState(false);
   const [amountReceived, setAmountReceived] = useState("");
+  const [currencyConfig, setCurrencyConfig] = useState<PosCurrencyConfig | null>(null);
+  const [selectedPaymentCurrencyCode, setSelectedPaymentCurrencyCode] = useState("");
+  const [currencyQuoteError, setCurrencyQuoteError] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [receiptItems, setReceiptItems] = useState<CartItem[]>([]);
   const [businessSettings, setBusinessSettings] =
@@ -750,8 +788,33 @@ const [loggedIn, setLoggedIn] = useState(
     }
   }
 
-  const numericAmountReceived = Number(amountReceived || 0);
-  const previewChange = Math.max(0, numericAmountReceived - total);
+  const basePosCurrency = currencyConfig?.currencies.find((currency) => currency.is_base) || null;
+  const acceptedPaymentCurrencies = currencyConfig?.currencies.filter((currency) => {
+    const method = paymentMethod.trim().toLowerCase();
+    const accepted = method === "cash" ? currency.cash_accepted
+      : method === "card" ? currency.card_accepted
+        : method === "mobile" ? currency.mobile_accepted : false;
+    return currency.active && accepted && (currency.is_base || currencyConfig.multi_currency_enabled);
+  }) || [];
+  const activePaymentCurrency = acceptedPaymentCurrencies.find(
+    (currency) => currency.code === selectedPaymentCurrencyCode,
+  ) || basePosCurrency;
+  let paymentDueText = "";
+  let paymentChangeText = "";
+  try {
+    if (activePaymentCurrency && basePosCurrency) {
+      paymentDueText = convertBaseToForeign(
+        total.toFixed(basePosCurrency.decimal_places), basePosCurrency.decimal_places,
+        String(activePaymentCurrency.current_rate ?? "1"), activePaymentCurrency.decimal_places,
+      );
+      paymentChangeText = subtractCurrencyAmounts(
+        amountReceived || "0", paymentDueText, activePaymentCurrency.decimal_places,
+      );
+    }
+  } catch {
+    paymentDueText = "";
+    paymentChangeText = "";
+  }
   const creditProjection = projectCreditSale(
     selectedCreditCustomer,
     total,
@@ -961,6 +1024,13 @@ const [loggedIn, setLoggedIn] = useState(
         null,
       created_at: sale.created_at,
       shift_id: sale.shift_id || null,
+      base_currency_code: sale.base_currency_code || businessSettings?.currency_code || null,
+      payment_currency_code: sale.payment_currency_code || sale.base_currency_code || businessSettings?.currency_code || null,
+      exchange_rate_id: sale.exchange_rate_id || null,
+      exchange_rate_snapshot: sale.exchange_rate_snapshot || null,
+      payment_amount_original: sale.payment_amount_original || null,
+      tendered_amount_original: sale.tendered_amount_original || null,
+      change_amount_original: sale.change_amount_original || null,
       cashier_name: cashierName || cashier?.name || null,
       customer_name: sale.customer_name_snapshot || null,
       customer_code: sale.customer_code_snapshot || null,
@@ -2201,22 +2271,73 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
-    if (paymentMethod === "cash") {
-      setAmountReceived(total.toFixed(2));
-      setShowTender(true);
-      return;
-    }
-
     if (paymentMethod === "credit") {
       await openCreditSaleDialog();
       return;
     }
 
-    void submitSale();
+    try {
+      const response = await api.get(`/currencies/${companyId}/pos-config`);
+      const config = response.data as PosCurrencyConfig;
+      if (config.company_id !== companyId || !config.base_currency_code || !Array.isArray(config.currencies)) {
+        throw new Error("Company payment currency configuration is invalid");
+      }
+      const method = paymentMethod.trim().toLowerCase();
+      if (!("cash card mobile".split(" ").includes(method))) {
+        throw new Error("This payment method is not available for multi-currency checkout");
+      }
+      const eligible = config.currencies.filter((currency) => currency.active && (
+        method === "cash" ? currency.cash_accepted
+          : method === "card" ? currency.card_accepted
+            : currency.mobile_accepted
+      ) && (currency.is_base || config.multi_currency_enabled));
+      const base = eligible.find((currency) => currency.code === config.base_currency_code && currency.is_base);
+      if (!base) throw new Error("The company base currency is not enabled for this payment method");
+      setCurrencyConfig(config);
+      const previous = eligible.find((currency) => currency.code === selectedPaymentCurrencyCode);
+      const selected = previous || base;
+      setSelectedPaymentCurrencyCode(selected.code);
+      setCurrencyQuoteError("");
+      setAmountReceived(paymentMethod === "cash" ? convertBaseToForeign(
+        total.toFixed(base.decimal_places), base.decimal_places,
+        selected.current_rate == null ? "1" : String(selected.current_rate), selected.decimal_places,
+      ) : "");
+      setShowTender(true);
+    } catch (error) {
+      if (
+        isAndroidNativeApp() && isNetworkFailure(error)
+        && businessSettings?.currency_code
+        && await canCreateOfflineSale()
+      ) {
+        const offlineBase: PosCurrency = {
+          code: businessSettings.currency_code,
+          display_name: businessSettings.currency_code,
+          symbol: businessSettings.currency_symbol || businessSettings.currency_code,
+          decimal_places: businessSettings.decimal_places ?? 2,
+          active: true, is_base: true,
+          cash_accepted: true, card_accepted: true, mobile_accepted: true,
+          current_rate: "1", current_rate_id: null, rate_effective_at: null,
+        };
+        const offlineConfig: PosCurrencyConfig = {
+          company_id: companyId, version: 1, generated_at: new Date().toISOString(),
+          multi_currency_enabled: false, base_currency_code: offlineBase.code,
+          currencies: [offlineBase],
+        };
+        setCurrencyConfig(offlineConfig);
+        setSelectedPaymentCurrencyCode(offlineBase.code);
+        setCurrencyQuoteError("");
+        setAmountReceived(paymentMethod === "cash" ? total.toFixed(offlineBase.decimal_places) : "");
+        setShowTender(true);
+        setMessage("Offline mode: only the previously loaded base currency is available.");
+        return;
+      }
+      setCurrencyQuoteError(getApiErrorMessage(error, "Unable to load accepted payment currencies"));
+      setMessage(getApiErrorMessage(error, "Unable to load accepted payment currencies"));
+    }
   }
 
   async function submitSale(
-    cashAmount?: number,
+    cashAmount?: string | number,
     creditCustomer?: CreditCustomer,
   ) {
     if (discountError) { setMessage(discountError); return; }
@@ -2239,6 +2360,36 @@ const [loggedIn, setLoggedIn] = useState(
       const projection = projectCreditSale(creditCustomer || null, total);
       if (projection.error) {
         setCreditDialogMessage(projection.error);
+        return;
+      }
+    }
+
+    const paymentCurrency = currencyConfig?.currencies.find(
+      (currency) => currency.code === selectedPaymentCurrencyCode,
+    );
+    const baseCurrency = currencyConfig?.currencies.find((currency) => currency.is_base);
+    if (paymentMethod !== "credit") {
+      if (!currencyConfig || currencyConfig.company_id !== companyId || !paymentCurrency || !paymentCurrency.active) {
+        setMessage("Reload the payment currency configuration before completing this sale.");
+        return;
+      }
+      const accepted = paymentMethod === "cash" ? paymentCurrency.cash_accepted
+        : paymentMethod === "card" ? paymentCurrency.card_accepted
+          : paymentMethod === "mobile" ? paymentCurrency.mobile_accepted : false;
+      if (!accepted || (!paymentCurrency.is_base && !currencyConfig.multi_currency_enabled)) {
+        setMessage("This currency is not accepted for the selected payment method.");
+        return;
+      }
+      if (!paymentCurrency.is_base && (
+        !paymentCurrency.current_rate_id || !paymentCurrency.current_rate
+        || !/^\d+(?:\.\d+)?$/.test(String(paymentCurrency.current_rate))
+        || !isCurrencyAmountAtLeast(String(paymentCurrency.current_rate), "0.0000000001", 10)
+      )) {
+        setMessage("No valid current exchange rate is available for this currency.");
+        return;
+      }
+      if (!paymentCurrency.is_base && !(await isDeviceOnline())) {
+        setMessage("Foreign-currency payments are online-only. Reconnect before taking this payment.");
         return;
       }
     }
@@ -2287,30 +2438,41 @@ const [loggedIn, setLoggedIn] = useState(
       })),
     };
 
+    if (paymentMethod !== "credit" && paymentCurrency && currencyConfig) {
+      payload.payment_currency_code = paymentCurrency.code;
+      payload.exchange_rate_id = paymentCurrency.current_rate_id || null;
+      payload.currency_config_version = currencyConfig.version;
+    }
+
     let receivedForReceipt = total;
+    let tenderedReceiptText: string | null = null;
+    let changeReceiptText = "0";
 
     if (paymentMethod === "cash") {
-      const numericAmountReceived =
-        Number(amountReceived);
-
-      const received =
-        cashAmount ?? numericAmountReceived;
-
-      if (
-        !Number.isFinite(received) ||
-        received < total
-      ) {
+      const receivedText = String(cashAmount ?? amountReceived).trim();
+      const basePlaces = baseCurrency?.decimal_places ?? decimalPlaces;
+      const requiredPayment = paymentCurrency ? convertBaseToForeign(
+        total.toFixed(basePlaces), basePlaces,
+        String(paymentCurrency.current_rate || "1"), paymentCurrency.decimal_places,
+      ) : total.toFixed(basePlaces);
+      let sufficient = false;
+      try {
+        sufficient = Boolean(paymentCurrency) && isCurrencyAmountAtLeast(receivedText, requiredPayment, paymentCurrency!.decimal_places);
+      } catch {
+        sufficient = false;
+      }
+      if (!sufficient) {
         setMessage(
-          "Amount received is less than the total",
+          "Tendered amount is invalid or less than the amount due",
         );
         setProcessing(false);
         return;
       }
-
-      payload.amount_received =
-        received.toFixed(2);
-
-      receivedForReceipt = received;
+      payload.tendered_amount_original = receivedText;
+      if (paymentCurrency?.is_base) payload.amount_received = receivedText;
+      receivedForReceipt = paymentCurrency?.is_base ? Number(receivedText) : total;
+      tenderedReceiptText = receivedText;
+      changeReceiptText = subtractCurrencyAmounts(receivedText, requiredPayment, paymentCurrency!.decimal_places);
     } else if (paymentMethod === "credit") {
       receivedForReceipt = 0;
     }
@@ -2318,6 +2480,9 @@ const [loggedIn, setLoggedIn] = useState(
     const completeOfflineSale = async () => {
       if (paymentMethod === "credit") {
         throw new Error("Credit sales are online-only and cannot be queued.");
+      }
+      if (paymentCurrency && !paymentCurrency.is_base) {
+        throw new Error("Foreign-currency payments cannot be queued offline. Reconnect and retry the payment.");
       }
       if (!(await canCreateOfflineSale())) {
         setMessage(
@@ -2331,6 +2496,10 @@ const [loggedIn, setLoggedIn] = useState(
       // preserves it as a legacy/unassigned shift transaction on sync.
       const queuedPayload = {
         ...payload,
+        // A base-currency offline sale remains compatible with the existing
+        // queue and is valued from authoritative company settings at sync.
+        currency_config_version: undefined,
+        exchange_rate_id: undefined,
         client_created_at: new Date().toISOString(),
       };
       await queueOfflineSale(queuedPayload);
@@ -2393,14 +2562,18 @@ const [loggedIn, setLoggedIn] = useState(
         tax_inclusive: taxInclusive,
         total_amount:
           total.toFixed(2),
+        base_currency_code: baseCurrency?.code || businessSettings?.currency_code || null,
+        payment_currency_code: baseCurrency?.code || businessSettings?.currency_code || null,
+        exchange_rate_snapshot: "1",
+        payment_amount_original: total.toFixed(baseCurrency?.decimal_places ?? decimalPlaces),
+        tendered_amount_original: tenderedReceiptText,
+        change_amount_original: changeReceiptText,
+        cashier_name: cashier?.name || null,
         amount_received:
           receivedForReceipt.toFixed(2),
         change_due:
           paymentMethod === "cash"
-            ? Math.max(
-                0,
-                receivedForReceipt - total,
-              ).toFixed(2)
+            ? changeReceiptText
             : "0.00",
         payment_method: paymentMethod,
         discount_amount: payload.discount_amount,
@@ -3853,67 +4026,82 @@ const [loggedIn, setLoggedIn] = useState(
       {showTender && (
         <div style={overlay}>
           <div style={modalCard}>
-            <h2 style={{ marginTop: 0 }}>Cash Tender</h2>
-
-            <p style={modalLabel}>Amount due</p>
-            <h1 style={modalTotal}>${total.toFixed(2)}</h1>
-
-            <label style={modalLabel}>Amount received</label>
-            <input
-              autoFocus
-              type="number"
-              min={total}
-              step="0.01"
-              value={amountReceived}
+            <h2 style={{ marginTop: 0 }}>{paymentMethod.toUpperCase()} Payment</h2>
+            <p style={modalLabel}>Base currency: {basePosCurrency?.code || currencyConfig?.base_currency_code || "Unavailable"}</p>
+            <label style={modalLabel} htmlFor="payment-currency">Payment currency</label>
+            <select
+              id="payment-currency"
+              value={selectedPaymentCurrencyCode}
               style={tenderInput}
-              onChange={(event) =>
-                setAmountReceived(event.target.value)
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  void submitSale(numericAmountReceived);
+              onChange={(event) => {
+                const nextCode = event.target.value;
+                const next = acceptedPaymentCurrencies.find((currency) => currency.code === nextCode);
+                if (!next || !basePosCurrency) return;
+                setSelectedPaymentCurrencyCode(next.code);
+                setCurrencyQuoteError("");
+                try {
+                  setAmountReceived(paymentMethod === "cash" ? convertBaseToForeign(
+                    total.toFixed(basePosCurrency.decimal_places), basePosCurrency.decimal_places,
+                    String(next.current_rate ?? "1"), next.decimal_places,
+                  ) : "");
+                } catch (error) {
+                  setCurrencyQuoteError(error instanceof Error ? error.message : "Invalid exchange rate");
                 }
               }}
-            />
-
-            <div style={quickAmountGrid}>
-              <button
-                style={secondaryButton}
-                onClick={() => setAmountReceived(total.toFixed(2))}
-              >
-                Exact
-              </button>
-
-              {[5, 10, 20].map((increment) => (
-                <button
-                  key={increment}
-                  style={secondaryButton}
-                  onClick={() =>
-                    setAmountReceived(
-                      (Math.ceil(total / increment) * increment).toFixed(2),
-                    )
-                  }
-                >
-                  Next ${increment}
-                </button>
+            >
+              {acceptedPaymentCurrencies.map((currency) => (
+                <option key={currency.code} value={currency.code}>
+                  {currency.code} — {currency.display_name}
+                </option>
               ))}
-            </div>
+            </select>
 
-            <div style={changeBox}>
-              <span>Change due</span>
-              <strong>${previewChange.toFixed(2)}</strong>
-            </div>
+            {activePaymentCurrency && basePosCurrency && (
+              <section aria-label="Payment conversion" style={{ ...changeBox, display: "grid", gap: 8, textAlign: "left" }}>
+                <div>Amount due: {currencySymbol}{total.toFixed(basePosCurrency.decimal_places)} {basePosCurrency.code}</div>
+                {!activePaymentCurrency.is_base && (
+                  <div>Rate: 1 {basePosCurrency.code} = {activePaymentCurrency.current_rate || "Unavailable"} {activePaymentCurrency.code}</div>
+                )}
+                <strong>Pay: {activePaymentCurrency.symbol}{paymentDueText || "Rate unavailable"} {activePaymentCurrency.code}</strong>
+                {activePaymentCurrency.rate_effective_at && !activePaymentCurrency.is_base && (
+                  <small>Rate effective {new Date(activePaymentCurrency.rate_effective_at).toLocaleString()}</small>
+                )}
+              </section>
+            )}
+
+            {paymentMethod === "cash" ? (
+              <>
+                <label style={modalLabel} htmlFor="payment-tendered">Amount tendered ({activePaymentCurrency?.code || ""})</label>
+                <input
+                  autoFocus
+                  id="payment-tendered"
+                  type="text"
+                  inputMode="decimal"
+                  value={amountReceived}
+                  style={tenderInput}
+                  onChange={(event) => setAmountReceived(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter") void submitSale(amountReceived); }}
+                />
+                <button
+                  style={secondaryButton}
+                  onClick={() => setAmountReceived(paymentDueText)}
+                  disabled={!paymentDueText}
+                >Exact amount</button>
+                <div style={changeBox}>
+                  <span>Change due ({activePaymentCurrency?.code || ""})</span>
+                  <strong>{activePaymentCurrency?.symbol}{paymentChangeText || "—"}</strong>
+                </div>
+              </>
+            ) : (
+              <p style={modalLabel}>Charge exactly {activePaymentCurrency?.symbol}{paymentDueText} {activePaymentCurrency?.code} using the selected terminal/provider.</p>
+            )}
+
+            {currencyQuoteError && <p role="alert" style={errorText}>{currencyQuoteError}</p>}
 
             <button
               style={primaryButton}
-              disabled={
-                processing ||
-                !Number.isFinite(numericAmountReceived) ||
-                numericAmountReceived < total
-              }
-              onClick={() =>
-                void submitSale(numericAmountReceived)
-              }
+              disabled={processing || !activePaymentCurrency || !paymentDueText || Boolean(currencyQuoteError)}
+              onClick={() => void submitSale(paymentMethod === "cash" ? amountReceived : undefined)}
             >
               {processing ? "Processing..." : "Confirm Payment"}
             </button>
@@ -4308,11 +4496,6 @@ const modalLabel: CSSProperties = {
   marginBottom: 7,
 };
 
-const modalTotal: CSSProperties = {
-  fontSize: 48,
-  margin: "0 0 25px",
-};
-
 const tenderInput: CSSProperties = {
   width: "100%",
   padding: 18,
@@ -4320,13 +4503,6 @@ const tenderInput: CSSProperties = {
   borderRadius: 12,
   fontSize: 28,
   fontWeight: 800,
-};
-
-const quickAmountGrid: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 9,
-  marginTop: 8,
 };
 
 const changeBox: CSSProperties = {
