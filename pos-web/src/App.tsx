@@ -1280,7 +1280,7 @@ const [loggedIn, setLoggedIn] = useState(
     });
   }
 
-  async function handlePrintShiftSummary(shift: ShiftRecord) {
+  async function handlePrintShiftSummary(shift: ShiftRecord, authoritativeHtml?: string) {
     const shiftMoney = (value: string | number | null | undefined, currency: ShiftRecord["currencies"][number]) => {
       const numeric = Number(value ?? 0);
       try {
@@ -1311,7 +1311,7 @@ const [loggedIn, setLoggedIn] = useState(
         { label: `${currency.currency_code} variance`, value: currency.variance === null ? "Open" : shiftMoney(currency.variance, currency) },
       ]),
     ];
-    await printReceiptSnapshot({
+    const snapshot: ReceiptSnapshot = {
       id: shift.id, receipt_number: shift.shift_number, company_id: shift.company_id,
       business_name: businessSettings?.name || "ApexRetail POS", shop_name: shift.shop_name,
       branch_name: shift.branch_name, pos_name: shift.register_name,
@@ -1320,8 +1320,26 @@ const [loggedIn, setLoggedIn] = useState(
       payment_method: "shift_summary", status: "informational", items: [],
       document_type: "shift_summary", shift_summary_lines: lines,
       receipt_footer: "SHIFT SUMMARY - NOT A SALES RECEIPT",
-    });
+    };
+    if (authoritativeHtml) {
+      await sendReceiptToPrinter({
+        config: printerConfig,
+        html: authoritativeHtml,
+        rawDataBase64: encodeBase64(buildEscPosPayload(snapshot, printerConfig)),
+        jobName: `Z Report ${shift.shift_number}`,
+      });
+    } else {
+      await printReceiptSnapshot(snapshot);
+    }
     setPrinterNotice(`Printed shift summary ${shift.shift_number}`);
+  }
+
+  async function handlePrintZReport(shift: ShiftRecord) {
+    const response = await api.get<string>(`/shifts/${shift.id}/z-report/thermal`, {
+      params: { paper_width: printerConfig.paperWidth },
+      responseType: "text",
+    });
+    await handlePrintShiftSummary(shift, response.data);
   }
 
   async function archiveAndMaybePrintReceipt(
@@ -3413,6 +3431,7 @@ const [loggedIn, setLoggedIn] = useState(
         if (!businessSettings?.shift_enforcement_enabled) setShiftPromptDismissed(true);
       }}
       onPrintShiftSummary={handlePrintShiftSummary}
+      onPrintZReport={handlePrintZReport}
       onShiftChanged={(shift) => {
         setCurrentShift(shift);
         const deviceId = localStorage.getItem("device_id") || "unknown";
@@ -3671,6 +3690,7 @@ const [loggedIn, setLoggedIn] = useState(
           onTestPrint={handleTestPrint}
           onReprintSale={handleReprintSale}
           onPrintShiftSummary={handlePrintShiftSummary}
+          onPrintZReport={handlePrintZReport}
           onShiftChanged={(shift) => {
             setCurrentShift(shift);
             const deviceId = localStorage.getItem("device_id") || "unknown";

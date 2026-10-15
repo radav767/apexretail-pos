@@ -4,6 +4,8 @@
 .pos-shift-header p,.pos-shift-current-heading p,.pos-shift-history-heading p { margin:6px 0 0; color:#667085; line-height:1.45; }
 .pos-shift-eyebrow { margin:0 0 4px!important; color:#2563eb!important; font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; }
 .pos-shift-header-actions,.pos-shift-history-heading>div:last-child { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+.pos-shift-nav { display:flex; gap:8px; overflow-x:auto; padding:4px 0; scrollbar-width:thin; }
+.pos-shift-nav a,.pos-shift-button { display:inline-flex; min-height:42px; flex:none; align-items:center; justify-content:center; padding:0 14px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#172033; font-weight:750; text-decoration:none; }
 .pos-shift-page button { min-height:42px; padding:0 14px; border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#172033; font:inherit; font-weight:750; cursor:pointer; }
 .pos-shift-page button:disabled { opacity:.55; cursor:not-allowed; }
 .pos-shift-page button.danger { border-color:#b42318; background:#b42318; color:white; }
@@ -13,6 +15,9 @@
 .pos-shift-offline,.pos-shift-error,.pos-shift-notice { margin:0; padding:12px 14px; border-radius:10px; font-weight:700; line-height:1.45; }
 .pos-shift-offline,.pos-shift-error { background:#fff1f0; color:#a12622; }
 .pos-shift-notice { background:#ecfdf3; color:#067647; }
+.pos-shift-closed { border-color:#86efac; background:#f0fdf4; }
+.pos-shift-closed-title { margin:0 0 8px!important; color:#067647!important; font-size:14px; font-weight:900; letter-spacing:.04em; }
+.pos-shift-closed>div,.pos-z-report-actions { display:flex; gap:9px; flex-wrap:wrap; }
 .pos-shift-current-heading { align-items:center; }
 .pos-shift-current-heading>button { flex:none; }
 .pos-shift-status { display:inline-flex; margin-bottom:7px; padding:5px 9px; border-radius:999px; background:#dcfce7; color:#166534; font-size:11px; font-weight:850; letter-spacing:.04em; }
@@ -46,12 +51,21 @@
 .pos-shift-history-heading h2 { font-size:19px; }
 .pos-shift-history-heading>div:last-child>span { color:#667085; font-size:12px; }
 .pos-shift-history article { flex-wrap:wrap; }
+.pos-shift-z-list article { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0; border-top:1px solid #edf0f4; }
+.pos-shift-z-list article>span { display:grid; gap:4px; }
+.pos-shift-z-list small { color:#667085; }
+.pos-shift-z-list article>div { display:flex; gap:8px; flex-wrap:wrap; }
 .pos-shift-history-currencies { display:grid; gap:3px; color:#475467; font-size:12px; }
 .pos-shift-modal-backdrop { position:fixed; inset:0; z-index:1300; display:grid; place-items:center; padding:18px; background:rgba(16,24,40,.6); }
 .pos-shift-modal { width:min(800px,100%); max-height:90dvh; overflow:auto; padding:20px; border-radius:16px; background:white; box-shadow:0 24px 60px #0003; }
 .pos-shift-modal>header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
 .pos-shift-modal h2 { margin:0; }
 .pos-shift-modal>p { color:#667085; }
+.pos-z-report-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin:16px 0; }
+.pos-z-report-summary span { display:grid; gap:5px; padding:12px; border:1px solid #e2e8f0; border-radius:11px; color:#667085; font-size:12px; }
+.pos-z-report-summary strong { color:#172033; font-size:15px; font-variant-numeric:tabular-nums; }
+.pos-z-report-actions { margin:16px 0; }
+.pos-z-report-pdf { width:100%; min-height:520px; border:1px solid #d0d5dd; border-radius:10px; }
 @media(max-width:900px) { .pos-shift-facts,.pos-shift-session-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } .pos-shift-form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .pos-shift-form-grid>button { grid-column:1/-1; } }
-@media(max-width:720px) { .pos-shift-page { padding:calc(78px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom)); } .pos-shift-header,.pos-shift-current-heading,.pos-shift-history-heading { flex-direction:column; align-items:stretch; } .pos-shift-header-actions>* { flex:1; } .pos-shift-panel,.pos-shift-current { padding:15px; } .pos-shift-facts,.pos-shift-session-facts { grid-template-columns:repeat(2,minmax(0,1fr)); } .pos-shift-history-heading>div:last-child { justify-content:space-between; } }
-@media(max-width:390px) { .pos-shift-page { padding-left:10px; padding-right:10px; } .pos-shift-facts,.pos-shift-session-facts,.pos-shift-form-grid,.pos-shift-count-grid { grid-template-columns:minmax(0,1fr); } .pos-shift-form-grid>button { grid-column:auto; } .pos-shift-current-heading>button { width:100%; } .pos-shift-history article { align-items:flex-start; flex-direction:column; } .pos-shift-history article>button { width:100%; } .pos-shift-modal-backdrop { padding:7px; } .pos-shift-modal { max-height:calc(100dvh - 14px); padding:13px; } }
+@media(max-width:720px) { .pos-shift-page { padding:calc(78px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom)); } .pos-shift-header,.pos-shift-current-heading,.pos-shift-history-heading { flex-direction:column; align-items:stretch; } .pos-shift-header-actions>* { flex:1; } .pos-shift-panel,.pos-shift-current { padding:15px; } .pos-shift-facts,.pos-shift-session-facts,.pos-z-report-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .pos-shift-history-heading>div:last-child { justify-content:space-between; } .pos-z-report-pdf { min-height:420px; } }
+@media(max-width:390px) { .pos-shift-page { padding-left:10px; padding-right:10px; } .pos-shift-facts,.pos-shift-session-facts,.pos-shift-form-grid,.pos-shift-count-grid,.pos-z-report-summary { grid-template-columns:minmax(0,1fr); } .pos-shift-form-grid>button { grid-column:auto; } .pos-shift-current-heading>button { width:100%; } .pos-shift-history article,.pos-shift-z-list article { align-items:flex-start; flex-direction:column; } .pos-shift-history article>button,.pos-shift-z-list article>div,.pos-shift-z-list article>div>button,.pos-shift-closed>div>button,.pos-z-report-actions>* { width:100%; } .pos-shift-modal-backdrop { padding:7px; } .pos-shift-modal { max-height:calc(100dvh - 14px); padding:13px; } .pos-z-report-pdf { min-height:360px; } }

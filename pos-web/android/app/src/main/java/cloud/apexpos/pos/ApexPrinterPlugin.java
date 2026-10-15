@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.provider.Settings;
 import android.hardware.usb.UsbConstants;
 import android.hardware.usb.UsbDevice;
@@ -27,6 +28,8 @@ import android.util.Base64;
 import android.util.Log;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -105,11 +108,12 @@ public class ApexPrinterPlugin extends Plugin {
 
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getContext().registerReceiver(usbPermissionReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            getContext().registerReceiver(usbPermissionReceiver, filter);
-        }
+        ContextCompat.registerReceiver(
+            getContext(),
+            usbPermissionReceiver,
+            filter,
+            ContextCompat.RECEIVER_NOT_EXPORTED
+        );
 
         usbDeviceStateReceiver =
             new BroadcastReceiver() {
@@ -129,11 +133,15 @@ public class ApexPrinterPlugin extends Plugin {
         usbStateFilter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         usbStateFilter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            getContext().registerReceiver(usbDeviceStateReceiver, usbStateFilter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            getContext().registerReceiver(usbDeviceStateReceiver, usbStateFilter);
-        }
+        ContextCompat.registerReceiver(
+            getContext(),
+            usbDeviceStateReceiver,
+            usbStateFilter,
+            // USB attach/detach are protected system broadcasts. Exporting this
+            // notification-only receiver preserves delivery from the system USB
+            // service; the custom permission-result receiver above stays private.
+            ContextCompat.RECEIVER_EXPORTED
+        );
     }
 
     @Override
@@ -251,7 +259,10 @@ public class ApexPrinterPlugin extends Plugin {
     @PluginMethod
     public void listBluetoothPrinters(PluginCall call) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-            && getPermissionState("bluetooth") != PermissionState.GRANTED) {
+            && (ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_CONNECT)
+                    != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_SCAN)
+                    != PackageManager.PERMISSION_GRANTED)) {
             Log.w(TAG, "Bluetooth bonded device read blocked: permission denied");
             call.reject("Bluetooth permission denied", "bluetooth_permission_denied");
             return;

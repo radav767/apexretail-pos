@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 
-const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/ShiftManagementPage.tsx", import.meta.url), "utf8");
+const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const modulePage = readFileSync(new URL("../src/PosModulePage.tsx", import.meta.url), "utf8");
 const formatter = readFileSync(new URL("../src/printing/receiptFormatter.ts", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/shift-management.css", import.meta.url), "utf8");
@@ -41,7 +41,7 @@ test("cash movements are online-only and never queued or represented as sales/ex
 });
 
 test("physical currency cards, drawer counts, variance, and shift history are shown", () => {
-  for (const text of ["Opening", "Current expected cash", "Counted", "Variance", "Recent shifts", "Cash movement history"]) {
+  for (const text of ["Opening", "Current expected cash", "Counted", "Variance", "Shift History", "Cash movement history"]) {
     assert.ok(page.includes(text), `missing ${text}`);
   }
   assert.match(page, /filter\(\(row\) => row\.cash_accepted\)/);
@@ -54,9 +54,40 @@ test("shift print template is informational, not a sales receipt", () => {
   assert.match(page, /Printing does not create a financial transaction/);
 });
 
-test("tablet, phone, narrow-phone, and safe-area layouts are defined", () => {
+test("closed shift success workflow exposes the required actions", () => {
+  assert.match(page, /SHIFT CLOSED SUCCESSFULLY/);
+  for (const label of ["View Z Report", "Print Z Report", "Return to Sales"]) {
+    assert.match(page, new RegExp(label));
+  }
+  assert.match(page, /setClosedShift\(response\.data\)/);
+});
+
+test("shift management exposes all operational sections", () => {
+  for (const label of ["Current Shift", "Open Shift", "Cash In / Cash Out", "Close Shift", "Shift History", "Z Reports"]) {
+    assert.match(page, new RegExp(label));
+  }
+});
+
+test("Z Reports use backend immutable JSON, PDF, and audited reprint APIs", () => {
+  assert.match(page, /`\/shifts\/\$\{target\.id\}\/z-report`/);
+  assert.match(page, /`\/shifts\/\$\{target\.id\}\/z-report\.pdf`/);
+  assert.match(page, /params: \{ reprint: true \}/);
+  assert.match(page, /responseType: "arraybuffer"/);
+  assert.match(page, /Immutable closing snapshot/);
+});
+
+test("thermal printing uses backend layout at the configured paper width", () => {
+  assert.match(app, /`\/shifts\/\$\{shift\.id\}\/z-report\/thermal`/);
+  assert.match(app, /paper_width: printerConfig\.paperWidth/);
+  assert.match(app, /authoritativeHtml/);
+  assert.match(app, /buildEscPosPayload\(snapshot, printerConfig\)/);
+});
+
+test("Z Report dialogs remain responsive for handheld layouts", () => {
   assert.match(css, /@media\(max-width:900px\)/);
   assert.match(css, /@media\(max-width:720px\)/);
+  assert.match(css, /\.pos-z-report-summary/);
+  assert.match(css, /\.pos-z-report-pdf/);
   assert.match(css, /@media\(max-width:390px\)/);
   assert.match(css, /env\(safe-area-inset-top\)/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);

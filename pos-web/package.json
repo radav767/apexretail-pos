@@ -17,7 +17,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test:discounts": "node scripts/run-discount-tests.mjs && node scripts/run-receipt-discount-tests.mjs && node scripts/test-offline-discounts.mjs && node --test tests/checkoutUi.test.mjs",
-    "test:offline-quarantine": "node scripts/test-offline-quarantine.mjs"
+    "test:offline-quarantine": "node scripts/test-offline-quarantine.mjs",
+    "test:shift-management": "node --test tests/shiftManagementUi.test.mjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",
