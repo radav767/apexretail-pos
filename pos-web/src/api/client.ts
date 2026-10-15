@@ -67,6 +67,14 @@ export function getApiErrorMessage(
       return data.detail;
     }
 
+    if (!error.response && (
+      error.code === "ERR_NETWORK" ||
+      error.code === "ECONNABORTED" ||
+      error.message === "Network Error"
+    )) {
+      return "Unable to reach ApexPOS. Check the connection and verify the transaction status before retrying.";
+    }
+
     if (typeof error.message === "string") {
       return error.message;
     }

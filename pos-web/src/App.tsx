@@ -399,6 +399,10 @@ const [loggedIn, setLoggedIn] = useState(
   const activeDiscoveryScopeRef = useRef<string | null>(null);
   const saleSubmissionInFlightRef = useRef(false);
   const creditClientSaleIdRef = useRef<string | null>(null);
+  const nonCreditSaleIdentityRef = useRef<{
+    fingerprint: string;
+    clientSaleId: string;
+  } | null>(null);
   const salesSearchWedgeRef = useRef(new KeyboardWedgeDetector());
 
   useKeyboardWedge(
@@ -2054,6 +2058,7 @@ const [loggedIn, setLoggedIn] = useState(
     setReceipt(null);
     setReceiptItems([]);
     setMessage("");
+    nonCreditSaleIdentityRef.current = null;
   }
 
 
@@ -2427,7 +2432,7 @@ const [loggedIn, setLoggedIn] = useState(
     setCreditDialogMessage("");
 
     const completedItems = discounted.items;
-    const clientSaleId = paymentMethod === "credit"
+    let clientSaleId = paymentMethod === "credit"
       ? creditClientSaleIdRef.current || createClientSaleId()
       : createClientSaleId();
 
@@ -2503,6 +2508,22 @@ const [loggedIn, setLoggedIn] = useState(
       receivedForReceipt = 0;
     }
 
+    if (paymentMethod !== "credit") {
+      const fingerprint = JSON.stringify({
+        ...payload,
+        client_sale_id: null,
+      });
+      const pendingIdentity = nonCreditSaleIdentityRef.current;
+      clientSaleId = pendingIdentity?.fingerprint === fingerprint
+        ? pendingIdentity.clientSaleId
+        : createClientSaleId();
+      nonCreditSaleIdentityRef.current = {
+        fingerprint,
+        clientSaleId,
+      };
+      payload.client_sale_id = clientSaleId;
+    }
+
     const completeOfflineSale = async () => {
       if (paymentMethod === "credit") {
         throw new Error("Credit sales are online-only and cannot be queued.");
@@ -2529,6 +2550,7 @@ const [loggedIn, setLoggedIn] = useState(
         client_created_at: new Date().toISOString(),
       };
       await queueOfflineSale(queuedPayload);
+      nonCreditSaleIdentityRef.current = null;
 
       const rate =
         Math.max(0, configuredTaxRate);
@@ -2637,56 +2659,55 @@ const [loggedIn, setLoggedIn] = useState(
       );
     };
 
+    const acceptOnlineSale = async (savedReceipt: Receipt) => {
+      const completedReceipt = paymentMethod === "credit" && creditCustomer
+        ? {
+            ...savedReceipt,
+            customer_id: savedReceipt.customer_id || creditCustomer.id,
+            customer_name_snapshot:
+              savedReceipt.customer_name_snapshot || creditCustomer.name,
+            customer_code_snapshot:
+              savedReceipt.customer_code_snapshot || creditCustomer.customer_code,
+            credit_due_date: creditProjection.dueDate,
+            credit_outstanding_balance: total.toFixed(2),
+          }
+        : savedReceipt;
+
+      setReceipt(completedReceipt);
+      setReceiptItems(completedItems);
+      setShowTender(false);
+      setShowCreditSale(false);
+      setCart([]);
+      setSaleDiscount("0");
+      setAmountReceived("");
+      setMessage("Sale completed successfully");
+
+      await archiveAndMaybePrintReceipt(
+        buildReceiptSnapshot(
+          completedReceipt,
+          completedItems.map((item) => ({
+            product_id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            selling_unit: item.selling_unit,
+            unit_price: item.selling_price,
+            line_total: item.line_total,
+            line_discount_amount: item.line_discount_amount,
+          })),
+        ),
+      );
+
+      await loadProducts(companyId, branchId || undefined);
+      creditClientSaleIdRef.current = null;
+      nonCreditSaleIdentityRef.current = null;
+    };
+
+    let savedOnlineReceipt: Receipt | null = null;
     try {
       try {
         const response =
           await api.post("/sales", payload);
-
-        const savedReceipt = response.data as Receipt;
-        const completedReceipt = paymentMethod === "credit" && creditCustomer
-          ? {
-              ...savedReceipt,
-              customer_id: savedReceipt.customer_id || creditCustomer.id,
-              customer_name_snapshot:
-                savedReceipt.customer_name_snapshot || creditCustomer.name,
-              customer_code_snapshot:
-                savedReceipt.customer_code_snapshot || creditCustomer.customer_code,
-              credit_due_date: creditProjection.dueDate,
-              credit_outstanding_balance: total.toFixed(2),
-            }
-          : savedReceipt;
-
-        setReceipt(completedReceipt);
-        setReceiptItems(completedItems);
-        setShowTender(false);
-        setShowCreditSale(false);
-        setCart([]);
-        setSaleDiscount("0");
-        setAmountReceived("");
-        setMessage(
-          "Sale completed successfully",
-        );
-
-        await archiveAndMaybePrintReceipt(
-          buildReceiptSnapshot(
-            completedReceipt,
-            completedItems.map((item) => ({
-              product_id: item.id,
-              name: item.name,
-              quantity: item.quantity,
-              selling_unit: item.selling_unit,
-              unit_price: item.selling_price,
-              line_total: item.line_total,
-              line_discount_amount: item.line_discount_amount,
-            })),
-          ),
-        );
-
-        await loadProducts(
-          companyId,
-          branchId || undefined,
-        );
-        creditClientSaleIdRef.current = null;
+        savedOnlineReceipt = response.data as Receipt;
       } catch (error: any) {
         /*
          * Only network failures are converted into
@@ -2695,6 +2716,23 @@ const [loggedIn, setLoggedIn] = useState(
          * Validation errors from the backend are NOT
          * queued, because they need to be corrected.
          */
+        if (isNetworkFailure(error)) {
+          try {
+            const reconciliation = await api.get<Receipt>(
+              `/sales/by-client-id/${companyId}/${clientSaleId}`,
+            );
+            await acceptOnlineSale(reconciliation.data);
+            return;
+          } catch (reconciliationError: any) {
+            if (
+              reconciliationError?.response?.status !== 404 &&
+              !isNetworkFailure(reconciliationError)
+            ) {
+              throw reconciliationError;
+            }
+          }
+        }
+
         if (
           paymentMethod !== "credit" &&
           isAndroidNativeApp() &&
@@ -2710,7 +2748,16 @@ const [loggedIn, setLoggedIn] = useState(
           return;
         }
 
+        if (isNetworkFailure(error)) {
+          throw new Error(
+            "Sale status could not be confirmed. Reconnect and retry without changing the cart; ApexPOS will reuse the same transaction reference and cannot deduct stock twice.",
+          );
+        }
+
         throw error;
+      }
+      if (savedOnlineReceipt) {
+        await acceptOnlineSale(savedOnlineReceipt);
       }
     } catch (error: any) {
       const failureMessage = getApiErrorMessage(error, "Sale failed");
@@ -2737,6 +2784,7 @@ const [loggedIn, setLoggedIn] = useState(
     setCreditCustomers([]);
     setCreditDialogMessage("");
     creditClientSaleIdRef.current = null;
+    nonCreditSaleIdentityRef.current = null;
     setMessage("");
     setSearch("");
   }
@@ -2786,6 +2834,7 @@ const [loggedIn, setLoggedIn] = useState(
     setCreditCustomers([]);
     setCreditDialogMessage("");
     creditClientSaleIdRef.current = null;
+    nonCreditSaleIdentityRef.current = null;
     setAmountReceived("");
     setAuthMode("login");
   }

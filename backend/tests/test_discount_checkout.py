@@ -13,6 +13,41 @@ from tests.test_sales_history_actions import RecordingDB
 
 
 class DiscountCheckoutTest(unittest.IsolatedAsyncioTestCase):
+    async def test_client_sale_status_requires_same_tenant_authentication(self):
+        company_id = uuid4()
+        sale_id = uuid4()
+        sale = SimpleNamespace(id=sale_id)
+        repo = SimpleNamespace(
+            get_by_client_sale_id=AsyncMock(return_value=sale),
+        )
+        service = SalesService(repo)
+
+        with self.assertRaisesRegex(HTTPException, "Authentication"):
+            await service.by_client_sale_id(company_id, uuid4(), None)
+
+        wrong_tenant = SimpleNamespace(
+            company_id=uuid4(),
+            actor_type="user",
+        )
+        with self.assertRaisesRegex(HTTPException, "Forbidden"):
+            await service.by_client_sale_id(
+                company_id,
+                uuid4(),
+                wrong_tenant,
+            )
+
+        actor = SimpleNamespace(
+            company_id=company_id,
+            actor_type="employee",
+            permissions={"sales": True},
+        )
+        result = await service.by_client_sale_id(
+            company_id,
+            uuid4(),
+            actor,
+        )
+        self.assertIs(result, sale)
+
     async def checkout(
         self,
         discount="0.20",

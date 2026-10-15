@@ -19,6 +19,14 @@ test("queued offline sales retain their cashier-bound signed shift identity", ()
   assert.match(app, /offline_shift_token: currentShift\?\.offline_shift_token \|\| null/);
 });
 
+test("ambiguous online sale retries reconcile and reuse one transaction identity", () => {
+  assert.match(app, /nonCreditSaleIdentityRef/);
+  assert.match(app, /pendingIdentity\?\.fingerprint === fingerprint/);
+  assert.match(app, /payload\.client_sale_id = clientSaleId/);
+  assert.match(app, /\/sales\/by-client-id\/\$\{companyId\}\/\$\{clientSaleId\}/);
+  assert.match(app, /cannot deduct stock twice/);
+});
+
 test("zero-value discount summaries are conditional", () => {
   assert.match(app, /Number\(discounted\.sale_discount_amount\) > 0/);
   assert.doesNotMatch(app, /Item discounts applied:/);

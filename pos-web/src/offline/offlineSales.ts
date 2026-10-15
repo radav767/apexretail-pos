@@ -152,13 +152,11 @@ export function isNetworkFailure(error: unknown): boolean {
     code?: string;
     message?: string;
     response?: unknown;
+    request?: unknown;
   };
 
-  if (!candidate?.response) {
-    return true;
-  }
-
-  return (
+  return !candidate?.response && (
+    Boolean(candidate?.request) ||
     candidate.code === "ERR_NETWORK" ||
     candidate.code === "ECONNABORTED" ||
     candidate.message === "Network Error"

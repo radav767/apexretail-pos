@@ -66,6 +66,25 @@ async def create_refund(
     )
 
 
+# This route lets a POS reconcile an ambiguous transport timeout before it
+# permits another submission.  It must remain above /{company_id}.
+@router.get(
+    "/by-client-id/{company_id}/{client_sale_id}",
+    response_model=SaleOut,
+)
+async def sale_by_client_id(
+    company_id: UUID,
+    client_sale_id: UUID,
+    service: SalesService = Depends(get_service),
+    actor: AuthActor | None = Depends(get_optional_auth_actor),
+):
+    return await service.by_client_sale_id(
+        company_id,
+        client_sale_id,
+        actor,
+    )
+
+
 # This specific route must remain above /{company_id}.
 @router.get(
     "/history/{company_id}",

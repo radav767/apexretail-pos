@@ -34,6 +34,27 @@ class SalesService:
     def __init__(self, repo: SalesRepository):
         self.repo = repo
 
+    async def by_client_sale_id(self, company_id, client_sale_id, actor):
+        if actor is None:
+            raise HTTPException(401, "Authentication is required")
+        if actor.company_id != company_id:
+            raise HTTPException(403, "Forbidden")
+        if (
+            actor.actor_type == "employee"
+            and (
+                not actor.permissions
+                or actor.permissions.get("sales") is False
+            )
+        ):
+            raise HTTPException(403, "Permission denied")
+        sale = await self.repo.get_by_client_sale_id(
+            company_id,
+            client_sale_id,
+        )
+        if sale is None:
+            raise HTTPException(404, "Sale transaction was not found")
+        return sale
+
     @staticmethod
     def validate_currency_quote(data: SaleCreate, snapshot, current_version: int | None):
         if (
