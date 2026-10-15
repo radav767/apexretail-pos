@@ -2432,6 +2432,11 @@ const [loggedIn, setLoggedIn] = useState(
     setCreditDialogMessage("");
 
     const completedItems = discounted.items;
+    // Capture the original transaction time before the first submission. It
+    // is attached only if this transaction has to be persisted offline.
+    // Online requests deliberately omit both offline-only fields so the
+    // backend validates them against the cashier's currently open shift.
+    const offlineClientCreatedAt = new Date().toISOString();
     let clientSaleId = paymentMethod === "credit"
       ? creditClientSaleIdRef.current || createClientSaleId()
       : createClientSaleId();
@@ -2456,7 +2461,6 @@ const [loggedIn, setLoggedIn] = useState(
       ),
       payment_method: paymentMethod,
       shift_id: currentShift?.id || null,
-      offline_shift_token: currentShift?.offline_shift_token || null,
       discount_amount: discounted.discount_amount,
       sale_discount_amount: discounted.sale_discount_amount,
       items: completedItems.map((item) => ({
@@ -2543,11 +2547,12 @@ const [loggedIn, setLoggedIn] = useState(
       // with older queued rows remain compatible and are never rewritten.
       const queuedPayload = {
         ...payload,
+        offline_shift_token: currentShift?.offline_shift_token || null,
         // A base-currency offline sale remains compatible with the existing
         // queue and is valued from authoritative company settings at sync.
         currency_config_version: undefined,
         exchange_rate_id: undefined,
-        client_created_at: new Date().toISOString(),
+        client_created_at: offlineClientCreatedAt,
       };
       await queueOfflineSale(queuedPayload);
       nonCreditSaleIdentityRef.current = null;
@@ -4582,6 +4587,7 @@ const paymentGrid: CSSProperties = {
 
 const primaryButton: CSSProperties = {
   width: "100%",
+  boxSizing: "border-box",
   padding: 15,
   marginTop: 16,
   background: "#111827",
@@ -4593,6 +4599,7 @@ const primaryButton: CSSProperties = {
 
 const secondaryButton: CSSProperties = {
   width: "100%",
+  boxSizing: "border-box",
   padding: 13,
   marginTop: 10,
   background: "#e5e7eb",
@@ -4615,17 +4622,21 @@ const overlay: CSSProperties = {
   background: "rgba(15, 23, 42, 0.62)",
   display: "grid",
   placeItems: "center",
-  padding: 20,
+  padding: "clamp(8px, 3vw, 20px)",
+  boxSizing: "border-box",
+  overflow: "hidden",
 };
 
 const modalCard: CSSProperties = {
-  width: 460,
+  width: "min(460px, 100%)",
   maxWidth: "100%",
-  maxHeight: "calc(100vh - 40px)",
+  maxHeight: "calc(100dvh - 16px)",
+  boxSizing: "border-box",
   overflowY: "auto",
+  overflowX: "hidden",
   background: "white",
   borderRadius: 22,
-  padding: 30,
+  padding: "clamp(16px, 5vw, 30px)",
   boxShadow: "0 24px 70px rgba(0, 0, 0, 0.3)",
 };
 
@@ -4638,21 +4649,30 @@ const modalLabel: CSSProperties = {
 
 const tenderInput: CSSProperties = {
   width: "100%",
-  padding: 18,
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  padding: "clamp(12px, 4vw, 18px)",
   border: "2px solid #111827",
   borderRadius: 12,
-  fontSize: 28,
+  fontSize: "clamp(20px, 7vw, 28px)",
   fontWeight: 800,
 };
 
 const changeBox: CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
+  flexWrap: "wrap",
+  minWidth: 0,
+  maxWidth: "100%",
+  boxSizing: "border-box",
+  gap: 8,
   marginTop: 20,
-  padding: 18,
+  padding: "clamp(12px, 4vw, 18px)",
   borderRadius: 12,
   background: "#f3f4f6",
-  fontSize: 22,
+  fontSize: "clamp(17px, 5.5vw, 22px)",
+  overflowWrap: "anywhere",
 };
 
 const successMark: CSSProperties = {
