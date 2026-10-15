@@ -368,11 +368,14 @@ class SubscriptionService:
         self,
         subscription: CompanySubscription,
     ) -> dict:
-        now = datetime.now(UTC)
-        offline_grace_expires_at = now + timedelta(
+        # JWT NumericDate claims have whole-second precision. Derive every
+        # entitlement boundary from that same aligned instant so the ISO grace
+        # deadline cannot exceed the signed maximum by a fractional second.
+        issued_at = datetime.now(UTC).replace(microsecond=0)
+        offline_grace_expires_at = issued_at + timedelta(
             hours=self.policy.offline_grace_hours
         )
-        snapshot_expires_at = now + timedelta(
+        snapshot_expires_at = issued_at + timedelta(
             hours=min(self.policy.offline_grace_hours, 12)
         )
         token = create_entitlement_snapshot_token(
@@ -381,6 +384,7 @@ class SubscriptionService:
             plan=subscription.plan,
             offline_grace_expires_at=offline_grace_expires_at,
             snapshot_expires_at=snapshot_expires_at,
+            issued_at=issued_at,
         )
         writes_allowed = subscription.status in WRITE_ALLOWED_STATUSES
         return {

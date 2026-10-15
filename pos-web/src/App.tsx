@@ -55,7 +55,9 @@ import {
   subtractCurrencyAmounts,
 } from "./decimal";
 import {
+  classifyEntitlementRefreshFailure,
   entitlementReconnectMessage,
+  entitlementRefreshFailureMessage,
   loadEntitlementSnapshot,
   saveEntitlementSnapshot,
   verifyEntitlementSnapshotDetailed,
@@ -352,6 +354,8 @@ const [loggedIn, setLoggedIn] = useState(
     useState<CachedEntitlementSnapshot | null>(null);
   const [entitlementVerificationMessage, setEntitlementVerificationMessage] =
     useState("");
+  const [entitlementRefreshNotice, setEntitlementRefreshNotice] =
+    useState("");
   const [weightedProduct, setWeightedProduct] =
     useState<Product | null>(null);
   const [weightedQuantity, setWeightedQuantity] = useState("0.250");
@@ -569,15 +573,6 @@ const [loggedIn, setLoggedIn] = useState(
         setPrinterConfigLoaded(true);
       });
   }, []);
-
-  useEffect(() => {
-    if (!companyId) {
-      return;
-    }
-    setEntitlementSnapshot(
-      loadEntitlementSnapshot(companyId),
-    );
-  }, [companyId]);
 
   const signalPrinterRefresh = useCallback((reason: string) => {
     console.info("[printer] discovery signal", { reason });
@@ -889,28 +884,53 @@ const [loggedIn, setLoggedIn] = useState(
         message: snapshot.message || null,
         updated_at: new Date().toISOString(),
       };
-      saveEntitlementSnapshot(cached);
       const verification = await verifyEntitlementSnapshotDetailed(cached);
       if (verification.ok) {
+        // Never replace the last known-good offline authorization until the
+        // newly issued snapshot has passed local signature and claim checks.
+        saveEntitlementSnapshot(cached);
         setEntitlementSnapshot(cached);
         setEntitlementVerificationMessage("");
+        setEntitlementRefreshNotice("");
       } else {
         setEntitlementSnapshot(null);
+        setEntitlementRefreshNotice("");
         setEntitlementVerificationMessage(
           entitlementReconnectMessage(verification.category),
         );
       }
     } catch (error) {
+      const refreshFailure = classifyEntitlementRefreshFailure(error);
+      if (refreshFailure.category !== "temporary_unavailable") {
+        setEntitlementSnapshot(null);
+        setEntitlementRefreshNotice("");
+        setEntitlementVerificationMessage(
+          entitlementRefreshFailureMessage(refreshFailure, false),
+        );
+        throw error;
+      }
+
       const cached = loadEntitlementSnapshot(selectedCompanyId);
       if (!cached) {
-        throw error;
+        setEntitlementSnapshot(null);
+        setEntitlementVerificationMessage("");
+        setEntitlementRefreshNotice(
+          entitlementRefreshFailureMessage(refreshFailure, false),
+        );
+        return;
       }
       const verification = await verifyEntitlementSnapshotDetailed(cached);
       if (verification.ok) {
         setEntitlementSnapshot(cached);
         setEntitlementVerificationMessage("");
+        setEntitlementRefreshNotice(
+          entitlementRefreshFailureMessage(refreshFailure, true),
+        );
       } else {
         setEntitlementSnapshot(null);
+        setEntitlementRefreshNotice(
+          entitlementRefreshFailureMessage(refreshFailure, false),
+        );
         setEntitlementVerificationMessage(
           entitlementReconnectMessage(verification.category),
         );
@@ -2845,6 +2865,54 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   useEffect(() => {
+    if (!companyId) {
+      setEntitlementSnapshot(null);
+      setEntitlementVerificationMessage("");
+      setEntitlementRefreshNotice("");
+      return;
+    }
+
+    let cancelled = false;
+    const cached = loadEntitlementSnapshot(companyId);
+    setEntitlementRefreshNotice("");
+    if (!cached) {
+      setEntitlementSnapshot(null);
+      setEntitlementVerificationMessage("");
+      return;
+    }
+    void verifyEntitlementSnapshotDetailed(cached).then((verification) => {
+      if (cancelled) return;
+      if (verification.ok) {
+        setEntitlementSnapshot(cached);
+        setEntitlementVerificationMessage("");
+      } else {
+        setEntitlementSnapshot(null);
+        setEntitlementVerificationMessage(
+          entitlementReconnectMessage(verification.category),
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!loggedIn || !companyId) return;
+
+    const refreshAfterReconnect = () => {
+      void loadSubscriptionSnapshot(companyId).catch((error) => {
+        console.warn("[entitlement] refresh after reconnect failed", {
+          category: classifyEntitlementRefreshFailure(error).category,
+        });
+      });
+    };
+    window.addEventListener("online", refreshAfterReconnect);
+    return () => window.removeEventListener("online", refreshAfterReconnect);
+  }, [loggedIn, companyId]);
+
+  useEffect(() => {
     if (!loggedIn || !companyId) {
       return;
     }
@@ -3806,6 +3874,11 @@ const [loggedIn, setLoggedIn] = useState(
           {entitlementVerificationMessage && (
             <div className="subscription-banner subscription-banner-error" role="alert">
               {entitlementVerificationMessage}
+            </div>
+          )}
+          {entitlementRefreshNotice && (
+            <div className="subscription-banner" role="status">
+              {entitlementRefreshNotice}
             </div>
           )}
           </div>

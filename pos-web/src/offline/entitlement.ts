@@ -59,6 +59,11 @@ export type EntitlementVerificationResult =
   | { ok: true; claims: EntitlementClaims; kid: string; legacy: boolean }
   | { ok: false; category: EntitlementFailureCategory; kid?: string };
 
+export type EntitlementRefreshFailure = {
+  category: "authorization_rejected" | "temporary_unavailable" | "request_rejected";
+  status?: number;
+};
+
 type EntitlementKeyringInput = EntitlementKeyring | string;
 const KID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
 
@@ -169,6 +174,53 @@ export function entitlementReconnectMessage(category: EntitlementFailureCategory
     return "Offline authorization has expired. Reconnect and reload the POS to renew the subscription snapshot.";
   }
   return "The saved POS authorization could not be verified. Reconnect and reload the POS.";
+}
+
+export function classifyEntitlementRefreshFailure(
+  error: unknown,
+): EntitlementRefreshFailure {
+  const candidate = error && typeof error === "object"
+    ? error as {
+        code?: unknown;
+        message?: unknown;
+        response?: { status?: unknown };
+      }
+    : null;
+  const rawStatus = candidate?.response?.status;
+  const status = typeof rawStatus === "number" && Number.isInteger(rawStatus)
+    ? rawStatus
+    : undefined;
+
+  if (status === 401 || status === 403) {
+    return { category: "authorization_rejected", status };
+  }
+  if (
+    status === 408 || status === 425 || status === 429 ||
+    (status != null && status >= 500) ||
+    (status == null && ["ERR_NETWORK", "ECONNABORTED", "ETIMEDOUT"]
+      .includes(String(candidate?.code || ""))) ||
+    (status == null && String(candidate?.message || "") === "Network Error")
+  ) {
+    return { category: "temporary_unavailable", ...(status == null ? {} : { status }) };
+  }
+  return { category: "request_rejected", ...(status == null ? {} : { status }) };
+}
+
+export function entitlementRefreshFailureMessage(
+  failure: EntitlementRefreshFailure,
+  hasVerifiedSnapshot: boolean,
+): string {
+  if (failure.category === "authorization_rejected") {
+    return `Online authorization was rejected (HTTP ${failure.status}). Sign in again before continuing online.`;
+  }
+  if (failure.category === "temporary_unavailable" && hasVerifiedSnapshot) {
+    return "Connection temporarily unavailable. The saved POS authorization is verified and remains subject to its offline expiry.";
+  }
+  if (failure.category === "temporary_unavailable") {
+    return "Connection temporarily unavailable and no valid saved POS authorization is available.";
+  }
+  const statusSuffix = failure.status == null ? "" : ` (HTTP ${failure.status})`;
+  return `POS authorization refresh was rejected${statusSuffix}. Reconnect or sign in again.`;
 }
 
 export async function verifyEntitlementSnapshotDetailed(

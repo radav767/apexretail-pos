@@ -3,7 +3,9 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
 import {
+  classifyEntitlementRefreshFailure,
   entitlementReconnectMessage,
+  entitlementRefreshFailureMessage,
   type CachedEntitlementSnapshot,
   type EntitlementKeyring,
   isEntitlementSnapshotUsable,
@@ -153,6 +155,15 @@ test("expiry, offline grace, long-lived claims and company mismatch fail", async
   assert.equal(await category(snapshot(createToken(), otherCompanyId)), "company_mismatch");
 });
 
+test("fractional grace beyond the signed maximum fails closed", async () => {
+  const fractionallyOversizedGrace = new Date(
+    now + keyring.max_offline_grace_seconds * 1000 + 123,
+  ).toISOString();
+  assert.equal(await category(snapshot(createToken({
+    payload: claims({ offline_grace_expires_at: fractionallyOversizedGrace }),
+  }))), "offline_grace_exceeded");
+});
+
 test("retired key and refresh/reconnect guidance are explicit", async () => {
   const retiredRing: EntitlementKeyring = {
     ...keyring,
@@ -167,4 +178,21 @@ test("retired key and refresh/reconnect guidance are explicit", async () => {
     assert.equal(result.category, "key_retired");
     assert.match(entitlementReconnectMessage(result.category), /Reconnect and reload/i);
   }
+});
+
+test("refresh failures distinguish rejected credentials from temporary outages", () => {
+  const expired = classifyEntitlementRefreshFailure({ response: { status: 401 } });
+  const revoked = classifyEntitlementRefreshFailure({ response: { status: 403 } });
+  const offline = classifyEntitlementRefreshFailure({ code: "ERR_NETWORK" });
+  const timeout = classifyEntitlementRefreshFailure({ code: "ECONNABORTED" });
+  const unavailable = classifyEntitlementRefreshFailure({ response: { status: 503 } });
+
+  assert.deepEqual(expired, { category: "authorization_rejected", status: 401 });
+  assert.deepEqual(revoked, { category: "authorization_rejected", status: 403 });
+  assert.deepEqual(offline, { category: "temporary_unavailable" });
+  assert.deepEqual(timeout, { category: "temporary_unavailable" });
+  assert.deepEqual(unavailable, { category: "temporary_unavailable", status: 503 });
+  assert.match(entitlementRefreshFailureMessage(expired, false), /HTTP 401/);
+  assert.match(entitlementRefreshFailureMessage(offline, true), /saved POS authorization is verified/i);
+  assert.match(entitlementRefreshFailureMessage(offline, false), /no valid saved/i);
 });

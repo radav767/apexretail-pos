@@ -20,7 +20,17 @@ test("refresh and offline fallback reverify cached snapshots", () => {
   assert.match(app, /loadEntitlementSnapshot\(selectedCompanyId\)/);
   assert.match(app, /verifyEntitlementSnapshotDetailed\(cached\)/);
   assert.match(app, /entitlementReconnectMessage\(verification\.category\)/);
+  assert.match(app, /classifyEntitlementRefreshFailure\(error\)/);
+  assert.match(app, /refreshFailure\.category !== "temporary_unavailable"/);
+  assert.match(app, /saveEntitlementSnapshot\(cached\)[\s\S]*setEntitlementSnapshot\(cached\)/);
   assert.match(app, /role="alert"/);
+});
+
+test("restart restores verified cache and reconnection refreshes it", () => {
+  assert.match(app, /loadEntitlementSnapshot\(companyId\)/);
+  assert.match(app, /window\.addEventListener\("online", refreshAfterReconnect\)/);
+  assert.match(app, /setEntitlementRefreshNotice\(""\)/);
+  assert.match(app, /role="status"/);
 });
 
 test("unknown, retired and legacy keys instruct the operator to reconnect", () => {

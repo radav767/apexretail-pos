@@ -186,6 +186,41 @@ class TrialCreationTest(unittest.IsolatedAsyncioTestCase):
 
 
 class SubscriptionSecurityTest(unittest.TestCase):
+    def test_snapshot_uses_one_second_aligned_issuance_boundary(self):
+        service = SubscriptionService(
+            db=SimpleNamespace(),
+            offline_grace_hours=72,
+        )
+        subscription = SimpleNamespace(
+            company_id=uuid4(),
+            status="active",
+            plan="monthly",
+            trial_ends_at=None,
+            current_period_ends_at=datetime(2026, 11, 1, tzinfo=UTC),
+        )
+
+        with patch(
+            "app.subscriptions.service.create_entitlement_snapshot_token",
+            return_value="signed-snapshot",
+        ) as create_token:
+            snapshot = service.snapshot_for(subscription)
+
+        token_args = create_token.call_args.kwargs
+        issued_at = token_args["issued_at"]
+        self.assertEqual(issued_at.microsecond, 0)
+        self.assertEqual(
+            token_args["snapshot_expires_at"] - issued_at,
+            timedelta(hours=12),
+        )
+        self.assertEqual(
+            token_args["offline_grace_expires_at"] - issued_at,
+            timedelta(hours=72),
+        )
+        self.assertEqual(
+            snapshot["offline_grace_expires_at"],
+            token_args["offline_grace_expires_at"],
+        )
+
     def test_webhook_signature_verification_rejects_invalid_signature(self):
         service = SubscriptionService(
             db=SimpleNamespace(),
