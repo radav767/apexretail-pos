@@ -8,11 +8,17 @@ const modulePage = readFileSync(new URL("../src/PosModulePage.tsx", import.meta.
 const formatter = readFileSync(new URL("../src/printing/receiptFormatter.ts", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/shift-management.css", import.meta.url), "utf8");
 
-test("Shift Management is reachable from the cashier menu and module router", () => {
-  assert.match(app, /showPosModule\("Shift Management"\)/);
-  assert.match(app, /"Shift Management".*"Products"/);
-  assert.match(modulePage, /activeModule === "Shift Management"/);
-  assert.match(modulePage, /<ShiftManagementPage/);
+test("Shift Management is nested under Sales Management and not a top-level menu entry", () => {
+  assert.doesNotMatch(app, /showPosModule\("Shift Management"\)/);
+  assert.match(app, /showPosModule\("Sales Management"\)/);
+  assert.match(modulePage, /activeModule === "Sales Management"[\s\S]*<ShiftManagementPage/);
+  assert.match(modulePage, /<h2>Sales History<\/h2>/);
+});
+
+test("Sales automatically checks and gates on the authenticated cashier's current shift", () => {
+  assert.match(app, /api\.get\("\/shifts\/current"\)/);
+  assert.match(app, /activePosModule === "Sales"[\s\S]*!currentShift/);
+  assert.match(app, /offline_shift_token: currentShift\?\.offline_shift_token/);
 });
 
 test("open/current/close and cashier history use authoritative shift APIs", () => {

@@ -29,7 +29,8 @@ from app.sales.repository import SalesRepository
 from app.sales.schema import SaleCreate, SaleItemCreate
 from app.sales.service import SalesService
 from app.shifts.repository import ShiftRepository
-from app.shifts.schema import CashMovementCreate, ShiftClose, ShiftClosingCount, ShiftOpen, ShiftOpeningBalance
+from app.shifts.schema import CashMovementCreate, OfflineSaleResolutionCreate, ShiftClose, ShiftClosingCount, ShiftOpen, ShiftOpeningBalance
+from app.shifts.report import simple_pdf, thermal_html
 from app.shifts.service import ShiftService
 
 
@@ -42,10 +43,12 @@ BRANCH = UUID("83000000-0000-0000-0000-000000000001")
 OTHER_BRANCH = UUID("83000000-0000-0000-0000-000000000002")
 EMPLOYEE = UUID("84000000-0000-0000-0000-000000000001")
 OTHER_EMPLOYEE = UUID("84000000-0000-0000-0000-000000000002")
+SECOND_EMPLOYEE = UUID("84000000-0000-0000-0000-000000000003")
 DEVICE = UUID("85000000-0000-0000-0000-000000000001")
 OTHER_DEVICE = UUID("85000000-0000-0000-0000-000000000002")
 POS_SESSION = UUID("86000000-0000-0000-0000-000000000001")
 OTHER_POS_SESSION = UUID("86000000-0000-0000-0000-000000000002")
+SECOND_POS_SESSION = UUID("86000000-0000-0000-0000-000000000003")
 USER = UUID("87000000-0000-0000-0000-000000000001")
 PRODUCT = UUID("88000000-0000-0000-0000-000000000001")
 CATEGORY = UUID("89000000-0000-0000-0000-000000000001")
@@ -60,6 +63,32 @@ class DecimalConversionTest(unittest.TestCase):
         self.assertEqual(quantize_currency(Decimal("1.23456"), 4), Decimal("1.2346"))
 
 
+class ZReportRendererTest(unittest.TestCase):
+    def test_pdf_symbols_pagination_and_thermal_widths(self):
+        report = {
+            "business_name": "Apex Retail", "shop_name": "Main", "branch_name": "Central",
+            "register_name": "POS 1", "cashier_name": "Cashier", "shift_number": "SHF-1",
+            "opened_at": "2026-10-14T08:00:00Z", "closed_at": "2026-10-14T16:00:00Z",
+            "closing_user_name": "Manager", "report_generated_at": "2026-10-14T16:00:01Z",
+            "summary": {"base_currency_code": "USD"},
+            "currencies": [{
+                "currency_code": code, "symbol": symbol, "opening_float": "0.00",
+                "cash_sales": "0.00", "cash_refunds": "0.00", "cash_settlements": "0.00",
+                "cash_in": "0.00", "cash_out": "0.00", "expected_cash": "0.00",
+                "counted_cash": "0.00", "variance": "0.00",
+            } for code, symbol in (("USD", "$"), ("EUR", "€"), ("GBP", "£"))],
+        }
+        pdf = simple_pdf(report)
+        self.assertTrue(pdf.startswith(b"%PDF-1.4"))
+        self.assertIn(b"/Encoding /WinAnsiEncoding", pdf)
+        self.assertIn(b"EUR \(\x80\)", pdf)
+        self.assertIn(b"GBP \(\xa3\)", pdf)
+        self.assertIn("size:58mm auto", thermal_html(report, "58mm"))
+        self.assertIn("size:80mm auto", thermal_html(report, "80mm"))
+        long_report = {**report, "currencies": report["currencies"] * 3}
+        self.assertIn(b"/Count 2", simple_pdf(long_report))
+
+
 class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         database_url = os.getenv(TEST_DATABASE_ENV)
@@ -71,7 +100,7 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
         self.engine = create_async_engine(database_url)
         async with self.engine.begin() as connection:
             await connection.execute(text("""
-                TRUNCATE audit_events, cashier_shift_cash_movements, cashier_shift_currency_snapshots, cashier_shifts,
+                TRUNCATE audit_events, offline_sale_resolutions, cashier_shift_cash_movements, cashier_shift_currency_snapshots, cashier_shifts,
                 expenses, expense_categories, credit_settlements, credit_receivables,
                 inventory_movements, sale_items, sales, inventory_balances, products,
                 categories, pos_sessions, employees, devices, users, company_settings,
@@ -111,14 +140,16 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
             VALUES (:user,:company,'phase5-owner@example.test','x','owner',true,false);
             INSERT INTO employees (id,company_id,shop_id,branch_id,name,pin,role,permissions,active,deleted) VALUES
             (:employee,:company,:shop,:branch,'Cashier','x','cashier','{}'::jsonb,true,false),
+            (:second_employee,:company,:shop,:branch,'Second Cashier','x','cashier','{}'::jsonb,true,false),
             (:other_employee,:other,:other_shop,:other_branch,'Other Cashier','x','cashier','{}'::jsonb,true,false);
             INSERT INTO devices (id,company_id,shop_id,branch_id,name,device_key,platform,app_version,status,assignment_revision,active,deleted) VALUES
             (:device,:company,:shop,:branch,'POS 1','phase5-device','web','1','active',1,true,false),
             (:other_device,:other,:other_shop,:other_branch,'POS 2','phase5-other-device','web','1','active',1,true,false);
             INSERT INTO pos_sessions (id,company_id,employee_id,device_id,shop_id,branch_id,token_hash,expires_at)
             VALUES (:session,:company,:employee,:device,:shop,:branch,'phase5-token',now()+interval '1 day'),
+                   (:second_session,:company,:second_employee,:device,:shop,:branch,'phase5-second-token',now()+interval '1 day'),
                    (:other_session,:other,:other_employee,:other_device,:other_shop,:other_branch,'phase5-other-token',now()+interval '1 day');
-        """, dict(company=COMPANY, other=OTHER_COMPANY, shop=SHOP, other_shop=OTHER_SHOP, branch=BRANCH, other_branch=OTHER_BRANCH, user=USER, employee=EMPLOYEE, other_employee=OTHER_EMPLOYEE, device=DEVICE, other_device=OTHER_DEVICE, session=POS_SESSION, other_session=OTHER_POS_SESSION))
+        """, dict(company=COMPANY, other=OTHER_COMPANY, shop=SHOP, other_shop=OTHER_SHOP, branch=BRANCH, other_branch=OTHER_BRANCH, user=USER, employee=EMPLOYEE, second_employee=SECOND_EMPLOYEE, other_employee=OTHER_EMPLOYEE, device=DEVICE, other_device=OTHER_DEVICE, session=POS_SESSION, second_session=SECOND_POS_SESSION, other_session=OTHER_POS_SESSION))
         await self.execute_script(connection, """
             INSERT INTO company_settings (id,company_id,currency_code,currency_symbol,decimal_places,tax_name,tax_rate,tax_inclusive,paper_size,auto_print,payment_methods,multi_currency_enabled,shift_enforcement_enabled,active,deleted)
             VALUES (:one,:company,'USD','$',2,'Tax',0,false,'80mm',false,'["cash","card","mobile","credit"]'::jsonb,true,false,true,false),
@@ -362,6 +393,74 @@ class Phase5PostgresTest(unittest.IsolatedAsyncioTestCase):
                 await ShiftService(ShiftRepository(session)).open(
                     ShiftOpen(idempotency_key=open_key), wrong_identity,
                 )
+
+    async def test_shared_register_handover_is_manager_authorized_and_audited(self):
+        first = await self.open_shift("handover-first-open")
+        second_actor = self.make_actor(SECOND_EMPLOYEE, DEVICE, SECOND_POS_SESSION, COMPANY, SHOP, BRANCH)
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = ShiftService(ShiftRepository(session))
+            self.assertIsNone(await service.current(second_actor))
+            with self.assertRaisesRegex(HTTPException, "cashier or register"):
+                await service.open(ShiftOpen(idempotency_key="handover-blocked"), second_actor)
+        manager = AuthActor("user", COMPANY, "owner", user=SimpleNamespace(id=USER, email="phase5-owner@example.test"), permissions={})
+        close_data = ShiftClose(
+            counted_balances=[
+                ShiftClosingCount(currency_code="USD", amount="20"),
+                ShiftClosingCount(currency_code="ZAR", amount="500"),
+            ],
+            idempotency_key="manager-handover-close", confirmed=True,
+            exception_reason="Drawer counted and handed to second cashier",
+        )
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = ShiftService(ShiftRepository(session))
+            closed = await service.manager_close(first["id"], close_data, manager)
+            repeated = await service.manager_close(first["id"], close_data, manager)
+            self.assertEqual(closed["id"], repeated["id"])
+            second = await service.open(ShiftOpen(idempotency_key="handover-second-open"), second_actor)
+            self.assertEqual(second["employee_id"], SECOND_EMPLOYEE)
+            self.assertIsNone(await service.current(self.actor))
+            self.assertEqual((await service.current(second_actor))["id"], second["id"])
+            audits = (await session.execute(text(
+                "SELECT count(*) FROM audit_events WHERE action='cashier_shift_manager_closed' AND details->>'shift_id'=:shift_id"
+            ), {"shift_id": str(first["id"])})).scalar_one()
+            self.assertEqual(audits, 1)
+
+    async def test_closed_shift_offline_sale_requires_audited_original_shift_resolution(self):
+        shift = await self.open_shift("offline-resolution-open")
+        occurred_at = datetime.now(timezone.utc)
+        manager = AuthActor("user", COMPANY, "owner", user=SimpleNamespace(id=USER, email="phase5-owner@example.test"), permissions={})
+        client_sale_id = uuid4()
+        async with AsyncSession(self.engine, expire_on_commit=False) as session:
+            service = ShiftService(ShiftRepository(session))
+            closed = await service.close(shift["id"], ShiftClose(
+                counted_balances=[
+                    ShiftClosingCount(currency_code="USD", amount="20"),
+                    ShiftClosingCount(currency_code="ZAR", amount="500"),
+                ], idempotency_key="offline-resolution-close", confirmed=True,
+            ), self.actor)
+            immutable_total = closed["summary"]["net_sales_base"]
+            sale = SaleCreate(
+                company_id=COMPANY, branch_id=BRANCH, employee_id=EMPLOYEE,
+                device_id=DEVICE, shift_id=shift["id"],
+                offline_shift_token=shift["offline_shift_token"],
+                client_created_at=occurred_at, client_sale_id=client_sale_id,
+                payment_method="cash", amount_received="10",
+                items=[SaleItemCreate(product_id=PRODUCT, quantity="1", unit_price="10", line_total="10")],
+            )
+            with self.assertRaisesRegex(HTTPException, "closed"):
+                await SalesService(SalesRepository(session)).create_sale(sale.model_copy(deep=True), actor=self.actor)
+            request = OfflineSaleResolutionCreate(
+                action="post_to_original_shift", reason="Manager verified originating POS evidence",
+                idempotency_key="offline-resolution-post", sale=sale,
+            )
+            resolution = await service.resolve_offline_sale(request, manager)
+            repeated = await service.resolve_offline_sale(request, manager)
+            self.assertEqual(resolution["id"], repeated["id"])
+            posted = (await session.execute(select(Sale).where(Sale.client_sale_id == client_sale_id))).scalar_one()
+            self.assertEqual((posted.shift_id, posted.employee_id, posted.device_id), (shift["id"], EMPLOYEE, DEVICE))
+            self.assertEqual((await service.z_report(shift["id"], manager))["summary"]["net_sales_base"], immutable_total)
+            with self.assertRaises(Exception):
+                await session.execute(text("UPDATE offline_sale_resolutions SET reason='tampered' WHERE id=:id"), {"id": resolution["id"]})
 
     async def test_foreign_transactions_rate_snapshots_expected_cash_and_closed_immutability(self):
         rate = await self.add_rate()

@@ -74,9 +74,13 @@ class SalesService:
         data: SaleCreate,
         *,
         actor: AuthActor | None,
+        resolved_shift=None,
+        resolved_employee=None,
+        resolved_device=None,
+        resolution_record=None,
     ):
-        device = None
-        employee = None
+        device = resolved_device
+        employee = resolved_employee
         customer = None
 
         if actor is not None:
@@ -131,11 +135,14 @@ class SalesService:
             data.company_id,
             data.branch_id,
         )
-        shift = await resolve_shift_for_write(
-            self.repo.db, actor, data.company_id, branch.id, data.shift_id,
-            occurred_at=data.client_created_at,
-            attach_active=True,
-        )
+        shift = resolved_shift
+        if shift is None:
+            shift = await resolve_shift_for_write(
+                self.repo.db, actor, data.company_id, branch.id, data.shift_id,
+                occurred_at=data.client_created_at,
+                attach_active=True,
+                offline_shift_token=data.offline_shift_token,
+            )
         if shift is not None:
             if data.device_id is not None and data.device_id != shift.device_id:
                 raise HTTPException(403, "POS device does not match the active shift register")
@@ -159,7 +166,7 @@ class SalesService:
         elif data.customer_id is not None:
             raise HTTPException(400, "customer_id is only supported for credit sales")
 
-        if data.device_id is not None or data.device_key:
+        if resolved_device is None and (data.device_id is not None or data.device_key):
             device = await self.repo.get_device(
                 data.company_id,
                 device_id=data.device_id,
@@ -616,7 +623,7 @@ class SalesService:
 
 
 
-        if data.employee_id is not None:
+        if resolved_employee is None and data.employee_id is not None:
             employee = await self.repo.get_employee(
                 employee_id=data.employee_id,
                 company_id=data.company_id,
@@ -680,9 +687,9 @@ class SalesService:
             tendered_amount_original=tendered_amount_original,
             change_amount_original=change_amount_original,
             cashier_name=employee.name if employee else None,
-            shop_name_snapshot=shop.name if shop else None,
+            shop_name_snapshot=shift.shop_name_snapshot if resolved_shift is not None else (shop.name if shop else None),
             shop_address_snapshot=shop_address_snapshot,
-            branch_name_snapshot=branch.name,
+            branch_name_snapshot=shift.branch_name_snapshot if resolved_shift is not None else branch.name,
             pos_name_snapshot=(
                 (
                     device.friendly_name
@@ -713,6 +720,29 @@ class SalesService:
             payment_method=payment_method,
             status="completed",
         )
+
+        if resolution_record is not None:
+            # The evidence FK targets the new sale. Flush that immutable target
+            # first, then let the repository commit sale, stock and audit data
+            # atomically in the same transaction.
+            self.repo.db.add(sale)
+            await self.repo.db.flush([sale])
+            resolution_record.sale_id = sale.id
+            self.repo.db.add_all([resolution_record, AuditEvent(
+                company_id=data.company_id,
+                actor_user_id=actor.user.id if actor and actor.actor_type == "user" and actor.user else None,
+                actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" and actor.employee else None,
+                device_id=shift.device_id,
+                action="offline_sale_posted_to_original_shift",
+                reason=resolution_record.reason,
+                details={
+                    "resolution_id": str(resolution_record.id),
+                    "sale_id": str(sale.id),
+                    "client_sale_id": str(data.client_sale_id),
+                    "original_shift_id": str(shift.id),
+                    "payload_sha256": resolution_record.payload_sha256,
+                },
+            )])
 
         if customer is not None:
             receivable_id = uuid.uuid4()

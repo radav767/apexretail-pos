@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+from app.sales.schema import SaleCreate
 
 
 class ShiftOpeningBalance(BaseModel):
@@ -42,6 +43,7 @@ class ShiftClose(BaseModel):
     closing_note: str | None = Field(default=None, max_length=1000)
     idempotency_key: str = Field(min_length=8, max_length=100)
     confirmed: bool
+    exception_reason: str | None = Field(default=None, max_length=1000)
 
 
 class CashMovementCreate(BaseModel):
@@ -76,6 +78,10 @@ class CashMovementCreate(BaseModel):
         return normalized
 
 
+# Backward-compatible public names used by the completed Phase 4 clients.
+ShiftCashMovementCreate = CashMovementCreate
+
+
 class ShiftCurrencyOut(BaseModel):
     currency_code: str
     currency_name: str
@@ -106,9 +112,14 @@ class CashMovementOut(BaseModel):
     movement_type: str
     currency_code: str
     amount: Decimal
+    base_amount: Decimal | None = None
+    exchange_rate_snapshot: Decimal | None = None
     reason: str
     idempotency_key: str
     created_at: datetime
+
+
+ShiftCashMovementOut = CashMovementOut
 
 
 class ShiftOut(BaseModel):
@@ -124,6 +135,10 @@ class ShiftOut(BaseModel):
     shop_name: str | None = None
     branch_name: str | None = None
     register_name: str | None = None
+    business_name: str | None = None
+    closing_user_name: str | None = None
+    report_generated_at: datetime | None = None
+    offline_shift_token: str | None = None
     status: str
     opened_at: datetime
     closed_at: datetime | None
@@ -147,3 +162,33 @@ class ShiftFilterOptions(BaseModel):
     cashiers: list[dict]
     branches: list[dict]
     devices: list[dict]
+
+
+class OfflineSaleResolutionCreate(BaseModel):
+    action: str = Field(pattern="^(post_to_original_shift|retain_quarantined)$")
+    reason: str = Field(min_length=3, max_length=1000)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+    sale: SaleCreate
+
+
+class OfflineSaleResolutionOut(BaseModel):
+    id: UUID
+    company_id: UUID
+    client_sale_id: UUID
+    original_shift_id: UUID
+    original_employee_id: UUID
+    original_device_id: UUID
+    sale_id: UUID | None
+    action: str
+    reason: str
+    payload_sha256: str
+    resolver_name: str
+    created_at: datetime
+
+
+class OfflineSaleResolutionPage(BaseModel):
+    items: list[OfflineSaleResolutionOut]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int

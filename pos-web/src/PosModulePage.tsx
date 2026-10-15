@@ -190,6 +190,7 @@ type Props = {
   onTestPrint: (config: PrinterConfig) => Promise<void>;
   onReprintSale: (saleId: string, receiptNumber?: string) => Promise<void>;
   onPrintShiftSummary: (shift: ShiftRecord) => Promise<void>;
+  onShiftChanged?: (shift: ShiftRecord | null) => void;
   onProductsChanged?: () => void;
   onBackToSales: () => void;
 };
@@ -338,6 +339,7 @@ export default function PosModulePage({
   onTestPrint,
   onReprintSale,
   onPrintShiftSummary,
+  onShiftChanged,
   onProductsChanged,
   onBackToSales,
 }: Props) {
@@ -1282,6 +1284,17 @@ export default function PosModulePage({
 
         {notice && !error && (
           <div className="pos-module-notice">{notice}</div>
+        )}
+
+        {!loading && activeModule === "Sales Management" && (
+          <ShiftManagementPage
+            companyId={companyId}
+            branchId={branchId}
+            cashier={cashier}
+            onBackToSales={onBackToSales}
+            onPrintShiftSummary={onPrintShiftSummary}
+            onShiftChanged={onShiftChanged}
+          />
         )}
 
         {!loading && activeModule === "Sales Management" && (

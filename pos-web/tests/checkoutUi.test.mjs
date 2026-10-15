@@ -12,10 +12,11 @@ test("checkout exposes one sale discount input and no line discount input", () =
   assert.equal((app.match(/aria-label="Sale discount"/g) || []).length, 1);
 });
 
-test("queued offline sales carry an origin timestamp and are not assigned a shift during sync", () => {
+test("queued offline sales retain their cashier-bound signed shift identity", () => {
   assert.match(app, /client_created_at: new Date\(\)\.toISOString\(\)/);
   assert.match(app, /queueOfflineSale\(queuedPayload\)/);
-  assert.match(app, /shift_id\?: string \| null/);
+  assert.match(app, /shift_id: currentShift\?\.id \|\| null/);
+  assert.match(app, /offline_shift_token: currentShift\?\.offline_shift_token \|\| null/);
 });
 
 test("zero-value discount summaries are conditional", () => {

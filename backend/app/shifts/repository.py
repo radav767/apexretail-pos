@@ -3,6 +3,7 @@ from sqlalchemy import and_, func, select
 from app.models import (
     Branch, CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot,
     CompanyCurrency, CompanySetting, CreditSettlement, Device, Employee, Sale, Shop,
+    OfflineSaleResolution,
 )
 
 
@@ -86,9 +87,31 @@ class ShiftRepository:
             for movement, actor_name in rows
         ]
 
-    async def list(self, company_id, *, branch_id=None, employee_id=None, device_id=None, status=None, start_at=None, end_at=None, limit=25, offset=0):
+    async def offline_resolution(self, company_id, *, client_sale_id=None, idempotency_key=None):
+        query = select(OfflineSaleResolution).where(OfflineSaleResolution.company_id == company_id)
+        if client_sale_id is not None:
+            query = query.where(OfflineSaleResolution.client_sale_id == client_sale_id)
+        elif idempotency_key is not None:
+            query = query.where(OfflineSaleResolution.idempotency_key == idempotency_key)
+        else:
+            return None
+        return (await self.db.execute(query)).scalar_one_or_none()
+
+    async def offline_resolutions(self, company_id, *, action=None, shift_id=None, limit=25, offset=0):
+        query = select(OfflineSaleResolution).where(OfflineSaleResolution.company_id == company_id)
+        if action is not None:
+            query = query.where(OfflineSaleResolution.action == action)
+        if shift_id is not None:
+            query = query.where(OfflineSaleResolution.original_shift_id == shift_id)
+        total = int((await self.db.execute(select(func.count()).select_from(query.subquery()))).scalar_one())
+        rows = list((await self.db.execute(
+            query.order_by(OfflineSaleResolution.created_at.desc()).limit(limit).offset(offset)
+        )).scalars())
+        return rows, total
+
+    async def list(self, company_id, *, shop_id=None, branch_id=None, employee_id=None, device_id=None, status=None, start_at=None, end_at=None, limit=25, offset=0):
         query = self.filtered_query(
-            company_id, branch_id=branch_id, employee_id=employee_id,
+            company_id, shop_id=shop_id, branch_id=branch_id, employee_id=employee_id,
             device_id=device_id, status=status, start_at=start_at, end_at=end_at,
         )
         total = int((await self.db.execute(select(func.count()).select_from(query.order_by(None).subquery()))).scalar_one())
@@ -96,10 +119,10 @@ class ShiftRepository:
         return rows, total
 
     @staticmethod
-    def filtered_query(company_id, *, branch_id=None, employee_id=None, device_id=None, status=None, start_at=None, end_at=None):
+    def filtered_query(company_id, *, shop_id=None, branch_id=None, employee_id=None, device_id=None, status=None, start_at=None, end_at=None):
         query = select(CashierShift).where(CashierShift.company_id == company_id)
         for value, column in (
-            (branch_id, CashierShift.branch_id), (employee_id, CashierShift.employee_id),
+            (shop_id, CashierShift.shop_id), (branch_id, CashierShift.branch_id), (employee_id, CashierShift.employee_id),
             (device_id, CashierShift.device_id), (status, CashierShift.status),
         ):
             if value is not None:
@@ -205,9 +228,9 @@ class ShiftRepository:
             } for row in devices],
         }
 
-    async def report_summary(self, company_id, *, branch_id=None, employee_id=None, device_id=None, status=None, start_at=None, end_at=None):
+    async def report_summary(self, company_id, *, shop_id=None, branch_id=None, employee_id=None, device_id=None, status=None, start_at=None, end_at=None):
         filtered = self.filtered_query(
-            company_id, branch_id=branch_id, employee_id=employee_id,
+            company_id, shop_id=shop_id, branch_id=branch_id, employee_id=employee_id,
             device_id=device_id, status=status, start_at=start_at, end_at=end_at,
         )
         filtered_rows = filtered.with_only_columns(CashierShift.id, CashierShift.status).order_by(None).subquery()

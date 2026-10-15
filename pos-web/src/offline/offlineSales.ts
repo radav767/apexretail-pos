@@ -23,6 +23,8 @@ export type OfflineSalePayload = {
   device_id?: string | null;
   device_key?: string | null;
   assignment_revision?: number | null;
+  shift_id?: string | null;
+  offline_shift_token?: string | null;
   payment_method: string;
   payment_currency_code?: string | null;
   exchange_rate_id?: string | null;
@@ -76,6 +78,7 @@ const TERMINAL_AUTHORITY_CODES = new Set([
   "terminal_identity_revoked",
   "terminal_assignment_changed",
   "terminal_decommissioned",
+  "offline_shift_closed",
 ]);
 
 type StoredReceiptRow = {
@@ -164,9 +167,9 @@ export function isNetworkFailure(error: unknown): boolean {
 
 export function isTerminalAuthorityFailure(error: unknown): boolean {
   const candidate = error as {
-    response?: { data?: { code?: unknown } };
+    response?: { data?: { code?: unknown; detail?: { code?: unknown } } };
   };
-  const code = candidate?.response?.data?.code;
+  const code = candidate?.response?.data?.code || candidate?.response?.data?.detail?.code;
   return typeof code === "string" && TERMINAL_AUTHORITY_CODES.has(code);
 }
 
@@ -614,8 +617,9 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
       const quarantined = isTerminalAuthorityFailure(error);
       const evidence = synchronizationErrorEvidence(error);
       const authorityCode = quarantined
-        ? String((error as { response?: { data?: { code?: unknown } } })
-            ?.response?.data?.code || "")
+        ? String((error as { response?: { data?: { code?: unknown; detail?: { code?: unknown } } } })
+            ?.response?.data?.code || (error as { response?: { data?: { detail?: { code?: unknown } } } })
+              ?.response?.data?.detail?.code || "")
         : null;
       const timestamp = new Date().toISOString();
 

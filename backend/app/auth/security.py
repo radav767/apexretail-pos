@@ -17,6 +17,7 @@ SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 60 * 24
 EMPLOYEE_ACCESS_TOKEN_MINUTES = 60 * 24 * 30
+OFFLINE_SHIFT_TOKEN_MINUTES = 60 * 24 * 30
 ENTITLEMENT_SNAPSHOT_MINUTES = 60 * 24
 UTC = timezone.utc
 ENTITLEMENT_ISSUER = "apexpos"
@@ -130,6 +131,39 @@ def create_employee_access_token(
         },
         EMPLOYEE_ACCESS_TOKEN_MINUTES,
     )
+
+
+def create_offline_shift_token(
+    *, shift_id: str, company_id: str, branch_id: str,
+    device_id: str, employee_id: str, opened_at: str,
+) -> str:
+    """Sign the immutable cashier/register identity used by queued sales."""
+    return _create_token(
+        {
+            "sub": shift_id,
+            "shift_id": shift_id,
+            "company_id": company_id,
+            "branch_id": branch_id,
+            "device_id": device_id,
+            "employee_id": employee_id,
+            "opened_at": opened_at,
+            "token_type": "offline_shift",
+        },
+        OFFLINE_SHIFT_TOKEN_MINUTES,
+    )
+
+
+def decode_offline_shift_token(token: str, *, verify_expiration: bool = True) -> dict:
+    settings = get_settings()
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret or SECRET_KEY,
+        algorithms=[settings.jwt_algorithm or ALGORITHM],
+        options={"verify_exp": verify_expiration},
+    )
+    if payload.get("token_type") != "offline_shift":
+        raise ValueError("Invalid offline shift token type")
+    return payload
 
 
 def create_entitlement_snapshot_token(

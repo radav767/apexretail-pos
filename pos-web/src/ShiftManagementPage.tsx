@@ -19,6 +19,7 @@ export type ShiftRecord = {
   device_id: string; employee_id: string; cashier_name?: string | null; shop_name?: string | null;
   branch_name?: string | null; register_name?: string | null; status: "open" | "closed";
   opened_at: string; closed_at: string | null; opening_note?: string | null; closing_note?: string | null;
+  offline_shift_token?: string | null;
   currencies: ShiftCurrency[]; cash_movements?: CashMovement[];
   summary: { total_sales_base?: string | null; base_currency_code?: string | null };
 };
@@ -34,6 +35,7 @@ type Props = {
   cashier: Cashier | null;
   onBackToSales: () => void;
   onPrintShiftSummary: (shift: ShiftRecord) => Promise<void>;
+  onShiftChanged?: (shift: ShiftRecord | null) => void;
 };
 
 const emptyPage: PageResult = { items: [], page: 1, page_size: 10, total: 0, total_pages: 0 };
@@ -57,7 +59,7 @@ function validAmount(value: string, decimalPlaces: number, positiveOnly = false)
 }
 const idempotencyKey = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-export default function ShiftManagementPage({ companyId, branchId, cashier, onBackToSales, onPrintShiftSummary }: Props) {
+export default function ShiftManagementPage({ companyId, branchId, cashier, onBackToSales, onPrintShiftSummary, onShiftChanged }: Props) {
   const [online, setOnline] = useState(false);
   const [shift, setShift] = useState<ShiftRecord | null>(null);
   const [currencies, setCurrencies] = useState<CurrencyConfig[]>([]);
@@ -163,6 +165,7 @@ export default function ShiftManagementPage({ companyId, branchId, cashier, onBa
         idempotency_key: idempotencyKey(),
       });
       setShift(response.data);
+      onShiftChanged?.(response.data);
       setOpeningNote("");
       setNotice(`Shift ${response.data.shift_number} opened at ${new Date(response.data.opened_at).toLocaleString()}.`);
       await refreshHistory(1);
@@ -215,6 +218,7 @@ export default function ShiftManagementPage({ companyId, branchId, cashier, onBa
         idempotency_key: idempotencyKey(), confirmed: true,
       });
       setShift(null);
+      onShiftChanged?.(null);
       setHistoryDetail(response.data);
       setConfirmClose(false); setClosingNote("");
       setNotice(`Shift ${response.data.shift_number} closed at ${new Date(response.data.closed_at || Date.now()).toLocaleString()}.`);

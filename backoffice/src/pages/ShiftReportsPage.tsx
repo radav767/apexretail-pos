@@ -9,6 +9,7 @@ type CurrencyCash = {
   currency_name: string;
   symbol: string;
   decimal_places: number;
+  cash_accepted: boolean;
   opening_float: string | number;
   cash_sales: string | number;
   cash_refunds: string | number;
@@ -175,6 +176,11 @@ export default function ShiftReportsPage({ companyId }: { companyId: string }) {
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState("");
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [evidenceJson, setEvidenceJson] = useState("");
+  const [resolutionReason, setResolutionReason] = useState("");
+  const [resolutionAction, setResolutionAction] = useState<"post_to_original_shift" | "retain_quarantined">("retain_quarantined");
 
   const params = useMemo(() => filterParams(preset, dateFrom, dateTo, filters), [preset, dateFrom, dateTo, filters]);
 
@@ -238,10 +244,66 @@ export default function ShiftReportsPage({ companyId }: { companyId: string }) {
     try {
       const response = await api.get<Shift>(`/shifts/company/${companyId}/${shift.id}`);
       setSelected(response.data);
+      setCounts({});
+      setExceptionReason("");
     } catch (requestError: any) {
       setError(requestError?.response?.data?.detail || "Failed to load shift details.");
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function openZReport(target: Shift, kind: "thermal" | "pdf", paperWidth = "80mm") {
+    setError("");
+    try {
+      const path = kind === "pdf" ? `/shifts/${target.id}/z-report.pdf` : `/shifts/${target.id}/z-report/thermal`;
+      const response = await api.get(path, { params: { paper_width: paperWidth, reprint: true }, responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      if (kind === "pdf") {
+        const anchor = document.createElement("a");
+        anchor.href = url; anchor.download = `${target.shift_number}.pdf`; anchor.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.detail || "Unable to open Z Report.");
+    }
+  }
+
+  async function managerClose() {
+    if (!selected) return;
+    try {
+      const response = await api.post<Shift>(`/shifts/${selected.id}/manager-close`, {
+        confirmed: true,
+        exception_reason: exceptionReason.trim(),
+        idempotency_key: globalThis.crypto?.randomUUID?.() || `${Date.now()}-manager-close`,
+        counted_balances: selected.currencies.filter((row) => row.cash_accepted).map((row) => ({
+          currency_code: row.currency_code, amount: counts[row.currency_code] || "0",
+        })),
+      });
+      setSelected(response.data);
+      await load(page.page);
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.detail || "Unable to authorize shift closure.");
+    }
+  }
+
+  async function resolveOfflineSale() {
+    try {
+      const parsed = JSON.parse(evidenceJson);
+      const candidate = Array.isArray(parsed?.sales) ? parsed.sales[0]?.payload : parsed?.payload || parsed;
+      if (!candidate?.client_sale_id) throw new Error("No quarantined sale payload found.");
+      await api.post("/shifts/offline-resolutions", {
+        action: resolutionAction,
+        reason: resolutionReason.trim(),
+        idempotency_key: globalThis.crypto?.randomUUID?.() || `${Date.now()}-offline-resolution`,
+        sale: candidate,
+      });
+      setEvidenceJson(""); setResolutionReason("");
+    } catch (requestError: any) {
+      setError(requestError?.response?.data?.detail || requestError?.message || "Unable to resolve offline sale.");
     }
   }
 
@@ -325,6 +387,16 @@ export default function ShiftReportsPage({ companyId }: { companyId: string }) {
       <Pagination meta={page} onPage={(next) => void load(next)} />
     </section>
 
+    <section className="shift-table-panel" aria-label="Offline sale resolution">
+      <div className="shift-table-heading"><div><h2>Quarantined offline sales</h2><p>Paste exported evidence from the originating POS. The original queue is never deleted or reassigned here.</p></div></div>
+      <div className="shift-filter-grid">
+        <label>Evidence JSON<textarea rows={5} value={evidenceJson} onChange={(event) => setEvidenceJson(event.target.value)} /></label>
+        <label>Decision<select value={resolutionAction} onChange={(event) => setResolutionAction(event.target.value as typeof resolutionAction)}><option value="retain_quarantined">Retain quarantined</option><option value="post_to_original_shift">Post to signed original shift</option></select></label>
+        <label>Manager reason<textarea rows={3} value={resolutionReason} onChange={(event) => setResolutionReason(event.target.value)} /></label>
+        <button type="button" className="shift-apply-button" disabled={!evidenceJson.trim() || resolutionReason.trim().length < 3} onClick={() => void resolveOfflineSale()}>Record audited decision</button>
+      </div>
+    </section>
+
     {detailLoading && <div className="shift-modal-backdrop" role="presentation"><section className="shift-modal" role="dialog" aria-modal="true" aria-label="Shift details"><p>Loading shift details…</p></section></div>}
     {selected && <div className="shift-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
       <section className="shift-modal" role="dialog" aria-modal="true" aria-labelledby="shift-detail-title">
@@ -352,6 +424,8 @@ export default function ShiftReportsPage({ companyId }: { companyId: string }) {
           {!selected.currencies.length && <tr><td colSpan={11}>No currency snapshots available for this shift.</td></tr>}
         </tbody></table></div>
         <p className="shift-base-note">Accounting totals are in the company base currency. Physical drawer amounts and variance above are never combined or revalued.</p>
+        {selected.status === "closed" && <div className="shift-report-actions"><button type="button" onClick={() => void openZReport(selected, "thermal", "58mm")}>Print 58mm Z Report</button><button type="button" onClick={() => void openZReport(selected, "thermal", "80mm")}>Print 80mm Z Report</button><button type="button" onClick={() => void openZReport(selected, "pdf")}>Download PDF</button></div>}
+        {selected.status === "open" && <section><h3>Authorized handover / exception closure</h3>{selected.currencies.filter((row) => row.cash_accepted).map((row) => <label key={row.currency_code}>Counted {row.currency_code}<input type="number" min="0" value={counts[row.currency_code] || ""} onChange={(event) => setCounts({ ...counts, [row.currency_code]: event.target.value })} /></label>)}<label>Required manager reason<textarea value={exceptionReason} onChange={(event) => setExceptionReason(event.target.value)} /></label><button type="button" disabled={!exceptionReason.trim() || selected.currencies.filter((row) => row.cash_accepted).some((row) => counts[row.currency_code] == null)} onClick={() => void managerClose()}>Authorize and close shift</button></section>}
       </section>
     </div>}
   </div>;

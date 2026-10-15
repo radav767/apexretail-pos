@@ -29,3 +29,4 @@ from app.models.expense import Expense
 from app.models.company_currency import CompanyCurrency
 from app.models.currency_exchange_rate import CurrencyExchangeRate
 from app.models.cashier_shift import CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot
+from app.models.offline_sale_resolution import OfflineSaleResolution

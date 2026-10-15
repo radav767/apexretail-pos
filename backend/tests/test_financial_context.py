@@ -1,6 +1,7 @@
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -110,3 +111,25 @@ class FinancialContextTest(unittest.IsolatedAsyncioTestCase):
                 db, self.actor, self.company_id, self.branch_id, self.shift_id,
                 occurred_at=datetime.now(timezone.utc), attach_active=True,
             )
+
+    async def test_signed_identity_is_checked_without_expiry_then_closed_shift_is_quarantined(self):
+        occurred_at = datetime.now(timezone.utc)
+        self.shift.opened_at = occurred_at - timedelta(hours=1)
+        self.shift.status = "closed"
+        claims = {
+            "shift_id": str(self.shift_id),
+            "company_id": str(self.company_id),
+            "branch_id": str(self.branch_id),
+            "device_id": str(self.device_id),
+            "employee_id": str(self.employee_id),
+        }
+        db = _Database(self.settings, self.shift)
+        with patch("app.financial_context.decode_offline_shift_token", return_value=claims) as decode:
+            with self.assertRaises(HTTPException) as raised:
+                await resolve_shift_for_write(
+                    db, self.actor, self.company_id, self.branch_id, self.shift_id,
+                    occurred_at=occurred_at, attach_active=True,
+                    offline_shift_token="signed-expired-token",
+                )
+        decode.assert_called_once_with("signed-expired-token", verify_expiration=False)
+        self.assertEqual(raised.exception.detail["code"], "offline_shift_closed")

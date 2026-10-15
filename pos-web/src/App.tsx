@@ -6,7 +6,7 @@ import {
   getApiErrorMessage,
 } from "./api/client";
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
-import type { ShiftRecord } from "./ShiftManagementPage";
+import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
 import {
   projectCreditSale,
   type CreditCustomer,
@@ -177,6 +177,7 @@ type BusinessSettings = {
   paper_size?: string;
   auto_print?: boolean;
   payment_methods?: string[];
+  shift_enforcement_enabled?: boolean;
 };
 
 type PosCurrency = {
@@ -380,6 +381,9 @@ const [loggedIn, setLoggedIn] = useState(
 
   const [cashier, setCashier] =
     useState<CashierSession | null>(null);
+  const [currentShift, setCurrentShift] = useState<(ShiftRecord & { offline_shift_token?: string | null }) | null>(null);
+  const [shiftLoading, setShiftLoading] = useState(false);
+  const [shiftPromptDismissed, setShiftPromptDismissed] = useState(false);
   const [cashierPin, setCashierPin] = useState("");
   const [pinLoading, setPinLoading] = useState(false);
   const [pinMessage, setPinMessage] = useState("");
@@ -2021,6 +2025,8 @@ const [loggedIn, setLoggedIn] = useState(
     localStorage.removeItem("employee_id");
     localStorage.removeItem("employee_token");
     setCashier(null);
+    setCurrentShift(null);
+    setShiftPromptDismissed(false);
     setCashierPin("");
     setPinMessage("");
     setCart([]);
@@ -2426,6 +2432,8 @@ const [loggedIn, setLoggedIn] = useState(
         localStorage.getItem("device_assignment_revision") || "1",
       ),
       payment_method: paymentMethod,
+      shift_id: currentShift?.id || null,
+      offline_shift_token: currentShift?.offline_shift_token || null,
       discount_amount: discounted.discount_amount,
       sale_discount_amount: discounted.sale_discount_amount,
       items: completedItems.map((item) => ({
@@ -2492,8 +2500,8 @@ const [loggedIn, setLoggedIn] = useState(
         return;
       }
 
-      // This timestamp marks an offline-originated sale so the backend
-      // preserves it as a legacy/unassigned shift transaction on sync.
+      // New queues retain the signed original shift identity. Installations
+      // with older queued rows remain compatible and are never rewritten.
       const queuedPayload = {
         ...payload,
         // A base-currency offline sale remains compatible with the existing
@@ -2741,6 +2749,8 @@ const [loggedIn, setLoggedIn] = useState(
 
     setBranchId("");
     setCashier(null);
+    setCurrentShift(null);
+    setShiftPromptDismissed(false);
     setCashierPin("");
     setPinMessage("");
     setLoggedIn(false);
@@ -2881,6 +2891,45 @@ const [loggedIn, setLoggedIn] = useState(
       cancelled = true;
     };
   }, [loggedIn, companyId]);
+
+  useEffect(() => {
+    if (!cashier || !companyId) {
+      setCurrentShift(null);
+      setShiftLoading(false);
+      return;
+    }
+    let cancelled = false;
+    const deviceId = localStorage.getItem("device_id") || "unknown";
+    const cacheKey = `apex_shift_${companyId}_${cashier.id}_${deviceId}`;
+    async function loadShift() {
+      setShiftLoading(true);
+      setShiftPromptDismissed(false);
+      try {
+        if (!(await isDeviceOnline())) {
+          const cached = localStorage.getItem(cacheKey);
+          const parsed = cached ? JSON.parse(cached) as (ShiftRecord & { offline_shift_token?: string | null }) : null;
+          if (!cancelled) setCurrentShift(parsed?.status === "open" ? parsed : null);
+          return;
+        }
+        const response = await api.get("/shifts/current");
+        if (!cancelled) {
+          const loaded = response.data as (ShiftRecord & { offline_shift_token?: string | null }) | null;
+          setCurrentShift(loaded);
+          if (loaded) localStorage.setItem(cacheKey, JSON.stringify(loaded));
+          else localStorage.removeItem(cacheKey);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCurrentShift(null);
+          setMessage(getApiErrorMessage(error, "Unable to check the current shift"));
+        }
+      } finally {
+        if (!cancelled) setShiftLoading(false);
+      }
+    }
+    void loadShift();
+    return () => { cancelled = true; };
+  }, [cashier, companyId]);
 
   useEffect(() => {
     if (!loggedIn || !companyId) {
@@ -3352,6 +3401,28 @@ const [loggedIn, setLoggedIn] = useState(
     );
   }
 
+  if (cashier && activePosModule === "Sales" && !shiftPromptDismissed && (shiftLoading || !currentShift)) {
+    if (shiftLoading) {
+      return <main className="pos-shift-page"><section className="pos-shift-panel"><p>Checking the current cashier shift…</p></section></main>;
+    }
+    return <ShiftManagementPage
+      companyId={companyId}
+      branchId={branchId}
+      cashier={cashier}
+      onBackToSales={() => {
+        if (!businessSettings?.shift_enforcement_enabled) setShiftPromptDismissed(true);
+      }}
+      onPrintShiftSummary={handlePrintShiftSummary}
+      onShiftChanged={(shift) => {
+        setCurrentShift(shift);
+        const deviceId = localStorage.getItem("device_id") || "unknown";
+        const cacheKey = `apex_shift_${companyId}_${cashier.id}_${deviceId}`;
+        if (shift) localStorage.setItem(cacheKey, JSON.stringify(shift));
+        else localStorage.removeItem(cacheKey);
+      }}
+    />;
+  }
+
   const canManageProducts =
     cashier?.role === "owner" ||
     Boolean(cashier?.permissions?.manage_products);
@@ -3447,16 +3518,6 @@ const [loggedIn, setLoggedIn] = useState(
                           Sales Management
 
                         </button>
-
-                        {cashier && (
-                          <button
-                            type="button"
-                            style={posMenuButton}
-                            onClick={() => showPosModule("Shift Management")}
-                          >
-                            Shift Management
-                          </button>
-                        )}
 
                         <button
                           type="button"
@@ -3610,6 +3671,16 @@ const [loggedIn, setLoggedIn] = useState(
           onTestPrint={handleTestPrint}
           onReprintSale={handleReprintSale}
           onPrintShiftSummary={handlePrintShiftSummary}
+          onShiftChanged={(shift) => {
+            setCurrentShift(shift);
+            const deviceId = localStorage.getItem("device_id") || "unknown";
+            const cacheKey = `apex_shift_${companyId}_${cashier?.id || "unknown"}_${deviceId}`;
+            if (shift) localStorage.setItem(cacheKey, JSON.stringify(shift));
+            else {
+              localStorage.removeItem(cacheKey);
+              setShiftPromptDismissed(false);
+            }
+          }}
           onProductsChanged={() =>
             void loadProducts(
               companyId,

@@ -27,6 +27,13 @@ test("foreign currency writes are rejected offline and never enter the queue", (
   assert.match(offline, /payment_currency_code\?: string/);
 });
 
+test("closed original shifts are terminally quarantined without deleting or reassigning the queue", () => {
+  assert.match(offline, /"offline_shift_closed"/);
+  assert.match(offline, /response\?\.data\?\.detail\?\.code/);
+  assert.match(offline, /quarantined \? "quarantined" : "failed"/);
+  assert.match(offline, /if \(quarantined\) \{[\s\S]*break;/);
+});
+
 test("receipt snapshots render currency, exchange rate, tender, cashier, and shift", () => {
   const formatter = readFileSync(new URL("../src/printing/receiptFormatter.ts", import.meta.url), "utf8");
   assert.match(app, /payment_currency_code: sale\.payment_currency_code/);

@@ -1,17 +1,25 @@
+import hashlib
+import json
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
+from uuid import UUID
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.currencies.service import quantize_currency
+from app.auth.security import create_offline_shift_token, decode_offline_shift_token
 from app.financial_access import enforce_actor_branch, enforce_actor_company
 from app.models import (
-    AuditEvent, CashierShift, CashierShiftCashMovement,
-    CashierShiftCurrencySnapshot, CreditSettlement, Expense, Sale, SaleItem,
+    AuditEvent, Branch, CashierShift, CashierShiftCashMovement,
+    CashierShiftCurrencySnapshot, Company, CreditSettlement, CurrencyExchangeRate,
+    Device, Expense, OfflineSaleResolution, Sale, SaleItem, Shop,
 )
+from app.sales.repository import SalesRepository
+from app.sales.service import SalesService
 from app.shifts.repository import ShiftRepository
 from app.shifts.schema import CashMovementCreate
 
@@ -21,6 +29,7 @@ SUMMARY_FIELDS = (
     "discounts_base", "cash_sales_base", "card_sales_base", "mobile_sales_base",
     "credit_sales_base", "cash_settlements_base", "card_settlements_base",
     "mobile_settlements_base", "cash_expenses_base", "noncash_expenses_base",
+    "cash_refunds_base", "refunds_base", "cash_in_base", "cash_out_base",
 )
 
 
@@ -37,7 +46,7 @@ class ShiftService:
             raise HTTPException(403, "POS session identity mismatch")
         return session
 
-    async def view(self, shift, *, detailed=False, identity=None):
+    async def view(self, shift, *, detailed=False, identity=None, include_offline_token=False):
         snapshots = await self.repo.snapshots(shift.id)
         currencies = []
         for row in snapshots:
@@ -77,13 +86,20 @@ class ShiftService:
                 "counted_cash": counted_cash,
                 "variance": variance,
             })
-        summary = {name: getattr(shift, name) for name in SUMMARY_FIELDS}
+        summary = {name: getattr(shift, name, None) for name in SUMMARY_FIELDS}
         summary["total_sales_base"] = summary["net_sales_base"]
         calculated_summary = None
         if detailed or shift.status == "open":
             calculated_summary = await self._base_summary(shift.id)
             if shift.status == "open":
-                summary.update({name: calculated_summary[name] for name in SUMMARY_FIELDS})
+                # Repositories and integrations predating Phase 4 may return
+                # only the Phase 3 summary keys.  Treat newly additive totals
+                # as zero instead of making an otherwise valid open shift
+                # unreadable during a rolling deployment.
+                summary.update({
+                    name: calculated_summary.get(name, Decimal("0"))
+                    for name in SUMMARY_FIELDS
+                })
                 summary["total_sales_base"] = summary["net_sales_base"]
         if detailed:
             summary.update({
@@ -93,15 +109,33 @@ class ShiftService:
                 "refunds_base": calculated_summary["refunds_base"],
                 "base_currency_code": await self.repo.base_currency_code(shift.company_id),
             })
+        summary["base_currency_code"] = getattr(
+            shift, "base_currency_code_snapshot", summary.get("base_currency_code")
+        )
         movements = await self.repo.cash_movements(shift.id) if detailed else []
         if identity is None:
             identity = await self.repo.identity(shift)
+        snapshot_identity = {
+            "cashier_name": getattr(shift, "cashier_name_snapshot", None) or identity.get("cashier_name"),
+            "shop_name": getattr(shift, "shop_name_snapshot", None) or identity.get("shop_name"),
+            "branch_name": getattr(shift, "branch_name_snapshot", None) or identity.get("branch_name"),
+            "register_name": getattr(shift, "register_name_snapshot", None) or identity.get("register_name"),
+        }
         return {
             **{name: getattr(shift, name) for name in (
                 "id", "shift_number", "company_id", "shop_id", "branch_id", "device_id",
                 "employee_id", "status", "opened_at", "closed_at", "opening_note", "closing_note",
             )},
             **identity,
+            **snapshot_identity,
+            "business_name": getattr(shift, "business_name_snapshot", None),
+            "closing_user_name": getattr(shift, "closing_user_name_snapshot", None),
+            "report_generated_at": getattr(shift, "report_generated_at", None),
+            "offline_shift_token": create_offline_shift_token(
+                shift_id=str(shift.id), company_id=str(shift.company_id),
+                branch_id=str(shift.branch_id), device_id=str(shift.device_id),
+                employee_id=str(shift.employee_id), opened_at=shift.opened_at.isoformat(),
+            ) if include_offline_token and shift.status == "open" else None,
             "currencies": currencies,
             "cash_movements": movements,
             "summary": summary,
@@ -113,7 +147,7 @@ class ShiftService:
         if existing_key:
             if existing_key.employee_id != actor.employee.id or existing_key.device_id != session.device_id:
                 raise HTTPException(409, "Shift idempotency key is already in use")
-            return await self.view(existing_key)
+            return await self.view(existing_key, include_offline_token=True)
         existing = await self.repo.current(actor.employee.id, session.device_id, company_id=actor.company_id, for_update=True)
         if existing:
             raise HTTPException(409, "This cashier or register already has an open shift")
@@ -134,11 +168,21 @@ class ShiftService:
                 raise HTTPException(400, f"{currency.code} is not enabled for cash")
         shift_id = uuid.uuid4()
         now = datetime.now(timezone.utc)
+        company = await self.repo.db.get(Company, actor.company_id)
+        shop = await self.repo.db.get(Shop, session.shop_id)
+        branch = await self.repo.db.get(Branch, session.branch_id)
+        device = await self.repo.db.get(Device, session.device_id)
         shift = CashierShift(
             id=shift_id, shift_number=f"SHF-{now:%Y%m%d}-{str(shift_id)[:8].upper()}",
             company_id=actor.company_id, shop_id=session.shop_id, branch_id=session.branch_id,
             device_id=session.device_id, employee_id=actor.employee.id,
             opened_pos_session_id=session.id, status="open", opened_at=now,
+            business_name_snapshot=company.name,
+            shop_name_snapshot=shop.name,
+            branch_name_snapshot=branch.name,
+            register_name_snapshot=device.friendly_name or device.name or f"Register {device.pos_number}",
+            cashier_name_snapshot=actor.employee.name,
+            base_currency_code_snapshot=next(row.code for row in currencies if row.is_base),
             opening_note=(data.opening_note or "").strip() or None,
             open_idempotency_key=data.idempotency_key.strip(),
         )
@@ -160,12 +204,12 @@ class ShiftService:
         except IntegrityError as exc:
             await self.repo.db.rollback()
             raise HTTPException(409, "This cashier or register already has an open shift") from exc
-        return await self.view(shift, detailed=True)
+        return await self.view(shift, detailed=True, include_offline_token=True)
 
     async def current(self, actor):
         session = self.require_pos_actor(actor)
         shift = await self.repo.current(actor.employee.id, session.device_id, company_id=actor.company_id)
-        return await self.view(shift, detailed=True) if shift else None
+        return await self.view(shift, detailed=True, include_offline_token=True) if shift else None
 
     async def _currency_activity(self, shift_id, code):
         db = self.repo.db
@@ -195,10 +239,10 @@ class ShiftService:
     async def _base_summary(self, shift_id):
         db = self.repo.db
         sales = list((await db.execute(select(Sale).where(Sale.shift_id == shift_id))).scalars())
-        gross = sum((Decimal(row.total_amount or 0) for row in sales if row.original_sale_id is None), Decimal("0"))
+        gross = sum((Decimal(row.total_amount or 0) + Decimal(row.discount_amount or 0) for row in sales if row.original_sale_id is None), Decimal("0"))
         net = sum((Decimal(row.total_amount or 0) for row in sales), Decimal("0"))
         discounts = sum((Decimal(row.discount_amount or 0) for row in sales if row.original_sale_id is None), Decimal("0"))
-        by_method = {name: sum((Decimal(row.total_amount or 0) for row in sales if row.payment_method == name), Decimal("0")) for name in ("cash", "card", "mobile", "credit")}
+        by_method = {name: sum((Decimal(row.total_amount or 0) for row in sales if row.payment_method == name and row.original_sale_id is None), Decimal("0")) for name in ("cash", "card", "mobile", "credit")}
         sale_ids = [row.id for row in sales]
         cost = Decimal("0")
         if sale_ids:
@@ -206,6 +250,8 @@ class ShiftService:
         settlements = {name: Decimal((await db.execute(select(func.coalesce(func.sum(CreditSettlement.amount), 0)).where(CreditSettlement.shift_id == shift_id, CreditSettlement.payment_method == name))).scalar_one() or 0) for name in ("cash", "card", "mobile")}
         cash_expenses = Decimal((await db.execute(select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.shift_id == shift_id, Expense.payment_method == "cash"))).scalar_one() or 0)
         noncash_expenses = Decimal((await db.execute(select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.shift_id == shift_id, Expense.payment_method.in_(("card", "mobile"))))).scalar_one() or 0)
+        cash_in = Decimal((await db.execute(select(func.coalesce(func.sum(CashierShiftCashMovement.base_amount), 0)).where(CashierShiftCashMovement.shift_id == shift_id, CashierShiftCashMovement.movement_type == "cash_in"))).scalar_one() or 0)
+        cash_out = Decimal((await db.execute(select(func.coalesce(func.sum(CashierShiftCashMovement.base_amount), 0)).where(CashierShiftCashMovement.shift_id == shift_id, CashierShiftCashMovement.movement_type == "cash_out"))).scalar_one() or 0)
         cash_received = sum((Decimal(row.total_amount or 0) for row in sales if row.payment_method == "cash" and Decimal(row.total_amount or 0) > 0), Decimal("0")) + settlements["cash"]
         refunds = sum((abs(Decimal(row.total_amount or 0)) for row in sales if row.original_sale_id is not None and Decimal(row.total_amount or 0) < 0), Decimal("0"))
         cash_refunds = sum((abs(Decimal(row.total_amount or 0)) for row in sales if row.original_sale_id is not None and row.payment_method == "cash" and Decimal(row.total_amount or 0) < 0), Decimal("0"))
@@ -220,6 +266,9 @@ class ShiftService:
             "cash_received_base": cash_received,
             "cash_paid_out_base": cash_refunds + cash_expenses,
             "refunds_base": refunds,
+            "cash_refunds_base": cash_refunds,
+            "cash_in_base": cash_in,
+            "cash_out_base": cash_out,
         }
 
     async def close(self, shift_id, data, actor):
@@ -266,9 +315,68 @@ class ShiftService:
         shift.closed_at = datetime.now(timezone.utc)
         shift.closing_note = (data.closing_note or "").strip() or None
         shift.close_idempotency_key = data.idempotency_key.strip()
+        shift.closed_by_employee_id = actor.employee.id
+        shift.closing_user_name_snapshot = actor.employee.name
+        shift.report_generated_at = shift.closed_at
         self.repo.db.add(AuditEvent(
             company_id=shift.company_id, actor_employee_id=shift.employee_id, device_id=shift.device_id,
             action="cashier_shift_closed", details={"shift_id": str(shift.id), "shift_number": shift.shift_number},
+        ))
+        await self.repo.db.commit()
+        return await self.view(shift, detailed=True)
+
+    @staticmethod
+    def _can_manage_shifts(actor):
+        return actor.role in {"owner", "administrator", "manager"} or bool((actor.permissions or {}).get("shifts_manage"))
+
+    async def manager_close(self, shift_id, data, actor):
+        if actor.company_id is None or not self._can_manage_shifts(actor):
+            raise HTTPException(403, "Shift management permission denied")
+        if not data.confirmed or not (data.exception_reason or "").strip():
+            raise HTTPException(400, "A confirmed exception reason is required")
+        shift = await self.repo.by_id(actor.company_id, shift_id, for_update=True)
+        if shift is None:
+            raise HTTPException(404, "Shift not found")
+        if actor.actor_type == "employee":
+            enforce_actor_branch(actor, shift.branch_id)
+        if shift.status == "closed":
+            if shift.close_idempotency_key == data.idempotency_key.strip():
+                return await self.view(shift, detailed=True)
+            raise HTTPException(409, "Shift is already closed")
+        snapshots = await self.repo.snapshots(shift.id, for_update=True)
+        counted = {row.currency_code: Decimal(row.amount) for row in data.counted_balances}
+        required = {row.currency_code for row in snapshots if row.cash_accepted_snapshot}
+        if set(counted) != required:
+            raise HTTPException(400, "A closing cash count is required for every enabled cash currency")
+        for row in snapshots:
+            sales, refunds, settlements, expenses, cash_in, cash_out = await self._currency_activity(shift.id, row.currency_code)
+            precision = row.decimal_places_snapshot
+            row.cash_sales = quantize_currency(sales, precision)
+            row.cash_refunds = quantize_currency(refunds, precision)
+            row.cash_settlements = quantize_currency(settlements, precision)
+            row.cash_expenses = quantize_currency(expenses, precision)
+            row.cash_in = quantize_currency(cash_in, precision)
+            row.cash_out = quantize_currency(cash_out, precision)
+            row.expected_cash = quantize_currency(row.opening_float + sales + settlements + cash_in - refunds - expenses - cash_out, precision)
+            if row.cash_accepted_snapshot:
+                row.counted_cash = quantize_currency(counted[row.currency_code], precision)
+                row.variance = quantize_currency(row.counted_cash - row.expected_cash, precision)
+        await self.repo.db.flush(snapshots)
+        base_summary = await self._base_summary(shift.id)
+        for name in SUMMARY_FIELDS:
+            setattr(shift, name, base_summary[name].quantize(Decimal("0.01")))
+        now = datetime.now(timezone.utc)
+        shift.status, shift.closed_at, shift.report_generated_at = "closed", now, now
+        shift.closing_note = (data.closing_note or "").strip() or None
+        shift.close_idempotency_key = data.idempotency_key.strip()
+        shift.closed_by_user_id = actor.user.id if actor.actor_type == "user" and actor.user else None
+        shift.closed_by_employee_id = actor.employee.id if actor.actor_type == "employee" and actor.employee else None
+        shift.closing_user_name_snapshot = actor.user.email if actor.actor_type == "user" and actor.user else actor.employee.name
+        self.repo.db.add(AuditEvent(
+            company_id=shift.company_id, actor_user_id=shift.closed_by_user_id,
+            actor_employee_id=shift.closed_by_employee_id, device_id=shift.device_id,
+            action="cashier_shift_manager_closed", reason=data.exception_reason.strip(),
+            details={"shift_id": str(shift.id), "shift_number": shift.shift_number},
         ))
         await self.repo.db.commit()
         return await self.view(shift, detailed=True)
@@ -280,7 +388,8 @@ class ShiftService:
             "branch_id": movement.branch_id, "device_id": movement.device_id,
             "employee_id": movement.employee_id, "actor_name": actor_name,
             "movement_type": movement.movement_type, "currency_code": movement.currency_code,
-            "amount": movement.amount, "reason": movement.reason,
+            "amount": movement.amount, "base_amount": movement.base_amount,
+            "exchange_rate_snapshot": movement.exchange_rate_snapshot, "reason": movement.reason,
             "idempotency_key": movement.idempotency_key, "created_at": movement.created_at,
         }
 
@@ -328,11 +437,28 @@ class ShiftService:
             if amount > available:
                 raise HTTPException(409, "Cash out exceeds the expected drawer balance")
 
+        currency = next((row for row in await self.repo.active_currencies(actor.company_id) if row.code == data.currency_code), None)
+        if currency is None:
+            raise HTTPException(409, "The shift currency is no longer active")
+        now = datetime.now(timezone.utc)
+        if currency.is_base:
+            rate = Decimal("1")
+        else:
+            rate_row = (await self.repo.db.execute(select(CurrencyExchangeRate).where(
+                CurrencyExchangeRate.company_id == actor.company_id,
+                CurrencyExchangeRate.currency_id == currency.id,
+                CurrencyExchangeRate.effective_at <= now,
+            ).order_by(CurrencyExchangeRate.effective_at.desc(), CurrencyExchangeRate.created_at.desc()).limit(1))).scalar_one_or_none()
+            rate = Decimal(rate_row.foreign_units_per_base) if rate_row is not None else None
+
         movement = CashierShiftCashMovement(
             company_id=shift.company_id, shift_id=shift.id, branch_id=shift.branch_id,
             device_id=shift.device_id, employee_id=actor.employee.id,
             movement_type=data.movement_type, currency_code=data.currency_code,
-            amount=normalized_amount, reason=data.reason, idempotency_key=key,
+            amount=normalized_amount,
+            base_amount=(normalized_amount / rate).quantize(Decimal("0.01")) if rate is not None else None,
+            exchange_rate_snapshot=rate,
+            reason=data.reason, idempotency_key=key,
         )
         self.repo.db.add(movement)
         self.repo.db.add(AuditEvent(
@@ -352,6 +478,31 @@ class ShiftService:
             raise HTTPException(409, "Cash movement conflicted with another request") from exc
         await self.repo.db.refresh(movement)
         return self._movement_output(movement, actor.employee.name)
+
+    async def add_movement(self, data: CashMovementCreate, actor):
+        session = self.require_pos_actor(actor)
+        shift = await self.repo.current(actor.employee.id, session.device_id, company_id=actor.company_id)
+        if shift is None:
+            raise HTTPException(409, "An active shift for this cashier and register is required")
+        result = await self.create_cash_movement(shift.id, data, actor)
+        return SimpleNamespace(**result) if isinstance(result, dict) else result
+
+    async def preview_close(self, actor):
+        session = self.require_pos_actor(actor)
+        shift = await self.repo.current(actor.employee.id, session.device_id, company_id=actor.company_id)
+        if shift is None:
+            raise HTTPException(404, "No active shift")
+        return await self.view(shift, detailed=True, include_offline_token=True)
+
+    async def manager_preview_close(self, shift_id, actor):
+        if not self._can_manage_shifts(actor):
+            raise HTTPException(403, "Shift management permission denied")
+        shift = await self.repo.by_id(actor.company_id, shift_id)
+        if shift is None:
+            raise HTTPException(404, "Shift not found")
+        if actor.actor_type == "employee":
+            enforce_actor_branch(actor, shift.branch_id)
+        return await self.view(shift, detailed=True)
 
     async def my_history(self, actor, *, page=1, page_size=10):
         session = self.require_pos_actor(actor)
@@ -426,3 +577,169 @@ class ShiftService:
             await self.view(row, identity=identities.get(row.id))
             for row in rows
         ], total
+
+    async def z_report(self, shift_id, actor, *, reprint=False):
+        enforce_actor_company(actor, actor.company_id)
+        shift = await self.repo.by_id(actor.company_id, shift_id)
+        if shift is None:
+            raise HTTPException(404, "Shift not found")
+        if actor.actor_type == "employee" and shift.employee_id != actor.employee.id:
+            if not self._can_manage_shifts(actor):
+                raise HTTPException(403, "Shift report permission denied")
+            enforce_actor_branch(actor, shift.branch_id)
+        if shift.status != "closed":
+            raise HTTPException(409, "Z Report is available only after shift closure")
+        if reprint:
+            self.repo.db.add(AuditEvent(
+                company_id=shift.company_id,
+                actor_user_id=actor.user.id if actor.actor_type == "user" and actor.user else None,
+                actor_employee_id=actor.employee.id if actor.actor_type == "employee" and actor.employee else None,
+                device_id=actor.pos_session.device_id if actor.pos_session else None,
+                action="z_report_reprinted",
+                details={"shift_id": str(shift.id), "shift_number": shift.shift_number},
+            ))
+            await self.repo.db.commit()
+        # Closed shift summaries and currency rows are immutable snapshots.
+        return await self.view(shift, detailed=False)
+
+    @staticmethod
+    def _resolution_view(row):
+        return {
+            "id": row.id, "company_id": row.company_id,
+            "client_sale_id": row.client_sale_id,
+            "original_shift_id": row.original_shift_id,
+            "original_employee_id": row.original_employee_id,
+            "original_device_id": row.original_device_id,
+            "sale_id": row.sale_id, "action": row.action, "reason": row.reason,
+            "payload_sha256": row.payload_sha256,
+            "resolver_name": row.resolver_name_snapshot,
+            "created_at": row.created_at,
+        }
+
+    async def resolve_offline_sale(self, data, actor):
+        if not self._can_manage_shifts(actor):
+            raise HTTPException(403, "Shift management permission denied")
+        sale_data = data.sale
+        if sale_data.company_id != actor.company_id:
+            raise HTTPException(403, "Offline sale company mismatch")
+        if sale_data.client_sale_id is None or sale_data.shift_id is None or not sale_data.offline_shift_token:
+            raise HTTPException(400, "Client sale ID, original shift ID, and offline shift token are required")
+        if sale_data.client_created_at is None:
+            raise HTTPException(400, "Original offline transaction timestamp is required")
+        if sale_data.payment_method.strip().lower() == "credit":
+            raise HTTPException(409, "Offline credit sales cannot be resolved")
+        existing = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
+        if existing:
+            return self._resolution_view(existing)
+        if await SalesRepository(self.repo.db).get_by_client_sale_id(actor.company_id, sale_data.client_sale_id):
+            raise HTTPException(409, "Offline sale is already recorded and cannot be reviewed as quarantined")
+        keyed = await self.repo.offline_resolution(actor.company_id, idempotency_key=data.idempotency_key.strip())
+        if keyed:
+            raise HTTPException(409, "Offline resolution idempotency key is already in use")
+        try:
+            # Expiry limits automatic sync, not audited manager review of an
+            # already quarantined transaction. Signature and identity remain mandatory.
+            token = decode_offline_shift_token(sale_data.offline_shift_token, verify_expiration=False)
+            token_shift_id = UUID(str(token.get("shift_id")))
+        except Exception as exc:
+            raise HTTPException(409, "Offline shift identity is invalid") from exc
+        if token_shift_id != sale_data.shift_id:
+            raise HTTPException(409, "Offline shift identity does not match the sale")
+        shift = await self.repo.by_id(actor.company_id, token_shift_id, for_update=True)
+        if shift is None:
+            raise HTTPException(404, "Original shift not found")
+        expected_identity = {
+            "company_id": shift.company_id, "branch_id": shift.branch_id,
+            "device_id": shift.device_id, "employee_id": shift.employee_id,
+        }
+        if any(str(value) != str(token.get(name)) for name, value in expected_identity.items()):
+            raise HTTPException(409, "Offline shift identity evidence does not match the original shift")
+        if shift.status != "closed" or shift.closed_at is None:
+            raise HTTPException(409, "The original shift must be closed before manager resolution")
+        if sale_data.client_created_at < shift.opened_at or sale_data.client_created_at > shift.closed_at:
+            raise HTTPException(409, "Offline sale timestamp falls outside the original shift")
+        for supplied, expected, label in (
+            (sale_data.branch_id, shift.branch_id, "branch"),
+            (sale_data.employee_id, shift.employee_id, "cashier"),
+            (sale_data.device_id, shift.device_id, "register"),
+        ):
+            if supplied is not None and supplied != expected:
+                raise HTTPException(409, f"Offline sale {label} does not match the original shift")
+        if actor.actor_type == "employee":
+            enforce_actor_branch(actor, shift.branch_id)
+        payload = sale_data.model_dump(mode="json")
+        payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+        resolver_name = actor.user.email if actor.actor_type == "user" and actor.user else actor.employee.name
+        resolution = OfflineSaleResolution(
+            id=uuid.uuid4(), company_id=actor.company_id,
+            client_sale_id=sale_data.client_sale_id,
+            original_shift_id=shift.id, original_employee_id=shift.employee_id,
+            original_device_id=shift.device_id, action=data.action,
+            reason=data.reason.strip(), payload_sha256=digest,
+            payload_snapshot=payload, idempotency_key=data.idempotency_key.strip(),
+            resolved_by_user_id=actor.user.id if actor.actor_type == "user" and actor.user else None,
+            resolved_by_employee_id=actor.employee.id if actor.actor_type == "employee" and actor.employee else None,
+            resolver_name_snapshot=resolver_name,
+        )
+        audit = AuditEvent(
+            company_id=actor.company_id,
+            actor_user_id=resolution.resolved_by_user_id,
+            actor_employee_id=resolution.resolved_by_employee_id,
+            device_id=shift.device_id,
+            action="offline_sale_retained_quarantined",
+            reason=resolution.reason,
+            details={
+                "resolution_id": str(resolution.id),
+                "client_sale_id": str(resolution.client_sale_id),
+                "original_shift_id": str(shift.id), "payload_sha256": digest,
+            },
+        )
+        if data.action == "retain_quarantined":
+            self.repo.db.add_all([resolution, audit])
+            try:
+                await self.repo.db.commit()
+                await self.repo.db.refresh(resolution)
+            except IntegrityError as exc:
+                await self.repo.db.rollback()
+                retry = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
+                if retry:
+                    return self._resolution_view(retry)
+                raise HTTPException(409, "Offline sale was already reviewed") from exc
+            return self._resolution_view(resolution)
+
+        sale_data.branch_id = shift.branch_id
+        sale_data.employee_id = shift.employee_id
+        sale_data.device_id = shift.device_id
+        sale_data.device_key = None
+        sale_data.assignment_revision = None
+        employee = SimpleNamespace(
+            id=shift.employee_id, name=shift.cashier_name_snapshot,
+            branch_id=shift.branch_id, role="cashier",
+            permissions={"sales": True, "discounts": True},
+        )
+        device = SimpleNamespace(
+            id=shift.device_id, name=shift.register_name_snapshot,
+            friendly_name=shift.register_name_snapshot, pos_number=None,
+        )
+        try:
+            await SalesService(SalesRepository(self.repo.db)).create_sale(
+                sale_data, actor=actor, resolved_shift=shift,
+                resolved_employee=employee, resolved_device=device,
+                resolution_record=resolution,
+            )
+        except IntegrityError as exc:
+            await self.repo.db.rollback()
+            retry = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
+            if retry:
+                return self._resolution_view(retry)
+            raise HTTPException(409, "Offline sale was already reviewed or recorded") from exc
+        await self.repo.db.refresh(resolution)
+        return self._resolution_view(resolution)
+
+    async def offline_resolution_history(self, company_id, actor, **filters):
+        enforce_actor_company(actor, company_id)
+        if actor.actor_type == "employee" and not self._can_manage_shifts(actor):
+            raise HTTPException(403, "Shift management permission denied")
+        rows, total = await self.repo.offline_resolutions(company_id, **filters)
+        return [self._resolution_view(row) for row in rows], total
