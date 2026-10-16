@@ -2,6 +2,21 @@ import { applyDiscounts } from "./discounts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
+  ArchiveBoxIcon,
+  ArrowRightStartOnRectangleIcon,
+  BanknotesIcon,
+  Bars3Icon,
+  BuildingStorefrontIcon,
+  ChartBarIcon,
+  ClipboardDocumentListIcon,
+  Cog6ToothIcon,
+  CreditCardIcon,
+  CubeIcon,
+  QrCodeIcon,
+  ShoppingCartIcon,
+  UsersIcon,
+} from "@heroicons/react/24/outline";
+import {
   api,
   getApiErrorMessage,
 } from "./api/client";
@@ -3104,14 +3119,16 @@ const [loggedIn, setLoggedIn] = useState(
 
   if (!loggedIn) {
     return (
-      <div style={pageCenter}>
+      <div style={pageCenter} className="pos-auth-page">
         <div
+          className={`pos-auth-card ${authMode === "register" ? "pos-auth-card-wide" : ""}`}
           style={{
             ...loginCard,
             width: authMode === "register" ? 760 : 430,
           }}
         >
-          <h1 style={brand}>ApexRetail POS</h1>
+          <div className="pos-auth-logo" aria-hidden="true">A</div>
+          <h1 style={brand} className="pos-auth-title">ApexRetail POS</h1>
 
           <p
             style={{
@@ -3124,6 +3141,7 @@ const [loggedIn, setLoggedIn] = useState(
           </p>
 
           <div
+            className="pos-auth-tabs"
             style={{
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
@@ -3207,6 +3225,7 @@ const [loggedIn, setLoggedIn] = useState(
           ) : (
             <>
               <div
+                className="pos-auth-form-grid"
                 style={{
                   display: "grid",
                   gridTemplateColumns:
@@ -3415,9 +3434,10 @@ const [loggedIn, setLoggedIn] = useState(
 
   if (loggedIn && !branchId) {
     return (
-      <div style={pageCenter}>
-        <div style={loginCard}>
-          <h1 style={brand}>Preparing POS</h1>
+      <div style={pageCenter} className="pos-auth-page">
+        <div style={loginCard} className="pos-auth-card">
+          <div className="pos-auth-logo" aria-hidden="true">A</div>
+          <h1 style={brand} className="pos-auth-title">Preparing POS</h1>
 
           <p style={{ textAlign: "center" }}>
             Synchronizing this device with its assigned branch.
@@ -3445,8 +3465,9 @@ const [loggedIn, setLoggedIn] = useState(
     if (pinSelection) {
       const terminals = pinSelection.terminals.filter((item) => !selectedShopId || item.shop_id === selectedShopId);
       return (
-        <div style={pageCenter}><div style={loginCard}>
-          <h1 style={brand}>Choose POS location</h1>
+        <div style={pageCenter} className="pos-auth-page"><div style={loginCard} className="pos-auth-card">
+          <div className="pos-auth-logo" aria-hidden="true">A</div>
+          <h1 style={brand} className="pos-auth-title">Choose POS location</h1>
           <p>Select an authorised shop and available terminal. New sign-in requires an internet connection.</p>
           {!pinSelection.shops.length ? <p style={errorText}>No authorised shops are available.</p> : <>
             <label style={modalLabel}>Shop<select style={input} value={selectedShopId} onChange={(e) => { setSelectedShopId(e.target.value); setSelectedTerminalId(""); }}><option value="">Select shop</option>{pinSelection.shops.map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}</select></label>
@@ -3461,9 +3482,10 @@ const [loggedIn, setLoggedIn] = useState(
       );
     }
     return (
-      <div style={pageCenter}>
-        <div style={loginCard}>
-          <h1 style={brand}>Cashier Sign In</h1>
+      <div style={pageCenter} className="pos-auth-page">
+        <div style={loginCard} className="pos-auth-card pos-pin-card">
+          <div className="pos-auth-logo pos-auth-logo-pin" aria-hidden="true">••••</div>
+          <h1 style={brand} className="pos-auth-title">Cashier Sign In</h1>
 
           <p style={{ textAlign: "center" }}>
             Enter your four-digit employee PIN
@@ -3481,6 +3503,7 @@ const [loggedIn, setLoggedIn] = useState(
           </p>
 
           <input
+            className="pos-pin-input"
             style={{
               ...input,
               textAlign: "center",
@@ -3582,12 +3605,13 @@ const [loggedIn, setLoggedIn] = useState(
                   aria-expanded={menuOpen}
 
                   style={posMenuTrigger}
+                  className="pos-menu-trigger"
 
                   onClick={() => setMenuOpen((current) => !current)}
 
                 >
 
-                  ☰
+                  <Bars3Icon aria-hidden="true" />
 
                 </button>
 
@@ -3609,7 +3633,7 @@ const [loggedIn, setLoggedIn] = useState(
                     />
 
 
-                    <aside style={posMenuPanel}>
+                    <aside style={posMenuPanel} className="pos-menu-panel">
 
                       <div style={posMenuHeader}>
 
@@ -3629,7 +3653,7 @@ const [loggedIn, setLoggedIn] = useState(
                       </div>
 
 
-                      <nav style={posMenuNavigation}>
+                      <nav style={posMenuNavigation} className="pos-menu-navigation">
 
                         <button
 
@@ -3641,7 +3665,7 @@ const [loggedIn, setLoggedIn] = useState(
 
                         >
 
-                          Sales
+                          <ShoppingCartIcon className="pos-nav-icon" /> Sales
 
                         </button>
 
@@ -3656,7 +3680,7 @@ const [loggedIn, setLoggedIn] = useState(
 
                         >
 
-                          Sales Management
+                          <ClipboardDocumentListIcon className="pos-nav-icon" /> Sales Management
 
                         </button>
 
@@ -3665,7 +3689,7 @@ const [loggedIn, setLoggedIn] = useState(
                           style={posMenuButton}
                           onClick={() => showPosModule("Customers")}
                         >
-                          Customers
+                          <UsersIcon className="pos-nav-icon" /> Customers
                         </button>
 
                         {(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.credit_settlements) && (
@@ -3674,7 +3698,7 @@ const [loggedIn, setLoggedIn] = useState(
                             style={posMenuButton}
                             onClick={() => showPosModule("Credit Settlements")}
                           >
-                            Credit Settlements
+                            <CreditCardIcon className="pos-nav-icon" /> Credit Settlements
                           </button>
                         )}
 
@@ -3684,7 +3708,7 @@ const [loggedIn, setLoggedIn] = useState(
                             style={posMenuButton}
                             onClick={() => showPosModule("Expenses")}
                           >
-                            Expenses
+                            <BanknotesIcon className="pos-nav-icon" /> Expenses
                           </button>
                         )}
 
@@ -3694,7 +3718,7 @@ const [loggedIn, setLoggedIn] = useState(
                             style={posMenuButton}
                             onClick={() => showPosModule("Products")}
                           >
-                            Products
+                            <CubeIcon className="pos-nav-icon" /> Products
                           </button>
                         )}
 
@@ -3704,7 +3728,7 @@ const [loggedIn, setLoggedIn] = useState(
                             style={posMenuButton}
                             onClick={() => showPosModule("Inventory")}
                           >
-                            Inventory
+                            <ArchiveBoxIcon className="pos-nav-icon" /> Inventory
                           </button>
                         )}
 
@@ -3719,7 +3743,7 @@ const [loggedIn, setLoggedIn] = useState(
 
                         >
 
-                          Reports
+                          <ChartBarIcon className="pos-nav-icon" /> Reports
 
                         </button>
 
@@ -3734,7 +3758,7 @@ const [loggedIn, setLoggedIn] = useState(
 
                         >
 
-                          Settings
+                          <Cog6ToothIcon className="pos-nav-icon" /> Settings
 
                         </button>
 
@@ -3749,7 +3773,7 @@ const [loggedIn, setLoggedIn] = useState(
 
                         >
 
-                          Backoffice
+                          <BuildingStorefrontIcon className="pos-nav-icon" /> Backoffice
 
                         </button>
 
@@ -3772,7 +3796,7 @@ const [loggedIn, setLoggedIn] = useState(
 
                       >
 
-                        Log out
+                        <ArrowRightStartOnRectangleIcon className="pos-nav-icon" /> Log out
 
                       </button>
 
@@ -3839,7 +3863,8 @@ const [loggedIn, setLoggedIn] = useState(
       <main style={mainArea} className="pos-sales-main">
         <div style={topBar} className="pos-sales-topbar">
           <div>
-            <h1 style={{ margin: 0, fontSize: 32 }}>
+            <span className="pos-sales-eyebrow">Checkout</span>
+            <h1 style={{ margin: 0, fontSize: 32 }} className="pos-sales-title">
               ApexRetail POS
             </h1>
             <p style={{ margin: "4px 0 0" }}>
@@ -3884,6 +3909,7 @@ const [loggedIn, setLoggedIn] = useState(
           </div>
 
           <button
+          className="pos-topbar-action"
           type="button"
           onClick={switchCashier}
           style={{
@@ -3892,10 +3918,11 @@ const [loggedIn, setLoggedIn] = useState(
             marginTop: 0,
           }}
         >
-          Switch Cashier
+          <UsersIcon aria-hidden="true" /> Switch Cashier
         </button>
 
         <button
+            className="pos-topbar-action"
             onClick={logout}
             style={{
               ...secondaryButton,
@@ -3903,7 +3930,7 @@ const [loggedIn, setLoggedIn] = useState(
               marginTop: 0,
             }}
           >
-            Logout
+            <ArrowRightStartOnRectangleIcon aria-hidden="true" /> Logout
           </button>
         </div>
 
@@ -3958,7 +3985,7 @@ const [loggedIn, setLoggedIn] = useState(
             className="pos-scan-barcode-button"
             onClick={() => setSalesScannerOpen(true)}
           >
-            Scan Barcode
+            <QrCodeIcon aria-hidden="true" /> Scan Barcode
           </button>
         </div>
 
@@ -3971,6 +3998,9 @@ const [loggedIn, setLoggedIn] = useState(
               className="pos-product-card"
               disabled={Number(product.stock_qty) <= 0}
             >
+              <span className="pos-product-visual" aria-hidden="true">
+                {product.name.trim().slice(0, 2).toUpperCase() || "AP"}
+              </span>
               <h3>{product.name}</h3>
               <p>SKU: {product.sku || "-"}</p>
               <p>
@@ -4243,8 +4273,8 @@ const [loggedIn, setLoggedIn] = useState(
 
       {showTender && (
         <div style={overlay}>
-          <div style={modalCard}>
-            <h2 style={{ marginTop: 0 }}>{paymentMethod.toUpperCase()} Payment</h2>
+          <div style={modalCard} className="pos-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-payment-title">
+            <h2 style={{ marginTop: 0 }} id="pos-payment-title">{paymentMethod.toUpperCase()} Payment</h2>
             <p style={modalLabel}>Base currency: {basePosCurrency?.code || currencyConfig?.base_currency_code || "Unavailable"}</p>
             <label style={modalLabel} htmlFor="payment-currency">Payment currency</label>
             <select
@@ -4275,7 +4305,7 @@ const [loggedIn, setLoggedIn] = useState(
             </select>
 
             {activePaymentCurrency && basePosCurrency && (
-              <section aria-label="Payment conversion" style={{ ...changeBox, display: "grid", gap: 8, textAlign: "left" }}>
+              <section className="pos-payment-conversion" aria-label="Payment conversion" style={{ ...changeBox, display: "grid", gap: 8, textAlign: "left" }}>
                 <div>Amount due: {currencySymbol}{total.toFixed(basePosCurrency.decimal_places)} {basePosCurrency.code}</div>
                 {!activePaymentCurrency.is_base && (
                   <div>Rate: 1 {basePosCurrency.code} = {activePaymentCurrency.current_rate || "Unavailable"} {activePaymentCurrency.code}</div>
@@ -4301,11 +4331,12 @@ const [loggedIn, setLoggedIn] = useState(
                   onKeyDown={(event) => { if (event.key === "Enter") void submitSale(amountReceived); }}
                 />
                 <button
+                  className="pos-exact-payment-button"
                   style={secondaryButton}
                   onClick={() => setAmountReceived(paymentDueText)}
                   disabled={!paymentDueText}
                 >Exact amount</button>
-                <div style={changeBox}>
+                <div style={changeBox} className="pos-payment-change">
                   <span>Change due ({activePaymentCurrency?.code || ""})</span>
                   <strong>{activePaymentCurrency?.symbol}{paymentChangeText || "—"}</strong>
                 </div>
@@ -4317,6 +4348,7 @@ const [loggedIn, setLoggedIn] = useState(
             {currencyQuoteError && <p role="alert" style={errorText}>{currencyQuoteError}</p>}
 
             <button
+              className="pos-confirm-payment"
               style={primaryButton}
               disabled={processing || !activePaymentCurrency || !paymentDueText || Boolean(currencyQuoteError)}
               onClick={() => void submitSale(paymentMethod === "cash" ? amountReceived : undefined)}
@@ -4325,6 +4357,7 @@ const [loggedIn, setLoggedIn] = useState(
             </button>
 
             <button
+              className="pos-cancel-payment"
               style={secondaryButton}
               onClick={() => {
                 setShowTender(false);
@@ -4535,7 +4568,7 @@ const pageCenter: CSSProperties = {
   minHeight: "100vh",
   display: "grid",
   placeItems: "center",
-  background: "#eef2f7",
+  background: "#f3f7f4",
 };
 
 const loginCard: CSSProperties = {
@@ -4565,7 +4598,7 @@ const appShell: CSSProperties = {
   minHeight: "100vh",
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr) 420px",
-  background: "#eef2f7",
+  background: "#f3f7f4",
 };
 
 const mainArea: CSSProperties = {
@@ -4663,7 +4696,7 @@ const primaryButton: CSSProperties = {
   boxSizing: "border-box",
   padding: 15,
   marginTop: 16,
-  background: "#111827",
+  background: "#43A047",
   color: "white",
   border: 0,
   borderRadius: 12,
@@ -4675,17 +4708,18 @@ const secondaryButton: CSSProperties = {
   boxSizing: "border-box",
   padding: 13,
   marginTop: 10,
-  background: "#e5e7eb",
-  color: "#111827",
-  border: 0,
+  background: "#ffffff",
+  color: "#17212B",
+  border: "1px solid #dfe7e1",
   borderRadius: 12,
   fontWeight: 700,
 };
 
 const activePaymentButton: CSSProperties = {
   ...secondaryButton,
-  background: "#111827",
+  background: "#43A047",
   color: "white",
+  border: "1px solid #2E7D32",
 };
 
 const overlay: CSSProperties = {

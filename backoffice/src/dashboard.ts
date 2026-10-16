@@ -2,6 +2,7 @@ export type DashboardRangeKey =
   | "today"
   | "yesterday"
   | "last_7_days"
+  | "this_month"
   | "last_month"
   | "custom";
 
@@ -150,6 +151,7 @@ export const dashboardRangeOptions: Array<{
   { key: "today", label: "Today" },
   { key: "yesterday", label: "Yesterday" },
   { key: "last_7_days", label: "Last 7 days" },
+  { key: "this_month", label: "This month" },
   { key: "last_month", label: "Last month" },
   { key: "custom", label: "Custom date range" },
 ];

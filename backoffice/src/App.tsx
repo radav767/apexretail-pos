@@ -20,6 +20,7 @@ import CustomersPage from "./pages/CustomersPage";
 import CreditSettlementsPage from "./pages/CreditSettlementsPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import ShiftReportsPage from "./pages/ShiftReportsPage";
+import { AppIcon } from "./components/AppIcon";
 
 type BackofficePage =
   | "dashboard"
@@ -134,21 +135,27 @@ function App() {
       try {
         setDashboardLoading(true);
         setMessage("");
+        const thisMonthStart = localDateValue(
+          new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+        );
+        const apiRangeKey = rangeKey === "this_month" ? "custom" : rangeKey;
+        const apiDateFrom = rangeKey === "this_month" ? thisMonthStart : customDateFrom;
+        const apiDateTo = rangeKey === "this_month" ? localDateValue(new Date()) : customDateTo;
 
         const response = await api.get(
           `/dashboard/analytics-v3/${id}`,
           {
             params: {
-              range_key: rangeKey,
+              range_key: apiRangeKey,
               granularity,
               shop_id: selectedShopId || undefined,
               date_from:
-                rangeKey === "custom"
-                  ? customDateFrom
+                apiRangeKey === "custom"
+                  ? apiDateFrom
                   : undefined,
               date_to:
-                rangeKey === "custom"
-                  ? customDateTo
+                apiRangeKey === "custom"
+                  ? apiDateTo
                   : undefined,
             },
           },
@@ -186,13 +193,23 @@ function App() {
     [rangeKey, granularity, selectedShopId, customDateFrom, customDateTo],
   );
 
-  const dashboardParams = useCallback(() => ({
-    range_key: rangeKey,
-    granularity,
-    shop_id: selectedShopId || undefined,
-    date_from: rangeKey === "custom" ? customDateFrom : undefined,
-    date_to: rangeKey === "custom" ? customDateTo : undefined,
-  }), [rangeKey, granularity, selectedShopId, customDateFrom, customDateTo]);
+  const dashboardParams = useCallback(() => {
+    const thisMonthStart = localDateValue(
+      new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    );
+    const apiRangeKey = rangeKey === "this_month" ? "custom" : rangeKey;
+    return {
+      range_key: apiRangeKey,
+      granularity,
+      shop_id: selectedShopId || undefined,
+      date_from: apiRangeKey === "custom"
+        ? (rangeKey === "this_month" ? thisMonthStart : customDateFrom)
+        : undefined,
+      date_to: apiRangeKey === "custom"
+        ? (rangeKey === "this_month" ? localDateValue(new Date()) : customDateTo)
+        : undefined,
+    };
+  }, [rangeKey, granularity, selectedShopId, customDateFrom, customDateTo]);
 
   const drilldownParams = useCallback((request: DashboardDrilldownRequest) => ({
     ...dashboardParams(),
@@ -427,7 +444,7 @@ function App() {
             aria-controls="backoffice-navigation"
             onClick={() => setMobileMenuOpen((open) => !open)}
           >
-            Menu
+            <AppIcon name="menu" /> Menu
           </button>
         </div>
 
@@ -439,87 +456,92 @@ function App() {
             className={page === "dashboard" ? "active" : ""}
             onClick={() => navigateTo("dashboard")}
           >
-            Dashboard
+            <AppIcon name="dashboard" /> <span>Dashboard</span>
           </button>
+
+          <span className="nav-section-label">Sales management</span>
 
           <button
             className={page === "sales" ? "active" : ""}
             onClick={() => navigateTo("sales")}
           >
-            Sales History
-          </button>
-
-          <button
-            className={page === "products" ? "active" : ""}
-            onClick={() => navigateTo("products")}
-          >
-            Products
-          </button>
-          <button
-            className={page === "inventory" ? "active" : ""}
-            onClick={() => navigateTo("inventory")}
-          >
-            Inventory
-          </button>
-          <button
-            className={page === "employees" ? "active" : ""}
-            onClick={() => navigateTo("employees")}
-          >
-            Employees
-          </button>
-          <button
-            className={page === "reports" ? "active" : ""}
-            onClick={() => navigateTo("reports")}
-          >
-            Reports
+            <AppIcon name="sales" /> <span>Sales History</span>
           </button>
           <button
             className={page === "shift-reports" ? "active" : ""}
             onClick={() => navigateTo("shift-reports")}
           >
-            Shift Reports
-          </button>
-          <button
-            className={page === "devices" ? "active" : ""}
-            onClick={() => navigateTo("devices")}
-          >
-            Devices/POS
-          </button>
-          <button
-            className={page === "settings" ? "active" : ""}
-            onClick={() => navigateTo("settings")}
-          >
-            Settings
+            <AppIcon name="shifts" /> <span>Cashier Shifts</span>
           </button>
           <button
             className={`${page === "customers" ? "active" : ""} customers-nav-button`.trim()}
             onClick={() => navigateTo("customers")}
           >
-            Customer Accounts
+            <AppIcon name="customers" /> <span>Customer Accounts</span>
           </button>
           <button
             className={`${page === "credit-settlements" ? "active" : ""} credit-settlements-nav-button`.trim()}
             onClick={() => navigateTo("credit-settlements")}
           >
-            Credit Reports
+            <AppIcon name="credit" /> <span>Credit Management</span>
           </button>
           <button
             className={`${page === "expenses" ? "active" : ""} expenses-nav-button`.trim()}
             onClick={() => navigateTo("expenses")}
           >
-            Expense Reports
+            <AppIcon name="expenses" /> <span>Expenses</span>
+          </button>
+
+          <span className="nav-section-label">Catalogue & operations</span>
+          <button
+            className={page === "products" ? "active" : ""}
+            onClick={() => navigateTo("products")}
+          >
+            <AppIcon name="products" /> <span>Products</span>
+          </button>
+          <button
+            className={page === "inventory" ? "active" : ""}
+            onClick={() => navigateTo("inventory")}
+          >
+            <AppIcon name="inventory" /> <span>Inventory</span>
+          </button>
+          <button
+            className={page === "reports" ? "active" : ""}
+            onClick={() => navigateTo("reports")}
+          >
+            <AppIcon name="reports" /> <span>Reports</span>
+          </button>
+          <button
+            className={page === "devices" ? "active" : ""}
+            onClick={() => navigateTo("devices")}
+          >
+            <AppIcon name="devices" /> <span>Shops & Devices</span>
+          </button>
+
+          <span className="nav-section-label">People & settings</span>
+          <button
+            className={page === "employees" ? "active" : ""}
+            onClick={() => navigateTo("employees")}
+          >
+            <AppIcon name="employees" /> <span>Employees</span>
+          </button>
+          <button
+            className={page === "settings" ? "active" : ""}
+            onClick={() => navigateTo("settings")}
+          >
+            <AppIcon name="settings" /> <span>Settings</span>
           </button>
           <button
             className="logout-nav-button"
             type="button"
             onClick={logout}
           >
-            Log out
+            <AppIcon name="logout" /> <span>Log out</span>
           </button>
         </nav>
 
         <button className="logout-button" onClick={logout}>
-          Log out
+          <AppIcon name="logout" /> <span>Log out</span>
         </button>
       </aside>
 
@@ -560,6 +582,7 @@ function App() {
             onClick={() => loadBackofficeData(companyId)}
             disabled={loading || dashboardLoading}
           >
+            <AppIcon name="refresh" />
             {loading || dashboardLoading ? "Loading..." : "Refresh"}
           </button>
         </header>

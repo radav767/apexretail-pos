@@ -7,7 +7,7 @@ const css = readFileSync(new URL("../src/pages/credit-settlements.css", import.m
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 
 test("Credit Settlements is responsive navigation without changing hamburger or logout", () => {
-  assert.match(app, />\s*Credit Reports\s*</);
+  assert.match(app, />\s*Credit Management\s*</);
   assert.match(app, /page === "credit-settlements" && \(\s*<CreditSettlementsPage/);
   assert.match(app, /function navigateTo[\s\S]*setMobileMenuOpen\(false\)/);
   assert.match(app, /className="logout-nav-button"/);

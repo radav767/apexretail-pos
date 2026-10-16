@@ -4,6 +4,11 @@ import {
   type DashboardDrilldownRequest, type DashboardMetricKey,
   type DashboardPhase3Summary, type DashboardRangeKey, type DashboardRankedRow,
 } from "./dashboard";
+import {
+  PaymentDonutChart,
+  RankedBarChart,
+  RevenueTrendChart,
+} from "./components/AnalyticsCharts";
 
 export type ExportSection = "trends" | "top_products" | "top_categories" | "payment_methods" | "shop_breakdown" | "cashier_breakdown" | "discount_breakdown" | "refund_breakdown";
 
@@ -61,27 +66,27 @@ export function DashboardPanel(props: Props) {
     ["Refunds", "refunds", summary.metrics.refunds],
   ] as Array<[string, string, DashboardMetric]> : [];
   const financialCards = summary ? [
-    { title: "Operating Expenses", value: summary.financial_summary.operating_expenses, detail: "Deducted from gross profit, not sales", page: "expenses" as const },
+    { title: "Operating Expenses", value: summary.financial_summary.operating_expenses, detail: "Recorded expenses", page: "expenses" as const },
     { title: "Net Profit", value: summary.financial_summary.net_profit, detail: "Gross profit minus operating expenses" },
-    { title: "Cash Sales", value: summary.financial_summary.cash_sales, detail: "Sales revenue paid in cash" },
-    { title: "Card Sales", value: summary.financial_summary.card_sales, detail: "Sales revenue paid by card" },
-    { title: "Mobile / Transfer Sales", value: summary.financial_summary.mobile_sales, detail: "Sales revenue paid by mobile / transfer" },
-    { title: "Credit Sales", value: summary.financial_summary.credit_sales, detail: "Recognized as revenue at sale time" },
+    { title: "Cash Sales", value: summary.financial_summary.cash_sales, detail: "Cash payments" },
+    { title: "Card Sales", value: summary.financial_summary.card_sales, detail: "Card payments" },
+    { title: "Mobile / Transfer Sales", value: summary.financial_summary.mobile_sales, detail: "Mobile and transfer payments" },
+    { title: "Credit Sales", value: summary.financial_summary.credit_sales, detail: "Credit transactions" },
     { title: "Credit Settlements", value: summary.financial_summary.credit_settlements, detail: `Cash ${money(summary.financial_summary.cash_settlements, summary)} · Card ${money(summary.financial_summary.card_settlements, summary)} · Mobile ${money(summary.financial_summary.mobile_settlements, summary)}`, page: "credit-settlements" as const },
-    { title: "Outstanding Credit / Receivables", value: summary.financial_summary.outstanding_receivables, detail: "Current unsettled customer credit", page: "credit-settlements" as const },
-    { title: "Expected Cash Movement", value: summary.financial_summary.expected_cash_movement, detail: "Cash sales + cash settlements − cash expenses" },
+    { title: "Outstanding Credit / Receivables", value: summary.financial_summary.outstanding_receivables, detail: "Open receivables", page: "credit-settlements" as const },
+    { title: "Expected Cash Movement", value: summary.financial_summary.expected_cash_movement, detail: "Net cash movement" },
   ] : [];
 
   return <>
     <section className="dashboard-filters panel" aria-labelledby="dashboard-filters-title">
-      <div className="panel-header"><div><h2 id="dashboard-filters-title">Reporting Filters</h2><p>Completed sales only. Reporting timezone: {summary?.reporting_timezone || "Africa/Harare"}</p></div></div>
+      <div className="panel-header"><div><h2 id="dashboard-filters-title">Performance overview</h2><p>{summary?.reporting_timezone || "Africa/Harare"} · Completed sales</p></div></div>
       <div className="dashboard-filter-grid">
         <label className="dashboard-filter-field"><span>Reporting period</span><select aria-label="Reporting period" value={rangeKey} onChange={(event) => onRangeChange(event.target.value as DashboardRangeKey)}>{dashboardRangeOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</select></label>
         <label className="dashboard-filter-field"><span>Shop</span><select aria-label="Shop" value={selectedShopId} onChange={(event) => onShopChange(event.target.value)}><option value="">All shops</option>{(shops ?? summary?.shops ?? []).map((shop) => <option key={shop.id} value={shop.id}>{shop.name}</option>)}</select></label>
         <label className="dashboard-filter-field"><span>Trend grouping</span><select aria-label="Trend grouping" value={granularity} onChange={(event) => onGranularityChange(event.target.value as Props["granularity"])}><option value="day">Day</option><option value="week">Week</option><option value="month">Month</option></select></label>
         {rangeKey === "custom" && <><label className="dashboard-filter-field"><span>Date from</span><input aria-label="Date from" type="date" value={customDateFrom} onChange={(event) => onDateFromChange(event.target.value)} /></label><label className="dashboard-filter-field"><span>Date to</span><input aria-label="Date to" type="date" value={customDateTo} onChange={(event) => onDateToChange(event.target.value)} /></label></>}
       </div>
-      {summary && <p className="dashboard-range-caption">Showing {summary.date_from} to {summary.date_to}{summary.shop_id ? " for one shop" : " across all company shops"}. Compared with {summary.comparison.date_from} to {summary.comparison.date_to}.</p>}
+      {summary && <p className="dashboard-range-caption">Showing {summary.date_from} to {summary.date_to} for {summary.shop_id ? "one shop" : "all shops"} · Comparison {summary.comparison.date_from} – {summary.comparison.date_to}</p>}
     </section>
 
     <section className="summary-grid" aria-label="Financial summary">{cards.map(([title, key, metric]) => {
@@ -95,6 +100,20 @@ export function DashboardPanel(props: Props) {
     ))}</section>
 
     {summary && <>
+      <div className="dashboard-chart-grid dashboard-chart-grid-primary">
+        <section className="panel chart-card chart-card-wide">
+          <div className="panel-header"><div><span className="panel-eyebrow">Revenue</span><h2>Sales trend</h2></div><ExportButton section="trends" onExport={onExport} /></div>
+          <RevenueTrendChart summary={summary} />
+        </section>
+        <section className="panel chart-card">
+          <div className="panel-header"><div><span className="panel-eyebrow">Tender mix</span><h2>Payment methods</h2></div></div>
+          <PaymentDonutChart rows={summary.payment_methods} summary={summary} />
+        </section>
+      </div>
+      <section className="panel chart-card">
+        <div className="panel-header"><div><span className="panel-eyebrow">Product performance</span><h2>Top-selling products</h2></div><ExportButton section="top_products" onExport={onExport} /></div>
+        <RankedBarChart rows={summary.top_products} summary={summary} />
+      </section>
       <section className="panel analytics-panel"><div className="panel-header"><div><h2>Sales and gross-profit trend</h2><p>Grouped by {granularity}</p></div><ExportButton section="trends" onExport={onExport} /></div><div className="analytics-table-wrap"><table className="analytics-table"><caption className="sr-only">Sales and gross-profit trend</caption><thead><tr><th>Period</th><th>Gross sales</th><th>Refunds</th><th>Net sales</th><th>Gross profit</th><th>Discounts</th></tr></thead><tbody>{summary.trends.length ? summary.trends.map((point) => <tr key={point.period_start}><th scope="row"><button type="button" className="dashboard-detail-link" onClick={() => onOpenDrilldown({ title: `Sales from ${point.period_start} to ${point.period_end}`, metric: "net_sales", dateFrom: point.period_start, dateTo: point.period_end })}>{point.period_start} – {point.period_end}</button></th><td>{formatDashboardMoney(point.metrics.gross_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.refunds, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.net_sales, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.gross_profit, summary.currency_symbol, summary.decimal_places)}</td><td>{formatDashboardMoney(point.metrics.discounts, summary.currency_symbol, summary.decimal_places)}</td></tr>) : <tr><td colSpan={6}>No contributing sales</td></tr>}</tbody></table></div></section>
       <div className="analytics-grid"><RankedTable title="Top products" rows={summary.top_products} summary={summary} section="top_products" dimension="product" onExport={onExport} onOpenDrilldown={onOpenDrilldown} /><RankedTable title="Top categories" rows={summary.top_categories} summary={summary} section="top_categories" dimension="category" onExport={onExport} onOpenDrilldown={onOpenDrilldown} /></div>
       <BreakdownTable title="Payment methods" rows={summary.payment_methods} summary={summary} section="payment_methods" dimension="payment" onExport={onExport} onOpenDrilldown={onOpenDrilldown} />

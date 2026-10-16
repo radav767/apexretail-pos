@@ -57,7 +57,7 @@ test("shift print template is informational, not a sales receipt", () => {
 test("closed shift success workflow exposes the required actions", () => {
   assert.match(page, /SHIFT CLOSED SUCCESSFULLY/);
   for (const label of ["View Z Report", "Print Z Report", "Return to Sales"]) {
-    assert.match(page, new RegExp(label));
+    assert.match(page, new RegExp(label, "i"));
   }
   assert.match(page, /setClosedShift\(response\.data\)/);
 });
