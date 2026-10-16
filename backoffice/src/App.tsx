@@ -7,7 +7,7 @@ import {
   type DashboardPhase3Summary,
   type DashboardRangeKey,
 } from "./dashboard";
-import { DashboardPanel, type ExportSection } from "./DashboardPanel";
+import { DashboardPanel, type DashboardFeature, type ExportSection } from "./DashboardPanel";
 import { DashboardDrilldownDialog } from "./DashboardDrilldownDialog";
 import ProductsPage from "./pages/ProductsPage";
 import InventoryPage from "./pages/InventoryPage";
@@ -42,6 +42,12 @@ function initialBackofficePage(): BackofficePage {
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
+function initialDashboardFeature(): DashboardFeature {
+  const requested = new URLSearchParams(window.location.search).get("feature");
+  return (["sales-analytics", "payment-methods", "top-products"] as DashboardFeature[])
+    .includes(requested as DashboardFeature) ? requested as DashboardFeature : "home";
+}
+
 function localDateValue(date: Date): string {
   const adjusted = new Date(
     date.getTime() - date.getTimezoneOffset() * 60_000,
@@ -66,6 +72,7 @@ function App() {
   const [dashboardShops, setDashboardShops] = useState<DashboardPhase3Summary["shops"]>([]);
   const [granularity, setGranularity] = useState<"day" | "week" | "month">("day");
   const [page, setPage] = useState<BackofficePage>(initialBackofficePage);
+  const [dashboardFeature, setDashboardFeature] = useState<DashboardFeature>(initialDashboardFeature);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
@@ -369,12 +376,36 @@ function App() {
 
   function navigateTo(nextPage: typeof page) {
     setPage(nextPage);
+    setDashboardFeature("home");
     const url = new URL(window.location.href);
     url.searchParams.set("page", nextPage);
-    window.history.replaceState(null, "", url);
+    url.searchParams.delete("feature");
+    window.history.pushState(null, "", url);
     setMobileMenuOpen(false);
     closeDashboardDrilldown();
   }
+
+  function navigateDashboardFeature(nextFeature: DashboardFeature) {
+    setPage("dashboard");
+    setDashboardFeature(nextFeature);
+    const url = new URL(window.location.href);
+    url.searchParams.set("page", "dashboard");
+    if (nextFeature === "home") url.searchParams.delete("feature");
+    else url.searchParams.set("feature", nextFeature);
+    window.history.pushState(null, "", url);
+    closeDashboardDrilldown();
+  }
+
+  useEffect(() => {
+    const syncLocation = () => {
+      setPage(initialBackofficePage());
+      setDashboardFeature(initialDashboardFeature());
+      setMobileMenuOpen(false);
+      closeDashboardDrilldown();
+    };
+    window.addEventListener("popstate", syncLocation);
+    return () => window.removeEventListener("popstate", syncLocation);
+  }, []);
 
   useEffect(() => {
     if (loggedIn && companyId) {
@@ -562,7 +593,13 @@ function App() {
           <div>
             <h1>
               {page === "dashboard"
-                ? "Business Dashboard"
+                ? dashboardFeature === "sales-analytics"
+                  ? "Sales Analytics"
+                  : dashboardFeature === "payment-methods"
+                    ? "Payment Methods"
+                    : dashboardFeature === "top-products"
+                      ? "Top Products"
+                      : "Business Dashboard"
                 : page === "sales"
                   ? "Sales History"
                   : page === "products"
@@ -615,7 +652,9 @@ function App() {
             onDateToChange={(value) => { closeDashboardDrilldown(); setCustomDateTo(value); }}
             onExport={(section) => void exportDashboard(section)}
             onOpenDrilldown={openDashboardDrilldown}
-            onNavigateFinancial={navigateTo}
+            feature={dashboardFeature}
+            onFeatureChange={navigateDashboardFeature}
+            onNavigatePage={navigateTo}
           />
         )}
 

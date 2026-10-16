@@ -41,10 +41,13 @@ test("Dashboard drill-down uses filtered paginated routes and stays separate fro
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*\.dashboard-dialog/);
 });
 
-test("Dashboard loads the scoped financial summary and links financial reports", () => {
+test("Dashboard loads scoped financial data and uses URL-backed feature navigation", () => {
   assert.match(app, /\/reports\/financial-summary\/\$\{id\}/);
   assert.match(app, /date_from: response\.data\.date_from/);
   assert.match(app, /shop_id: selectedShopId \|\| undefined/);
   assert.match(app, /financial_summary: financialResponse\.data/);
-  assert.match(app, /onNavigateFinancial=\{navigateTo\}/);
+  assert.match(app, /onNavigatePage=\{navigateTo\}/);
+  assert.match(app, /onFeatureChange=\{navigateDashboardFeature\}/);
+  assert.match(app, /window\.history\.pushState/);
+  assert.match(app, /window\.addEventListener\("popstate"/);
 });

@@ -84,10 +84,12 @@ const analyticsProps = {
   onGranularityChange: () => undefined,
   onExport: () => undefined,
   onOpenDrilldown: () => undefined,
-  onNavigateFinancial: () => undefined,
+  feature: "home" as const,
+  onFeatureChange: () => undefined,
+  onNavigatePage: () => undefined,
 };
 
-test("dashboard renders ranges, shop filter, and metrics", () => {
+test("dashboard home renders the compact financial summary and feature navigation", () => {
   const markup = renderToStaticMarkup(
     <DashboardPanel
       summary={summary}
@@ -114,44 +116,49 @@ test("dashboard renders ranges, shop filter, and metrics", () => {
     "Bulawayo",
     "Gross Sales",
     "Net Sales",
-    "Cost of Sales",
     "Gross Profit",
-    "Refunds",
-    "Discounts",
-    "Operating Expenses",
     "Net Profit",
-    "Cash Sales",
-    "Card Sales",
-    "Mobile / Transfer Sales",
-    "Credit Sales",
-    "Credit Settlements",
-    "Outstanding Credit / Receivables",
-    "Expected Cash Movement",
-    "Sales and gross-profit trend",
-    "Top products",
-    "Coffee",
-    "Top categories",
-    "Drinks",
-    "Export CSV",
+    "Sales Analytics",
+    "Payment Methods",
+    "Top Products",
+    "Financial Reports",
+    "Sales History",
+    "Inventory",
+    "Employees",
+    "Cashier Shifts",
   ]) {
     assert.match(markup, new RegExp(label));
   }
 
-  for (const amount of ["Z$150.00", "Z$120.00", "Z$72.00", "Z$48.00", "Z$30.00"]) {
+  for (const amount of ["Z$150.00", "Z$120.00", "Z$48.00", "Z$30.00"]) {
     assert.ok(markup.includes(amount));
   }
-  assert.ok(markup.includes("Unavailable"));
-  assert.ok(markup.includes("Historical discounts are unknown."));
-  assert.ok(markup.includes("Showing 2026-08-01 to 2026-08-31 for one shop"));
   assert.ok(markup.includes('value="2026-08-01"'));
   assert.ok(markup.includes('value="2026-08-31"'));
   assert.ok(markup.includes("dashboard-drilldown-trigger"));
-  assert.ok(markup.includes("dashboard-detail-link"));
-  assert.ok(markup.includes("Gross profit minus operating expenses"));
-  assert.ok(markup.includes("Cash Z$6.00 · Card Z$4.00 · Mobile Z$2.00"));
-  assert.equal((markup.match(/dashboard-financial-link/g) || []).length, 3);
-  assert.ok(!markup.includes("Sales and Receipts"));
-  assert.ok(!markup.includes("transaction records"));
+  assert.equal((markup.match(/dashboard-feature-icon/g) || []).length, 8);
+  assert.ok(!markup.includes("Sales trend"));
+});
+
+test("dashboard analytics features render only their selected content", () => {
+  const common = {
+    ...analyticsProps, summary, rangeKey: "today" as const, selectedShopId: "",
+    customDateFrom: "2026-08-01", customDateTo: "2026-08-31",
+    onRangeChange: () => undefined, onShopChange: () => undefined,
+    onDateFromChange: () => undefined, onDateToChange: () => undefined,
+  };
+  const sales = renderToStaticMarkup(<DashboardPanel {...common} feature="sales-analytics" />);
+  assert.match(sales, /Sales trend/);
+  assert.match(sales, /Revenue comparison/);
+  assert.doesNotMatch(sales, /Payment breakdown/);
+  const payments = renderToStaticMarkup(<DashboardPanel {...common} feature="payment-methods" />);
+  assert.match(payments, /Payment breakdown/);
+  assert.match(payments, /Cash sales/);
+  assert.doesNotMatch(payments, /Revenue comparison/);
+  const products = renderToStaticMarkup(<DashboardPanel {...common} feature="top-products" />);
+  assert.match(products, /Top-selling products/);
+  assert.match(products, /Category performance/);
+  assert.match(products, /Coffee/);
 });
 
 test("drill-down renders totals, rows, pagination, empty, loading, and errors", () => {

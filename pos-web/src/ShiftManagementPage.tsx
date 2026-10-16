@@ -44,6 +44,7 @@ type Props = {
   onPrintShiftSummary: (shift: ShiftRecord) => Promise<void>;
   onPrintZReport: (shift: ShiftRecord) => Promise<void>;
   onShiftChanged?: (shift: ShiftRecord | null) => void;
+  view?: "all" | "shift" | "z-reports";
 };
 
 const emptyPage: PageResult = { items: [], page: 1, page_size: 10, total: 0, total_pages: 0 };
@@ -67,7 +68,7 @@ function validAmount(value: string, decimalPlaces: number, positiveOnly = false)
 }
 const idempotencyKey = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-export default function ShiftManagementPage({ companyId, cashier, onBackToSales, onPrintShiftSummary, onPrintZReport, onShiftChanged }: Props) {
+export default function ShiftManagementPage({ companyId, cashier, onBackToSales, onPrintShiftSummary, onPrintZReport, onShiftChanged, view = "all" }: Props) {
   const [online, setOnline] = useState(false);
   const [shift, setShift] = useState<ShiftRecord | null>(null);
   const [currencies, setCurrencies] = useState<CurrencyConfig[]>([]);
@@ -295,16 +296,16 @@ export default function ShiftManagementPage({ companyId, cashier, onBackToSales,
     } finally { setBusy(false); }
   }
 
-  return <main className="pos-shift-page">
+  return <main className={`pos-shift-page pos-shift-view-${view}`}>
     <header className="pos-shift-header">
       <div><p className="pos-shift-eyebrow">{online ? "Online" : "Offline"} · {sessionRegisterName}</p><h1>Shift Management</h1><p>{cashier?.name || "Cashier"} · {sessionShopName} · {sessionBranchName}</p></div>
       <div className="pos-shift-header-actions"><button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button><button type="button" onClick={onBackToSales}>Return to Sales</button></div>
     </header>
-    <nav className="pos-shift-nav" aria-label="Shift management sections">
+    {view === "all" && <nav className="pos-shift-nav" aria-label="Shift management sections">
       {shift && <a href="#current-shift">Current Shift</a>}{!shift && <a href="#open-shift">Open Shift</a>}
       {shift && <a href="#cash-movements">Cash In / Cash Out</a>}{shift && <a href="#close-shift">Close Shift</a>}
       <a href="#shift-history">Shift History</a><a href="#z-reports">Z Reports</a>
-    </nav>
+    </nav>}
     {!online && <div className="pos-shift-offline" role="status">Shift management is online-only. Existing offline sales remain available; shift changes are never queued.</div>}
     {error && <p className="pos-shift-error" role="alert">{error}</p>}
     {notice && <p className="pos-shift-notice" role="status">{notice}</p>}

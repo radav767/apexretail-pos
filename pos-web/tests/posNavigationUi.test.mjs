@@ -6,6 +6,8 @@ const navigation = readFileSync(new URL("../src/components/PosNavigation.tsx", i
 const header = readFileSync(new URL("../src/components/PosSessionHeader.tsx", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const theme = readFileSync(new URL("../src/premium-theme.css", import.meta.url), "utf8");
+const modulePage = readFileSync(new URL("../src/PosModulePage.tsx", import.meta.url), "utf8");
+const featureHub = readFileSync(new URL("../src/components/PosFeatureHub.tsx", import.meta.url), "utf8");
 
 test("POS navigation follows the approved hierarchy without numbered controls", () => {
   const labels = ["Sales", "Sales Management", "Customers", "Expenses", "Products", "Inventory", "Reports", "Settings"];
@@ -48,4 +50,18 @@ test("dark-green shell is responsive without horizontal overflow", () => {
   assert.match(theme, /@media \(min-width: 1024px\)/);
   assert.match(theme, /@media \(max-width: 720px\)/);
   assert.match(theme, /overflow-x: hidden/);
+});
+
+test("module feature hubs are permission-aware and support browser history", () => {
+  for (const label of ["Transaction History", "Cancel / Void Sales", "Credit Settlement", "Cashier Shifts", "Z Reports", "Goods Received (GRN)", "Stock Adjustments", "Inventory Overview", "Inventory Activity", "Sales Summary", "Inventory Status"]) {
+    assert.ok(modulePage.includes(label), `missing focused feature ${label}`);
+  }
+  assert.match(modulePage, /permitted: canCreateRefunds/);
+  assert.match(modulePage, /permitted: canManageInventory/);
+  assert.match(modulePage, /window\.history\.pushState/);
+  assert.match(modulePage, /window\.addEventListener\("popstate"/);
+  assert.match(app, /window\.history\.pushState/);
+  assert.match(app, /window\.addEventListener\("popstate"/);
+  assert.match(featureHub, /features\.filter\(\(feature\) => feature\.permitted !== false\)/);
+  assert.match(theme, /@media \(max-width: 340px\)[\s\S]*\.pos-feature-grid/);
 });

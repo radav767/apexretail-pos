@@ -14,7 +14,8 @@ test("Shift Management is nested under Sales Management and not a top-level menu
   assert.doesNotMatch(navigation, /icon:[^\n]+module: "Shift Management"/);
   assert.match(app, /onNavigate=\{showPosModule\}/);
   assert.match(modulePage, /activeModule === "Sales Management"[\s\S]*<ShiftManagementPage/);
-  assert.match(modulePage, /<h2>Sales History<\/h2>/);
+  assert.match(modulePage, /title: "Transaction History"/);
+  assert.match(modulePage, /activeFeature === "transaction-history"/);
 });
 
 test("Sales automatically checks and gates on the authenticated cashier's current shift", () => {

@@ -867,6 +867,95 @@ a:focus-visible {
   }
 }
 
+/* Focused feature navigation */
+.pos-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.pos-feature-grid > button {
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  align-items: center;
+  gap: 14px;
+  padding: 17px;
+  border: 1px solid #dce6e1 !important;
+  border-radius: 16px !important;
+  background: #fff !important;
+  color: #20252b !important;
+  text-align: left;
+  box-shadow: var(--apx-shadow-sm);
+  transition: transform var(--apx-transition), border-color var(--apx-transition), box-shadow var(--apx-transition);
+}
+.pos-feature-grid > button:hover,
+.pos-feature-grid > button:focus-visible {
+  border-color: #16864d !important;
+  box-shadow: 0 11px 26px rgba(7, 88, 59, .13);
+  transform: translateY(-2px);
+}
+.pos-feature-grid > button:active { transform: translateY(0); }
+.pos-feature-grid strong,
+.pos-feature-grid small { display: block; }
+.pos-feature-grid strong { color: #07583b; font-size: .98rem; }
+.pos-feature-grid small { margin-top: 5px; color: #66736d; line-height: 1.35; }
+.pos-feature-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border-radius: 13px;
+  background: #eaf5ef;
+  color: #07583b;
+}
+.pos-feature-icon svg { width: 23px; height: 23px; }
+.pos-feature-back {
+  display: inline-flex;
+  width: auto !important;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 14px !important;
+  padding: 9px 14px !important;
+  border: 1px solid #cbdad3 !important;
+  border-radius: 11px !important;
+  background: #fff !important;
+  color: #07583b !important;
+  font-weight: 750;
+}
+.pos-feature-back svg { width: 18px; height: 18px; }
+.pos-feature-back:hover { background: #eaf5ef !important; }
+
+.pos-inventory-feature > .pos-module-card { display: none; }
+.pos-inventory-feature-goods-received > .pos-module-card:first-child,
+.pos-inventory-feature-stock-adjustments > .pos-module-card:first-child,
+.pos-inventory-feature-inventory-overview > .pos-module-card:nth-child(2),
+.pos-inventory-feature-inventory-activity > .pos-module-card:nth-child(3) { display: block; }
+.pos-inventory-feature-goods-received .pos-module-management-grid > .pos-module-subcard:nth-child(2),
+.pos-inventory-feature-stock-adjustments .pos-module-management-grid > .pos-module-subcard:first-child { display: none; }
+.pos-inventory-feature-goods-received .pos-module-management-grid,
+.pos-inventory-feature-stock-adjustments .pos-module-management-grid { grid-template-columns: minmax(0, 1fr); }
+
+.pos-shift-view-shift #z-reports { display: none; }
+.pos-shift-view-z-reports .pos-shift-current,
+.pos-shift-view-z-reports #open-shift,
+.pos-shift-view-z-reports #shift-history,
+.pos-shift-view-z-reports .pos-shift-closed { display: none; }
+
+@media (max-width: 860px) {
+  .pos-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .pos-feature-grid { gap: 10px; }
+  .pos-feature-grid > button { min-height: 104px; padding: 13px 11px; gap: 9px; }
+  .pos-feature-icon { width: 38px; height: 38px; flex-basis: 38px; }
+  .pos-feature-grid small { font-size: .72rem; }
+}
+@media (max-width: 340px) {
+  .pos-feature-grid { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 390px) {
   .pos-auth-tabs {
     grid-template-columns: 1fr !important;
@@ -993,4 +1082,10 @@ a:focus-visible {
   .pos-workspace-actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); justify-content: stretch; }
   .pos-shift-chip { grid-column: 1 / -1; width: fit-content; }
   .pos-menu-panel { width: min(304px, 88vw) !important; }
+}
+
+body .pos-module-card .pos-feature-grid > button:not(.danger):not(.secondary) {
+  border-color: #dce6e1 !important;
+  background: #fff !important;
+  color: #20252b !important;
 }

@@ -350,6 +350,16 @@ const [loggedIn, setLoggedIn] = useState(
   );
   const [activePosModule, setActivePosModule] = useState<PosModuleName>(initialPosModule);
 
+  useEffect(() => {
+    const syncModule = () => {
+      setActivePosModule(initialPosModule());
+      setMenuOpen(window.matchMedia("(min-width: 1024px)").matches);
+      setMessage("");
+    };
+    window.addEventListener("popstate", syncModule);
+    return () => window.removeEventListener("popstate", syncModule);
+  }, []);
+
   const [showTender, setShowTender] = useState(false);
   const [amountReceived, setAmountReceived] = useState("");
   const [currencyConfig, setCurrencyConfig] = useState<PosCurrencyConfig | null>(null);
@@ -2829,7 +2839,8 @@ const [loggedIn, setLoggedIn] = useState(
     setActivePosModule(moduleName);
     const url = new URL(window.location.href);
     url.searchParams.set("module", moduleName);
-    window.history.replaceState(null, "", url);
+    url.searchParams.delete("feature");
+    window.history.pushState(null, "", url);
     if (!window.matchMedia("(min-width: 1024px)").matches) {
       setMenuOpen(false);
     }
@@ -3659,8 +3670,7 @@ const [loggedIn, setLoggedIn] = useState(
             )
           }
           onBackToSales={() => {
-            setActivePosModule("Sales");
-            setMessage("");
+            showPosModule("Sales");
           }}
         />
       )}

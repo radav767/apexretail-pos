@@ -5,7 +5,7 @@ import "../src/theme.css";
 import "../src/ui-system.css";
 import "../src/premium-theme.css";
 import { DashboardDrilldownDialog } from "../src/DashboardDrilldownDialog";
-import { DashboardPanel } from "../src/DashboardPanel";
+import { DashboardPanel, type DashboardFeature } from "../src/DashboardPanel";
 import type { DashboardDrilldownRequest, DashboardMetric, DashboardPhase3Summary } from "../src/dashboard";
 import { AppIcon, type AppIconName } from "../src/components/AppIcon";
 
@@ -52,6 +52,11 @@ function Harness() {
   const [page, setPage] = useState<"dashboard" | "sales">(
     params.get("page") === "sales" ? "sales" : "dashboard",
   );
+  const [feature, setFeature] = useState<DashboardFeature>(() => {
+    const requested = params.get("feature");
+    return (["sales-analytics", "payment-methods", "top-products"] as DashboardFeature[]).includes(requested as DashboardFeature)
+      ? requested as DashboardFeature : "home";
+  });
   const [loggedIn, setLoggedIn] = useState(true);
   const [drilldown, setDrilldown] = useState<DashboardDrilldownRequest | null>(
     params.get("drilldown") === "open"
@@ -79,7 +84,7 @@ function Harness() {
   };
 
   function navigate(name: string) {
-    if (name === "Dashboard") setPage("dashboard");
+    if (name === "Dashboard") { setPage("dashboard"); setFeature("home"); }
     if (name === "Sales History") setPage("sales");
     setMenuOpen(false);
   }
@@ -100,8 +105,8 @@ function Harness() {
       <nav className={menuOpen ? "mobile-open" : ""}>{destinations.map(([name, icon]) => <button type="button" key={name} onClick={() => navigate(name)} className={(page === "dashboard" && name === "Dashboard") || (page === "sales" && name === "Sales History") ? "active" : ""}><AppIcon name={icon} /><span>{name}</span></button>)}<button type="button" className="logout-nav-button" onClick={() => setLoggedIn(false)}><AppIcon name="logout" /><span>Log out</span></button></nav>
       <button type="button" className="logout-button" onClick={() => setLoggedIn(false)}><AppIcon name="logout" /><span>Log out</span></button>
     </aside>
-    <main className="content"><header className="topbar"><div><h1>{page === "dashboard" ? "Business Dashboard" : "Sales History"}</h1><p>Safe synthetic fixture data — no production API calls</p></div><button className="refresh-button">Refresh</button></header>
-      {page === "dashboard" ? <DashboardPanel summary={summary} shops={summary.shops} rangeKey="today" granularity="day" selectedShopId="" customDateFrom="" customDateTo="" onRangeChange={() => {}} onGranularityChange={() => {}} onShopChange={() => {}} onDateFromChange={() => {}} onDateToChange={() => {}} onExport={() => {}} onOpenDrilldown={setDrilldown} onNavigateFinancial={() => {}} /> : <section className="panel"><div className="panel-header"><div><h2>Sales and Receipts</h2><p>2 transaction records loaded</p></div></div><div className="table-wrapper"><table><thead><tr><th>Receipt</th><th>Date</th><th>Payment</th><th>Total</th><th>Status</th></tr></thead><tbody><tr><td>APR-001</td><td>9/14/2026</td><td>CASH</td><td>$42.00</td><td>completed</td></tr></tbody></table></div></section>}
+    <main className="content"><header className="topbar"><div><h1>{page === "dashboard" ? feature === "sales-analytics" ? "Sales Analytics" : "Business Dashboard" : "Sales History"}</h1><p>Safe synthetic fixture data — no production API calls</p></div><button className="refresh-button">Refresh</button></header>
+      {page === "dashboard" ? <DashboardPanel summary={summary} shops={summary.shops} rangeKey="today" granularity="day" selectedShopId="" customDateFrom="" customDateTo="" onRangeChange={() => {}} onGranularityChange={() => {}} onShopChange={() => {}} onDateFromChange={() => {}} onDateToChange={() => {}} onExport={() => {}} onOpenDrilldown={setDrilldown} feature={feature} onFeatureChange={setFeature} onNavigatePage={() => {}} /> : <section className="panel"><div className="panel-header"><div><h2>Sales and Receipts</h2><p>2 transaction records loaded</p></div></div><div className="table-wrapper"><table><thead><tr><th>Receipt</th><th>Date</th><th>Payment</th><th>Total</th><th>Status</th></tr></thead><tbody><tr><td>APR-001</td><td>9/14/2026</td><td>CASH</td><td>$42.00</td><td>completed</td></tr></tbody></table></div></section>}
     </main>
     {page === "dashboard" && drilldown && <DashboardDrilldownDialog
       request={drilldown} data={drilldownData} loading={false} error=""

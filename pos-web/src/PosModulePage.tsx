@@ -12,6 +12,7 @@ import { KeyboardWedgeDetector } from "./barcode/keyboardWedge";
 import FinancialModules, { type FinancialModuleName } from "./FinancialModules";
 import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
 import PosSessionHeader from "./components/PosSessionHeader";
+import { PosFeatureBack, PosFeatureHub, type PosFeatureItem } from "./components/PosFeatureHub";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -238,6 +239,28 @@ type SettingsPageKey =
   | "tax"
   | "receipt";
 
+type ModuleFeature =
+  | "home" | "transaction-history" | "cancel-void-sales" | "credit-settlement"
+  | "cashier-shifts" | "z-reports" | "goods-received" | "stock-adjustments"
+  | "inventory-overview" | "inventory-activity" | "sales-summary" | "inventory-status";
+
+const moduleFeatures: Record<string, ModuleFeature[]> = {
+  "Sales Management": ["transaction-history", "cancel-void-sales", "credit-settlement", "cashier-shifts", "z-reports"],
+  Inventory: ["goods-received", "stock-adjustments", "inventory-overview", "inventory-activity"],
+  Reports: ["sales-summary", "inventory-status"],
+};
+
+function featureFromLocation(moduleName: PosModuleName): ModuleFeature {
+  const requested = new URLSearchParams(window.location.search).get("feature") as ModuleFeature | null;
+  return requested && moduleFeatures[moduleName]?.includes(requested) ? requested : "home";
+}
+
+function settingsPageFromLocation(): SettingsPageKey {
+  const value = new URLSearchParams(window.location.search).get("feature");
+  return (["printer", "business", "tax", "receipt"] as SettingsPageKey[]).includes(value as SettingsPageKey)
+    ? value as SettingsPageKey : "home";
+}
+
 const emptyProductForm: ProductForm = {
   branch_id: "",
   create_request_key: "",
@@ -392,6 +415,7 @@ export default function PosModulePage({
   const [printerSaveMessage, setPrinterSaveMessage] = useState("");
   const [activeSettingsPage, setActiveSettingsPage] =
     useState<SettingsPageKey>("home");
+  const [activeFeature, setActiveFeature] = useState<ModuleFeature>(() => featureFromLocation(activeModule));
   const [printerSettingsAction, setPrinterSettingsAction] = useState<
     "" | "bluetooth" | "app" | "print"
   >("");
@@ -488,6 +512,41 @@ export default function PosModulePage({
   useEffect(() => {
     setSelectedBranchId(branchId);
   }, [branchId]);
+
+  useEffect(() => {
+    const syncFeature = () => setActiveFeature(featureFromLocation(activeModule));
+    syncFeature();
+    window.addEventListener("popstate", syncFeature);
+    return () => window.removeEventListener("popstate", syncFeature);
+  }, [activeModule]);
+
+  useEffect(() => {
+    if (activeModule !== "Settings") return;
+    const syncSettings = () => setActiveSettingsPage(settingsPageFromLocation());
+    syncSettings();
+    window.addEventListener("popstate", syncSettings);
+    return () => window.removeEventListener("popstate", syncSettings);
+  }, [activeModule]);
+
+  function openFeature(feature: ModuleFeature) {
+    setActiveFeature(feature);
+    const url = new URL(window.location.href);
+    if (feature === "home") url.searchParams.delete("feature");
+    else url.searchParams.set("feature", feature);
+    window.history.pushState(null, "", url);
+  }
+
+  function backToFeatureHub() {
+    openFeature("home");
+  }
+
+  function openSettingsPage(page: SettingsPageKey) {
+    setActiveSettingsPage(page);
+    const url = new URL(window.location.href);
+    if (page === "home") url.searchParams.delete("feature");
+    else url.searchParams.set("feature", page);
+    window.history.pushState(null, "", url);
+  }
 
   useEffect(() => {
     if (!printerConfigLoaded || hasHydratedPrinterDraftRef.current) {
@@ -1265,7 +1324,13 @@ export default function PosModulePage({
     <section className="pos-module-overlay">
       <div className="pos-module-container">
         <PosSessionHeader
-          title={activeModule}
+          title={activeFeature === "home" ? activeModule : ({
+            "transaction-history": "Transaction History", "cancel-void-sales": "Cancel / Void Sales",
+            "credit-settlement": "Credit Settlement", "cashier-shifts": "Cashier Shifts", "z-reports": "Z Reports",
+            "goods-received": "Goods Received", "stock-adjustments": "Stock Adjustments",
+            "inventory-overview": "Inventory Overview", "inventory-activity": "Inventory Activity",
+            "sales-summary": "Sales Summary", "inventory-status": "Inventory Status",
+          } as Record<ModuleFeature, string>)[activeFeature]}
           cashierName={cashier?.name || "Employee"}
           shopName={localStorage.getItem("shop_name") || "Current shop"}
           branchName={localStorage.getItem("branch_name") || "Assigned branch"}
@@ -1285,7 +1350,22 @@ export default function PosModulePage({
           <div className="pos-module-notice">{notice}</div>
         )}
 
-        {!loading && activeModule === "Sales Management" && (
+        {!loading && activeModule === "Sales Management" && activeFeature === "home" && (
+          <PosFeatureHub
+            title="Sales Management"
+            features={[
+              { id: "transaction-history", title: "Transaction History", detail: "View completed sales and receipts", icon: "clock" },
+              { id: "cancel-void-sales", title: "Cancel / Void Sales", detail: "Review permitted refunds and void actions", icon: "void", permitted: canCreateRefunds },
+              { id: "credit-settlement", title: "Credit Settlement", detail: "Manage supported customer settlements", icon: "cash", permitted: cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(cashier?.permissions?.credit_settlements) },
+              { id: "cashier-shifts", title: "Cashier Shifts", detail: "Open, reconcile and close this shift", icon: "transfer" },
+              { id: "z-reports", title: "Z Reports", detail: "View and reprint immutable reports", icon: "report" },
+            ] as PosFeatureItem<ModuleFeature>[]}
+            onSelect={openFeature}
+          />
+        )}
+
+        {!loading && activeModule === "Sales Management" && (activeFeature === "cashier-shifts" || activeFeature === "z-reports") && (
+          <><PosFeatureBack label="Sales Management" onClick={backToFeatureHub} />
           <ShiftManagementPage
             companyId={companyId}
             branchId={branchId}
@@ -1294,14 +1374,17 @@ export default function PosModulePage({
             onPrintShiftSummary={onPrintShiftSummary}
             onPrintZReport={onPrintZReport}
             onShiftChanged={onShiftChanged}
+            view={activeFeature === "z-reports" ? "z-reports" : "shift"}
           />
+          </>
         )}
 
-        {!loading && activeModule === "Sales Management" && (
+        {!loading && activeModule === "Sales Management" && (activeFeature === "transaction-history" || activeFeature === "cancel-void-sales") && (
+          <><PosFeatureBack label="Sales Management" onClick={backToFeatureHub} />
           <div className="pos-module-card">
             <div className="pos-module-card-heading">
               <div>
-                <h2>Sales History</h2>
+                <h2>{activeFeature === "cancel-void-sales" ? "Cancel / Void Sales" : "Sales History"}</h2>
                 <div className="pos-module-date-filter">
                   <label htmlFor="sales-history-date">
                     Transaction date
@@ -1429,9 +1512,23 @@ export default function PosModulePage({
               </table>
             </div>
           </div>
+          </>
         )}
 
-        {activeModule === "Sales Management" && receiptDialog && (
+        {!loading && activeModule === "Sales Management" && activeFeature === "credit-settlement" && (
+          <><PosFeatureBack label="Sales Management" onClick={backToFeatureHub} /><FinancialModules
+            activeModule="Credit Settlements"
+            companyId={companyId}
+            branchId={branchId}
+            cashier={cashier}
+            currencySymbol={currencySymbol}
+            decimalPlaces={decimalPlaces}
+            printerConfig={printerConfig}
+            onBackToSales={onBackToSales}
+          /></>
+        )}
+
+        {activeModule === "Sales Management" && activeFeature !== "home" && receiptDialog && (
           <div className="pos-sale-dialog-backdrop" role="presentation">
             <section
               className="pos-sale-dialog"
@@ -1883,8 +1980,22 @@ export default function PosModulePage({
           </>
         )}
 
-        {!loading && activeModule === "Inventory" && (
-          <>
+        {!loading && activeModule === "Inventory" && activeFeature === "home" && (
+          <PosFeatureHub
+            title="Inventory"
+            features={[
+              { id: "goods-received", title: "Goods Received (GRN)", detail: "Receive stock from suppliers", icon: "inventory", permitted: canManageInventory },
+              { id: "stock-adjustments", title: "Stock Adjustments", detail: "Record corrections and physical counts", icon: "adjust", permitted: canManageInventory },
+              { id: "inventory-overview", title: "Inventory Overview", detail: "Review current branch balances", icon: "chart" },
+              { id: "inventory-activity", title: "Inventory Activity", detail: "Review auditable stock movements", icon: "clock" },
+            ] as PosFeatureItem<ModuleFeature>[]}
+            onSelect={openFeature}
+          />
+        )}
+
+        {!loading && activeModule === "Inventory" && activeFeature !== "home" && (
+          <><PosFeatureBack label="Inventory" onClick={backToFeatureHub} />
+          <div className={`pos-inventory-feature pos-inventory-feature-${activeFeature}`}>
             <div className="pos-module-card">
               <div className="pos-module-card-heading">
                 <div>
@@ -2295,13 +2406,24 @@ export default function PosModulePage({
                 </table>
               </div>
             </div>
-          </>
+          </div></>
         )}
 
-        {!loading && activeModule === "Reports" && (
-          <>
+        {!loading && activeModule === "Reports" && activeFeature === "home" && (
+          <PosFeatureHub
+            title="Reports"
+            features={[
+              { id: "sales-summary", title: "Sales Summary", detail: "Today's sales and transaction count", icon: "report" },
+              { id: "inventory-status", title: "Inventory Status", detail: "Products and low-stock indicators", icon: "inventory" },
+            ] as PosFeatureItem<ModuleFeature>[]}
+            onSelect={openFeature}
+          />
+        )}
+
+        {!loading && activeModule === "Reports" && activeFeature !== "home" && (
+          <><PosFeatureBack label="Reports" onClick={backToFeatureHub} />
             <div className="pos-report-grid">
-              <ReportCard
+              {activeFeature === "sales-summary" && <><ReportCard
                 title="Today's Sales"
                 value={money(summary?.today_sales)}
                 detail="Completed transaction value"
@@ -2310,8 +2432,8 @@ export default function PosModulePage({
                 title="Transactions"
                 value={String(summary?.today_transactions || 0)}
                 detail="Sales completed today"
-              />
-              <ReportCard
+              /></>}
+              {activeFeature === "inventory-status" && <><ReportCard
                 title="Products"
                 value={String(summary?.total_products || 0)}
                 detail="Active product records"
@@ -2321,7 +2443,7 @@ export default function PosModulePage({
                 value={String(summary?.low_stock_products || 0)}
                 detail="Products requiring attention"
                 warning
-              />
+              /></>}
             </div>
           </>
         )}
@@ -2359,7 +2481,7 @@ export default function PosModulePage({
                   <button
                     type="button"
                     className="pos-settings-menu-item"
-                    onClick={() => setActiveSettingsPage("printer")}
+                    onClick={() => openSettingsPage("printer")}
                   >
                     <strong>Printer</strong>
                     <span>
@@ -2371,7 +2493,7 @@ export default function PosModulePage({
                   <button
                     type="button"
                     className="pos-settings-menu-item"
-                    onClick={() => setActiveSettingsPage("business")}
+                    onClick={() => openSettingsPage("business")}
                   >
                     <strong>Business</strong>
                     <span>{settings?.name || "Business details"}</span>
@@ -2380,7 +2502,7 @@ export default function PosModulePage({
                   <button
                     type="button"
                     className="pos-settings-menu-item"
-                    onClick={() => setActiveSettingsPage("tax")}
+                    onClick={() => openSettingsPage("tax")}
                   >
                     <strong>Tax & Currency</strong>
                     <span>
@@ -2392,7 +2514,7 @@ export default function PosModulePage({
                   <button
                     type="button"
                     className="pos-settings-menu-item"
-                    onClick={() => setActiveSettingsPage("receipt")}
+                    onClick={() => openSettingsPage("receipt")}
                   >
                     <strong>Receipt & Payments</strong>
                     <span>
@@ -2409,7 +2531,7 @@ export default function PosModulePage({
                   <button
                     type="button"
                     className="pos-inline-button secondary"
-                    onClick={() => setActiveSettingsPage("home")}
+                    onClick={() => openSettingsPage("home")}
                   >
                     Back to Settings
                   </button>
