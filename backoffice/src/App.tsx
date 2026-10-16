@@ -54,6 +54,7 @@ function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loggedIn, setLoggedIn] = useState(
     Boolean(localStorage.getItem("backoffice_token")),
   );
@@ -425,7 +426,7 @@ function App() {
   }
 
   return (
-    <div className="backoffice-shell">
+    <div className={`backoffice-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="sidebar-brand">
@@ -436,6 +437,17 @@ function App() {
               <span>Backoffice</span>
             </div>
           </div>
+
+          <button
+            className="sidebar-collapse-toggle"
+            type="button"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="backoffice-navigation"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          >
+            <AppIcon name="menu" />
+          </button>
 
           <button
             className="mobile-menu-toggle"

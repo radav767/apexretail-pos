@@ -11,6 +11,7 @@ import { useKeyboardWedge } from "./barcode/useKeyboardWedge";
 import { KeyboardWedgeDetector } from "./barcode/keyboardWedge";
 import FinancialModules, { type FinancialModuleName } from "./FinancialModules";
 import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
+import PosSessionHeader from "./components/PosSessionHeader";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -166,6 +167,7 @@ type Props = {
   companyId: string;
   branchId: string;
   cashier: CashierSession | null;
+  shiftStatus: string;
   currencySymbol: string;
   decimalPlaces: number;
   printerConfig: PrinterConfig;
@@ -317,6 +319,7 @@ export default function PosModulePage({
   companyId,
   branchId,
   cashier,
+  shiftStatus,
   currencySymbol,
   decimalPlaces,
   printerConfig,
@@ -1261,21 +1264,14 @@ export default function PosModulePage({
   return (
     <section className="pos-module-overlay">
       <div className="pos-module-container">
-        <header className="pos-module-header">
-          <div>
-            <p className="pos-module-eyebrow">ApexRetail POS</p>
-            <h1>{activeModule}</h1>
-            <p>Live information for the currently selected business.</p>
-          </div>
-
-          <button
-            type="button"
-            className="pos-module-sales-button"
-            onClick={onBackToSales}
-          >
-            Return to Sales
-          </button>
-        </header>
+        <PosSessionHeader
+          title={activeModule}
+          cashierName={cashier?.name || "Employee"}
+          shopName={localStorage.getItem("shop_name") || "Current shop"}
+          branchName={localStorage.getItem("branch_name") || "Assigned branch"}
+          shiftStatus={shiftStatus}
+          actions={<button type="button" className="pos-module-sales-button" onClick={onBackToSales}>Return to Sales</button>}
+        />
 
         {loading && (
           <div className="pos-module-notice">Loading {activeModule}…</div>

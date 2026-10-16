@@ -1,25 +1,26 @@
 :root {
-  --brand-leaf: #43a047;
-  --brand-leaf-dark: #2e7d32;
-  --brand-leaf-deep: #205b27;
-  --brand-leaf-soft: #eaf6eb;
+  --brand-leaf: #07583b;
+  --brand-leaf-dark: #06452f;
+  --brand-leaf-deep: #043523;
+  --brand-leaf-fresh: #16864d;
+  --brand-leaf-soft: #e7f3ed;
   --brand-orange: #ff9800;
   --brand-orange-soft: #fff4e2;
   --brand-blue: #1976d2;
   --brand-blue-soft: #e9f3fc;
   --brand-red: #e53935;
   --brand-red-soft: #fdebea;
-  --brand-black: #17212b;
-  --bo-bg: #f4f7f5;
+  --brand-black: #20252b;
+  --bo-bg: #f5f7f8;
   --bo-surface: #fff;
   --bo-surface-soft: #f8faf8;
-  --bo-sidebar: #17212b;
-  --bo-sidebar-soft: #202e39;
-  --bo-sidebar-active: #43a047;
-  --bo-primary: #43a047;
-  --bo-primary-dark: #2e7d32;
-  --bo-primary-soft: #eaf6eb;
-  --bo-text: #17212b;
+  --bo-sidebar: #07583b;
+  --bo-sidebar-soft: #0a6847;
+  --bo-sidebar-active: #16864d;
+  --bo-primary: #07583b;
+  --bo-primary-dark: #06452f;
+  --bo-primary-soft: #e7f3ed;
+  --bo-text: #20252b;
   --bo-text-soft: #65727d;
   --bo-border: #dfe7e1;
   --bo-success: #2e7d32;
@@ -643,7 +644,7 @@ table tbody tr:hover {
   position: fixed;
   z-index: -1;
   inset: 0 50% 0 0;
-  background: linear-gradient(145deg, #17212b, #1f3327);
+  background: linear-gradient(145deg, #07583b, #043523);
   clip-path: polygon(0 0, 86% 0, 67% 100%, 0 100%);
 }
 
@@ -877,4 +878,101 @@ table tbody tr:hover {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* ApexRetail dark-green administration shell */
+.sidebar {
+  background:
+    radial-gradient(circle at 5% 0, rgba(44, 181, 105, .22), transparent 16rem),
+    linear-gradient(180deg, #07583b 0%, #064c35 58%, #043523 100%) !important;
+  box-shadow: 12px 0 36px rgba(7, 50, 36, .12) !important;
+}
+
+.logo-mark,
+.logo-mark.small {
+  background: #fff !important;
+  color: #07583b !important;
+  box-shadow: 0 10px 24px rgba(3, 48, 32, .24) !important;
+}
+
+.sidebar nav button.active {
+  border-color: rgba(255, 255, 255, .15) !important;
+  background: #16864d !important;
+  box-shadow: 0 9px 22px rgba(3, 48, 32, .24) !important;
+}
+
+.sidebar nav button:hover,
+.logout-button:hover { background: rgba(255, 255, 255, .09) !important; }
+.nav-section-label { color: #8db9a7 !important; }
+.sidebar-brand span { color: #b4d2c6 !important; }
+
+.sidebar-header { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.sidebar-collapse-toggle { display: inline-grid !important; width: 39px; height: 39px; min-height: 39px; place-items: center; padding: 0 !important; }
+.sidebar-collapse-toggle span { display: none; }
+.sidebar-collapse-toggle svg { width: 20px; height: 20px; }
+
+.backoffice-shell,
+.sidebar { transition: grid-template-columns var(--bo-transition), width var(--bo-transition); }
+
+.backoffice-shell.sidebar-collapsed { grid-template-columns: 82px minmax(0, 1fr) !important; }
+.sidebar-collapsed .sidebar { padding-inline: 12px !important; }
+.sidebar-collapsed .sidebar-header { grid-template-columns: 1fr; }
+.sidebar-collapsed .sidebar-brand > div:last-child,
+.sidebar-collapsed .sidebar nav button span,
+.sidebar-collapsed .nav-section-label,
+.sidebar-collapsed .logout-button span { display: none !important; }
+.sidebar-collapsed .sidebar-brand { justify-content: center; padding: 0; }
+.sidebar-collapsed .sidebar-collapse-toggle { margin: 0 auto 10px; }
+.sidebar-collapsed .sidebar nav button,
+.sidebar-collapsed .logout-button { justify-content: center; padding-inline: 8px !important; }
+
+.content { background: #f5f7f8; }
+.topbar { padding: 14px 18px !important; border: 1px solid var(--bo-border) !important; border-radius: 16px; background: #fff !important; box-shadow: var(--bo-shadow-sm) !important; }
+.summary-card,
+.panel,
+.dashboard-filters,
+.inventory-panel,
+.reports-panel,
+.settings-card,
+.shops-devices-panel,
+.product-management-card,
+.employee-list-panel,
+.employee-editor,
+.customer-list-panel,
+.customer-details-panel,
+.credit-filter-panel,
+.credit-history-panel,
+.credit-receivables-panel,
+.expense-filter-panel,
+.expense-history-panel,
+.expense-category-manager,
+.currency-panel,
+.shift-table-panel {
+  border-color: #dce4e0 !important;
+  background: #fff !important;
+  box-shadow: 0 5px 18px rgba(28, 48, 39, .055) !important;
+}
+
+.primary-button,
+.refresh-button,
+.dashboard-export,
+.reports-primary-button,
+.inventory-primary-button,
+.employee-primary-button,
+.settings-save-button,
+.device-primary-action,
+.save-product-button,
+.shift-apply-button {
+  background: #07583b !important;
+  border-color: #07583b !important;
+  color: #fff !important;
+}
+
+@media (max-width: 760px) {
+  .backoffice-shell.sidebar-collapsed { grid-template-columns: 1fr !important; }
+  .sidebar-collapsed .sidebar-brand > div:last-child,
+  .sidebar-collapsed .sidebar nav button span,
+  .sidebar-collapsed .logout-button span { display: initial !important; }
+  .sidebar-header { grid-template-columns: minmax(0, 1fr) auto !important; }
+  .sidebar-collapse-toggle { display: none !important; }
 }

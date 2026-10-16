@@ -2,18 +2,8 @@ import { applyDiscounts } from "./discounts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
-  ArchiveBoxIcon,
   ArrowRightStartOnRectangleIcon,
-  BanknotesIcon,
-  Bars3Icon,
-  BuildingStorefrontIcon,
-  ChartBarIcon,
-  ClipboardDocumentListIcon,
-  Cog6ToothIcon,
-  CreditCardIcon,
-  CubeIcon,
   QrCodeIcon,
-  ShoppingCartIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
 import {
@@ -21,6 +11,8 @@ import {
   getApiErrorMessage,
 } from "./api/client";
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
+import PosNavigation from "./components/PosNavigation";
+import PosSessionHeader from "./components/PosSessionHeader";
 import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
 import {
   projectCreditSale,
@@ -353,7 +345,9 @@ const [loggedIn, setLoggedIn] = useState(
     useState<CreditCustomer | null>(null);
   const [creditCustomersLoading, setCreditCustomersLoading] = useState(false);
   const [creditDialogMessage, setCreditDialogMessage] = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(() =>
+    window.matchMedia("(min-width: 1024px)").matches,
+  );
   const [activePosModule, setActivePosModule] = useState<PosModuleName>(initialPosModule);
 
   const [showTender, setShowTender] = useState(false);
@@ -2836,12 +2830,16 @@ const [loggedIn, setLoggedIn] = useState(
     const url = new URL(window.location.href);
     url.searchParams.set("module", moduleName);
     window.history.replaceState(null, "", url);
-    setMenuOpen(false);
+    if (!window.matchMedia("(min-width: 1024px)").matches) {
+      setMenuOpen(false);
+    }
     setMessage("");
   }
 
   function openBackoffice() {
-    setMenuOpen(false);
+    if (!window.matchMedia("(min-width: 1024px)").matches) {
+      setMenuOpen(false);
+    }
 
     window.open(
       "https://backoffice.apexpos.cloud",
@@ -3595,216 +3593,22 @@ const [loggedIn, setLoggedIn] = useState(
     Boolean(cashier?.permissions?.manage_inventory);
 
   return (
-    <div style={appShell} className="pos-sales-shell">
-      <button
-
-                  type="button"
-
-                  aria-label="Open POS menu"
-
-                  aria-expanded={menuOpen}
-
-                  style={posMenuTrigger}
-                  className="pos-menu-trigger"
-
-                  onClick={() => setMenuOpen((current) => !current)}
-
-                >
-
-                  <Bars3Icon aria-hidden="true" />
-
-                </button>
-
-
-                {menuOpen && (
-
-                  <>
-
-                    <button
-
-                      type="button"
-
-                      aria-label="Close POS menu"
-
-                      style={posMenuOverlay}
-
-                      onClick={() => setMenuOpen(false)}
-
-                    />
-
-
-                    <aside style={posMenuPanel} className="pos-menu-panel">
-
-                      <div style={posMenuHeader}>
-
-                        <strong style={posMenuBrand}>ApexRetail POS</strong>
-
-                        <span style={posMenuSubtitle}>Point of Sale Menu</span>
-
-                      </div>
-
-
-                      <div style={posMenuSession}>
-
-                        <strong>{cashier?.name || "Cashier"}</strong>
-
-                        <span>{cashier?.role || "employee"}</span>
-
-                      </div>
-
-
-                      <nav style={posMenuNavigation} className="pos-menu-navigation">
-
-                        <button
-
-                          type="button"
-
-                          style={{ ...posMenuButton, ...posMenuActiveButton }}
-
-                          onClick={() => showPosModule("Sales")}
-
-                        >
-
-                          <ShoppingCartIcon className="pos-nav-icon" /> Sales
-
-                        </button>
-
-
-                        <button
-
-                          type="button"
-
-                          style={posMenuButton}
-
-                          onClick={() => showPosModule("Sales Management")}
-
-                        >
-
-                          <ClipboardDocumentListIcon className="pos-nav-icon" /> Sales Management
-
-                        </button>
-
-                        <button
-                          type="button"
-                          style={posMenuButton}
-                          onClick={() => showPosModule("Customers")}
-                        >
-                          <UsersIcon className="pos-nav-icon" /> Customers
-                        </button>
-
-                        {(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.credit_settlements) && (
-                          <button
-                            type="button"
-                            style={posMenuButton}
-                            onClick={() => showPosModule("Credit Settlements")}
-                          >
-                            <CreditCardIcon className="pos-nav-icon" /> Credit Settlements
-                          </button>
-                        )}
-
-                        {(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.expenses_create) && (
-                          <button
-                            type="button"
-                            style={posMenuButton}
-                            onClick={() => showPosModule("Expenses")}
-                          >
-                            <BanknotesIcon className="pos-nav-icon" /> Expenses
-                          </button>
-                        )}
-
-                        {canManageProducts && (
-                          <button
-                            type="button"
-                            style={posMenuButton}
-                            onClick={() => showPosModule("Products")}
-                          >
-                            <CubeIcon className="pos-nav-icon" /> Products
-                          </button>
-                        )}
-
-                        {canManageInventory && (
-                          <button
-                            type="button"
-                            style={posMenuButton}
-                            onClick={() => showPosModule("Inventory")}
-                          >
-                            <ArchiveBoxIcon className="pos-nav-icon" /> Inventory
-                          </button>
-                        )}
-
-
-                        <button
-
-                          type="button"
-
-                          style={posMenuButton}
-
-                          onClick={() => showPosModule("Reports")}
-
-                        >
-
-                          <ChartBarIcon className="pos-nav-icon" /> Reports
-
-                        </button>
-
-
-                        <button
-
-                          type="button"
-
-                          style={posMenuButton}
-
-                          onClick={() => showPosModule("Settings")}
-
-                        >
-
-                          <Cog6ToothIcon className="pos-nav-icon" /> Settings
-
-                        </button>
-
-
-                        <button
-
-                          type="button"
-
-                          style={{ ...posMenuButton, ...posMenuBackofficeButton }}
-
-                          onClick={openBackoffice}
-
-                        >
-
-                          <BuildingStorefrontIcon className="pos-nav-icon" /> Backoffice
-
-                        </button>
-
-                      </nav>
-
-
-                      <button
-
-                        type="button"
-
-                        style={posMenuLogoutButton}
-
-                        onClick={() => {
-
-                          setMenuOpen(false);
-
-                          logout();
-
-                        }}
-
-                      >
-
-                        <ArrowRightStartOnRectangleIcon className="pos-nav-icon" /> Log out
-
-                      </button>
-
-                    </aside>
-
-                  </>
-
-                )}
+    <div style={appShell} className={`pos-sales-shell ${menuOpen ? "pos-navigation-open" : ""}`}>
+      <PosNavigation
+        open={menuOpen}
+        activeModule={activePosModule}
+        cashierName={cashier?.name || "Cashier"}
+        cashierRole={cashier?.role || "employee"}
+        canManageProducts={canManageProducts}
+        canManageInventory={canManageInventory}
+        canManageExpenses={Boolean(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.expenses_create)}
+        canManageCredit={Boolean(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.credit_settlements)}
+        onToggle={() => setMenuOpen((current) => !current)}
+        onClose={() => setMenuOpen(false)}
+        onNavigate={showPosModule}
+        onBackoffice={openBackoffice}
+        onLogout={logout}
+      />
 
       {activePosModule !== "Sales" && (
         <PosModulePage
@@ -3812,6 +3616,7 @@ const [loggedIn, setLoggedIn] = useState(
           companyId={companyId}
           branchId={branchId}
           cashier={cashier}
+          shiftStatus={currentShift?.status || "closed"}
           currencySymbol={currencySymbol}
           decimalPlaces={decimalPlaces}
           printerConfig={printerConfig}
@@ -3861,78 +3666,34 @@ const [loggedIn, setLoggedIn] = useState(
       )}
 
       <main style={mainArea} className="pos-sales-main">
-        <div style={topBar} className="pos-sales-topbar">
-          <div>
-            <span className="pos-sales-eyebrow">Checkout</span>
-            <h1 style={{ margin: 0, fontSize: 32 }} className="pos-sales-title">
-              ApexRetail POS
-            </h1>
-            <p style={{ margin: "4px 0 0" }}>
-            Sales screen
-          </p>
-          <p
-            style={{
-              margin: "5px 0 0",
-              color: "#667085",
-              fontSize: 14,
-            }}
-          >
-            Cashier: <strong>{cashier?.name || "Employee"}</strong>
-            {" · "}
-            {localStorage.getItem("branch_name") ||
-              "Assigned branch"}
-          </p>
-          {entitlementSnapshot && (
-            <p
-              style={{
-                margin: "5px 0 0",
-                color:
-                  entitlementSnapshot.writes_allowed
-                    ? "#15803d"
-                    : "#b42318",
-                fontSize: 13,
-              }}
-            >
-              Subscription: {entitlementSnapshot.status.replace(/_/g, " ")}
-            </p>
-          )}
-          {entitlementVerificationMessage && (
-            <div className="subscription-banner subscription-banner-error" role="alert">
-              {entitlementVerificationMessage}
-            </div>
-          )}
-          {entitlementRefreshNotice && (
-            <div className="subscription-banner" role="status">
-              {entitlementRefreshNotice}
-            </div>
-          )}
+        <PosSessionHeader
+          eyebrow="Checkout"
+          title="Sales"
+          cashierName={cashier?.name || "Employee"}
+          shopName={localStorage.getItem("shop_name") || "Current shop"}
+          branchName={localStorage.getItem("branch_name") || "Assigned branch"}
+          shiftStatus={currentShift?.status || "closed"}
+          actions={<>
+            <button className="pos-topbar-action" type="button" onClick={switchCashier}>
+              <UsersIcon aria-hidden="true" /> Switch cashier
+            </button>
+            <button className="pos-topbar-action" type="button" onClick={logout}>
+              <ArrowRightStartOnRectangleIcon aria-hidden="true" /> Log out
+            </button>
+          </>}
+        />
+
+        {entitlementSnapshot && !entitlementSnapshot.writes_allowed && (
+          <div className="subscription-banner subscription-banner-error" role="alert">
+            Subscription: {entitlementSnapshot.status.replace(/_/g, " ")}
           </div>
-
-          <button
-          className="pos-topbar-action"
-          type="button"
-          onClick={switchCashier}
-          style={{
-            ...secondaryButton,
-            width: 150,
-            marginTop: 0,
-          }}
-        >
-          <UsersIcon aria-hidden="true" /> Switch Cashier
-        </button>
-
-        <button
-            className="pos-topbar-action"
-            onClick={logout}
-            style={{
-              ...secondaryButton,
-              width: 120,
-              marginTop: 0,
-            }}
-          >
-            <ArrowRightStartOnRectangleIcon aria-hidden="true" /> Logout
-          </button>
-        </div>
+        )}
+        {entitlementVerificationMessage && (
+          <div className="subscription-banner subscription-banner-error" role="alert">{entitlementVerificationMessage}</div>
+        )}
+        {entitlementRefreshNotice && (
+          <div className="subscription-banner" role="status">{entitlementRefreshNotice}</div>
+        )}
 
         {quarantinedSales.length > 0 && (
           <section
@@ -4606,14 +4367,6 @@ const mainArea: CSSProperties = {
   padding: 28,
 };
 
-const topBar: CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 20,
-  marginBottom: 20,
-};
-
 const searchBox: CSSProperties = {
   width: "100%",
   padding: 16,
@@ -4696,7 +4449,7 @@ const primaryButton: CSSProperties = {
   boxSizing: "border-box",
   padding: 15,
   marginTop: 16,
-  background: "#43A047",
+  background: "#07583B",
   color: "white",
   border: 0,
   borderRadius: 12,
@@ -4717,9 +4470,9 @@ const secondaryButton: CSSProperties = {
 
 const activePaymentButton: CSSProperties = {
   ...secondaryButton,
-  background: "#43A047",
+  background: "#07583B",
   color: "white",
-  border: "1px solid #2E7D32",
+  border: "1px solid #06452F",
 };
 
 const overlay: CSSProperties = {
@@ -4817,124 +4570,3 @@ const errorText: CSSProperties = {
 };
 
 export default App;
-
-
-const posMenuTrigger: CSSProperties = {
-  position: "fixed",
-  top: 24,
-  left: 24,
-  width: 46,
-  height: 46,
-  border: "none",
-  borderRadius: 10,
-  background: "#0f172a",
-  color: "#ffffff",
-  fontSize: 25,
-  fontWeight: 700,
-  cursor: "pointer",
-  zIndex: 1102,
-  boxShadow: "0 8px 24px rgba(15, 23, 42, 0.22)",
-};
-
-const posMenuOverlay: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  border: "none",
-  padding: 0,
-  background: "rgba(15, 23, 42, 0.54)",
-  cursor: "default",
-  zIndex: 1100,
-};
-
-const posMenuPanel: CSSProperties = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: "min(340px, 88vw)",
-  height: "100vh",
-  padding: "28px 22px",
-  boxSizing: "border-box",
-  background: "#ffffff",
-  zIndex: 1101,
-  display: "flex",
-  flexDirection: "column",
-  boxShadow: "18px 0 50px rgba(15, 23, 42, 0.24)",
-  overflowY: "auto",
-};
-
-const posMenuHeader: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 3,
-  paddingLeft: 58,
-  minHeight: 50,
-  justifyContent: "center",
-  marginBottom: 22,
-};
-
-const posMenuBrand: CSSProperties = {
-  fontSize: 22,
-  color: "#0f172a",
-};
-
-const posMenuSubtitle: CSSProperties = {
-  fontSize: 13,
-  color: "#64748b",
-};
-
-const posMenuSession: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 3,
-  padding: 14,
-  marginBottom: 18,
-  borderRadius: 10,
-  background: "#f1f5f9",
-  color: "#0f172a",
-};
-
-const posMenuNavigation: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 8,
-};
-
-const posMenuButton: CSSProperties = {
-  width: "100%",
-  minHeight: 46,
-  padding: "11px 14px",
-  border: "1px solid #dbe3ec",
-  borderRadius: 9,
-  background: "#ffffff",
-  color: "#172033",
-  fontSize: 15,
-  fontWeight: 650,
-  textAlign: "left",
-  cursor: "pointer",
-};
-
-const posMenuActiveButton: CSSProperties = {
-  background: "#0f172a",
-  borderColor: "#0f172a",
-  color: "#ffffff",
-};
-
-const posMenuBackofficeButton: CSSProperties = {
-  marginTop: 8,
-  borderColor: "#0f172a",
-  color: "#0f172a",
-};
-
-const posMenuLogoutButton: CSSProperties = {
-  width: "100%",
-  minHeight: 48,
-  marginTop: "auto",
-  padding: "12px 14px",
-  border: "1px solid #fecaca",
-  borderRadius: 9,
-  background: "#fff1f2",
-  color: "#b42318",
-  fontSize: 15,
-  fontWeight: 700,
-  cursor: "pointer",
-};

@@ -3,14 +3,15 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const navigation = readFileSync(new URL("../src/components/PosNavigation.tsx", import.meta.url), "utf8");
 const page = readFileSync(new URL("../src/FinancialModules.tsx", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/financial-modules.css", import.meta.url), "utf8");
 const customerApi = readFileSync(new URL("../src/customerApi.ts", import.meta.url), "utf8");
 
 test("POS navigation exposes operational financial modules without changing logout", () => {
-  for (const label of ["Customers", "Credit Settlements", "Expenses"]) assert.match(app, new RegExp(`showPosModule\\(\\"${label}\\"\\)`));
+  for (const label of ["Customers", "Credit Settlements", "Expenses"]) assert.match(navigation, new RegExp(`module: \\"${label}\\"`));
   assert.match(app, /clearAuthenticationPreservingDeviceIdentity/);
-  assert.match(app, /Log out/);
+  assert.match(navigation, /Log out/);
 });
 
 test("customer workflow shares authoritative customer search with credit checkout", () => {

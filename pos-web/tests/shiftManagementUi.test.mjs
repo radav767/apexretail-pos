@@ -4,13 +4,15 @@ import { readFileSync } from "node:fs";
 
 const page = readFileSync(new URL("../src/ShiftManagementPage.tsx", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const navigation = readFileSync(new URL("../src/components/PosNavigation.tsx", import.meta.url), "utf8");
 const modulePage = readFileSync(new URL("../src/PosModulePage.tsx", import.meta.url), "utf8");
 const formatter = readFileSync(new URL("../src/printing/receiptFormatter.ts", import.meta.url), "utf8");
 const css = readFileSync(new URL("../src/shift-management.css", import.meta.url), "utf8");
 
 test("Shift Management is nested under Sales Management and not a top-level menu entry", () => {
-  assert.doesNotMatch(app, /showPosModule\("Shift Management"\)/);
-  assert.match(app, /showPosModule\("Sales Management"\)/);
+  assert.match(navigation, /label: "Sales Management"[\s\S]*children:[\s\S]*label: "Shift Management"/);
+  assert.doesNotMatch(navigation, /icon:[^\n]+module: "Shift Management"/);
+  assert.match(app, /onNavigate=\{showPosModule\}/);
   assert.match(modulePage, /activeModule === "Sales Management"[\s\S]*<ShiftManagementPage/);
   assert.match(modulePage, /<h2>Sales History<\/h2>/);
 });
