@@ -855,6 +855,9 @@ class FakeSalesRepo:
     async def sync_product_total(self, _product):
         return Decimal("8")
 
+    async def get_product_components(self, *_args, **_kwargs):
+        return []
+
     async def get_employee(self, **_kwargs):
         return SimpleNamespace(
             id=uuid4(),
@@ -900,7 +903,93 @@ class MutableSettingsService:
         }
 
 
+class FakeCompositeSalesRepo(FakeSalesRepo):
+    def __init__(self):
+        super().__init__()
+        self.parent_id = uuid4()
+        self.component_a_id = uuid4()
+        self.component_b_id = uuid4()
+        self.balances = {
+            self.component_a_id: SimpleNamespace(quantity=Decimal("10")),
+            self.component_b_id: SimpleNamespace(quantity=Decimal("20")),
+        }
+        self.products = {
+            self.parent_id: SimpleNamespace(
+                id=self.parent_id, name="Meal Combo", selling_price=Decimal("10"),
+                cost_price=Decimal("5.00"), product_type="composite",
+                track_inventory=False, category_id=None, unit="each",
+            ),
+            self.component_a_id: SimpleNamespace(
+                id=self.component_a_id, name="Rice", selling_price=Decimal("2"),
+                cost_price=Decimal("1.00"), product_type="standard",
+                track_inventory=True, category_id=None, unit="each",
+            ),
+            self.component_b_id: SimpleNamespace(
+                id=self.component_b_id, name="Chicken", selling_price=Decimal("4"),
+                cost_price=Decimal("2.00"), product_type="standard",
+                track_inventory=True, category_id=None, unit="each",
+            ),
+        }
+        self.saved_components = []
+        self.saved_movements = []
+        self.saved_by_client_id = {}
+
+    async def get_by_client_sale_id(self, _company_id, client_sale_id):
+        return self.saved_by_client_id.get(client_sale_id)
+
+    async def get_product(self, _company_id, product_id):
+        return self.products[product_id]
+
+    async def get_product_components(self, _company_id, composite_product_id):
+        if composite_product_id != self.parent_id:
+            return []
+        return [
+            (SimpleNamespace(quantity=Decimal("1.5"), unit="each"), self.products[self.component_a_id]),
+            (SimpleNamespace(quantity=Decimal("2"), unit="each"), self.products[self.component_b_id]),
+        ]
+
+    async def get_balance(self, _company_id, _branch, product):
+        return self.balances[product.id]
+
+    async def save_sale(
+        self, sale, _sale_items, _products, _balances, inventory_movements,
+        sale_item_components=None,
+    ):
+        self.saved_sale = sale
+        self.saved_sales.append(sale)
+        self.saved_movements = inventory_movements
+        self.saved_components = sale_item_components or []
+        if sale.client_sale_id:
+            self.saved_by_client_id[sale.client_sale_id] = sale
+        return sale
+
+
 class SalesServicePhase1Test(unittest.IsolatedAsyncioTestCase):
+    async def test_composite_sale_deducts_components_once_and_snapshots_recipe(self):
+        company_id = uuid4()
+        branch_id = uuid4()
+        client_sale_id = uuid4()
+        repo = FakeCompositeSalesRepo()
+        service = SalesService(repo)
+        payload = SaleCreate(
+            company_id=company_id,
+            branch_id=branch_id,
+            payment_method="cash",
+            amount_received=Decimal("25"),
+            client_sale_id=client_sale_id,
+            items=[SaleItemCreate(product_id=repo.parent_id, quantity=Decimal("2"))],
+        )
+
+        with patch("app.sales.service.BusinessSettingsService", FakeSettingsService):
+            first = await service.create_sale(payload, actor=None)
+            second = await service.create_sale(payload, actor=None)
+
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(repo.balances[repo.component_a_id].quantity, Decimal("7.000"))
+        self.assertEqual(repo.balances[repo.component_b_id].quantity, Decimal("16.000"))
+        self.assertEqual([item.quantity for item in repo.saved_components], [Decimal("3.000"), Decimal("4.000")])
+        self.assertEqual([item.movement_type for item in repo.saved_movements], ["composite_sale", "composite_sale"])
+
     async def test_server_derives_snapshots_and_allows_pre_deactivation_queue(self):
         company_id = uuid4()
         branch_id = uuid4()

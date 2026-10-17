@@ -2835,12 +2835,15 @@ const [loggedIn, setLoggedIn] = useState(
 
   function showPosModule(
     moduleName: PosModuleName,
+    feature?: string,
   ) {
     setActivePosModule(moduleName);
     const url = new URL(window.location.href);
     url.searchParams.set("module", moduleName);
-    url.searchParams.delete("feature");
+    if (feature) url.searchParams.set("feature", feature);
+    else url.searchParams.delete("feature");
     window.history.pushState(null, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
     if (!window.matchMedia("(min-width: 1024px)").matches) {
       setMenuOpen(false);
     }

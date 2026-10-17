@@ -13,6 +13,9 @@ from app.models.category import Category
 from app.models.inventory_balance import InventoryBalance
 from app.models.inventory_movement import InventoryMovement
 from app.models.product import Product
+from app.models.product_component import ProductComponent
+from app.models.product_variant import ProductVariant
+from app.models.product_price_level import ProductPriceLevel
 from app.models.product_creation_request import (
     ProductCreationRequest,
 )
@@ -80,18 +83,29 @@ class ProductRepository:
     async def delete_category(self, category: Category):
         category.active = False
         category.deleted = True
-
-        await self.db.execute(
-            update(Product)
-            .where(
-                Product.category_id == category.id,
-                Product.company_id == category.company_id,
-            )
-            .values(category_id=None)
-        )
-
         await self.db.commit()
         return category
+
+    async def category_dependency_counts(
+        self,
+        company_id: UUID,
+        category_id: UUID,
+    ) -> tuple[int, int]:
+        product_result = await self.db.execute(
+            select(func.count(Product.id)).where(
+                Product.company_id == company_id,
+                Product.category_id == category_id,
+                Product.deleted == False,
+            )
+        )
+        child_result = await self.db.execute(
+            select(func.count(Category.id)).where(
+                Category.company_id == company_id,
+                Category.parent_id == category_id,
+                Category.deleted == False,
+            )
+        )
+        return int(product_result.scalar_one() or 0), int(child_result.scalar_one() or 0)
 
     async def resolve_branch(
         self,
@@ -225,16 +239,149 @@ class ProductRepository:
             await self.db.rollback()
             raise
 
-    async def list_products(self, company_id: UUID):
+    async def list_products(
+        self,
+        company_id: UUID,
+        *,
+        search: str | None = None,
+        category_id: UUID | None = None,
+        product_type: str | None = None,
+    ):
+        query = select(Product).where(
+                Product.company_id == company_id,
+                Product.deleted == False,
+            )
+        if search:
+            pattern = f"%{search.strip()}%"
+            query = query.where(
+                or_(
+                    Product.name.ilike(pattern),
+                    Product.sku.ilike(pattern),
+                    Product.barcode.ilike(pattern),
+                )
+            )
+        if category_id is not None:
+            query = query.where(Product.category_id == category_id)
+        if product_type:
+            query = query.where(Product.product_type == product_type)
+        result = await self.db.execute(query.order_by(Product.name.asc()))
+        return result.scalars().all()
+
+    async def product_is_component(self, company_id: UUID, product_id: UUID) -> bool:
         result = await self.db.execute(
-            select(Product)
+            select(func.count(ProductComponent.id)).where(
+                ProductComponent.company_id == company_id,
+                ProductComponent.component_product_id == product_id,
+                ProductComponent.active == True,
+                ProductComponent.deleted == False,
+            )
+        )
+        return bool(result.scalar_one())
+
+    async def list_components(self, company_id: UUID, composite_product_id: UUID):
+        result = await self.db.execute(
+            select(ProductComponent, Product)
+            .join(Product, Product.id == ProductComponent.component_product_id)
             .where(
+                ProductComponent.company_id == company_id,
+                ProductComponent.composite_product_id == composite_product_id,
+                ProductComponent.active == True,
+                ProductComponent.deleted == False,
                 Product.company_id == company_id,
                 Product.deleted == False,
             )
             .order_by(Product.name.asc())
         )
+        return result.all()
+
+    async def replace_components(
+        self,
+        company_id: UUID,
+        composite_product_id: UUID,
+        components: list[dict],
+    ):
+        result = await self.db.execute(
+            select(ProductComponent).where(
+                ProductComponent.company_id == company_id,
+                ProductComponent.composite_product_id == composite_product_id,
+            )
+        )
+        existing = {row.component_product_id: row for row in result.scalars().all()}
+        requested_ids = {row["component_product_id"] for row in components}
+        for component_id, row in existing.items():
+            if component_id not in requested_ids:
+                row.active = False
+                row.deleted = True
+        for values in components:
+            row = existing.get(values["component_product_id"])
+            if row is None:
+                row = ProductComponent(
+                    company_id=company_id,
+                    composite_product_id=composite_product_id,
+                    **values,
+                )
+            else:
+                row.quantity = values["quantity"]
+                row.unit = values["unit"]
+                row.active = True
+                row.deleted = False
+            self.db.add(row)
+        await self.db.commit()
+        return await self.list_components(company_id, composite_product_id)
+
+    async def list_variants(self, company_id: UUID, product_id: UUID | None = None):
+        query = select(ProductVariant).where(
+            ProductVariant.company_id == company_id,
+            ProductVariant.deleted == False,
+        )
+        if product_id is not None:
+            query = query.where(ProductVariant.product_id == product_id)
+        result = await self.db.execute(query.order_by(ProductVariant.name.asc()))
         return result.scalars().all()
+
+    async def get_variant(self, company_id: UUID, variant_id: UUID):
+        result = await self.db.execute(
+            select(ProductVariant).where(
+                ProductVariant.id == variant_id,
+                ProductVariant.company_id == company_id,
+                ProductVariant.deleted == False,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def save_variant(self, variant: ProductVariant):
+        self.db.add(variant)
+        await self.db.commit()
+        await self.db.refresh(variant)
+        return variant
+
+    async def list_price_levels(self, company_id: UUID, product_id: UUID | None = None):
+        query = select(ProductPriceLevel).where(
+            ProductPriceLevel.company_id == company_id,
+            ProductPriceLevel.deleted == False,
+        )
+        if product_id is not None:
+            query = query.where(ProductPriceLevel.product_id == product_id)
+        result = await self.db.execute(
+            query.order_by(ProductPriceLevel.name.asc(), ProductPriceLevel.minimum_quantity.asc())
+        )
+        return result.scalars().all()
+
+    async def get_price_level(self, company_id: UUID, price_level_id: UUID):
+        result = await self.db.execute(
+            select(ProductPriceLevel).where(
+                ProductPriceLevel.id == price_level_id,
+                ProductPriceLevel.company_id == company_id,
+                ProductPriceLevel.deleted == False,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def save_price_level(self, price_level: ProductPriceLevel):
+        self.db.add(price_level)
+        await self.db.commit()
+        await self.db.refresh(price_level)
+        return price_level
 
     async def get_product(self, company_id: UUID, product_id: UUID):
         result = await self.db.execute(

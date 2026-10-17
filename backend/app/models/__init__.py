@@ -30,3 +30,7 @@ from app.models.company_currency import CompanyCurrency
 from app.models.currency_exchange_rate import CurrencyExchangeRate
 from app.models.cashier_shift import CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot
 from app.models.offline_sale_resolution import OfflineSaleResolution
+from app.models.product_component import ProductComponent
+from app.models.product_variant import ProductVariant
+from app.models.product_price_level import ProductPriceLevel
+from app.models.sale_item_component import SaleItemComponent

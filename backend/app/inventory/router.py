@@ -41,6 +41,7 @@ def get_service(
 async def inventory_overview(
     company_id: UUID,
     service: InventoryService = Depends(get_service),
+    _actor: AuthActor = Depends(require_path_permission("manage_inventory")),
 ):
     return await service.overview(company_id)
 
@@ -65,6 +66,7 @@ async def inventory_history(
     company_id: UUID,
     limit: int = Query(default=100, ge=1, le=500),
     service: InventoryService = Depends(get_service),
+    _actor: AuthActor = Depends(require_path_permission("manage_inventory")),
 ):
     return await service.history(company_id, limit)
 

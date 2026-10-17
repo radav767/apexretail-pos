@@ -866,3 +866,26 @@
     flex: 1;
   }
 }
+/* Phase 7A product feature pages */
+.pos-product-tools { display: grid; gap: 18px; }
+.pos-product-tool-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 10px; }
+.pos-product-tool-form input, .pos-product-tool-form select, .pos-product-search,
+.pos-product-picker select { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #d6e1db; border-radius: 10px; background: #fff; }
+.pos-product-tool-form button, .pos-primary-action { min-height: 44px; padding: 10px 16px; border: 0; border-radius: 10px; background: #07583b; color: #fff; font-weight: 800; }
+.pos-product-picker { display: grid; max-width: 560px; gap: 7px; color: #35423c; font-weight: 800; }
+.pos-unit-conversion { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 20px; border-radius: 14px; background: #f5f7f8; }
+.pos-unit-conversion small { flex-basis: 100%; color: #68736d; }
+.pos-barcode-labels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pos-barcode-labels article { display: grid; gap: 5px; padding: 16px; border: 1px dashed #07583b; border-radius: 12px; text-align: center; }
+.pos-barcode-labels article span { font-family: monospace; letter-spacing: .08em; }
+.pos-import-export { display: flex; flex-wrap: wrap; gap: 14px; align-items: end; }
+.pos-import-export label { display: grid; gap: 7px; font-weight: 800; }
+
+@media (max-width: 700px) {
+  .pos-product-tool-form, .pos-barcode-labels { grid-template-columns: 1fr; }
+}
+
+@media print {
+  .pos-session-header, .pos-feature-back, .pos-product-picker, .pos-module-card-heading { display: none !important; }
+  .pos-barcode-labels { grid-template-columns: repeat(3, 1fr); }
+}

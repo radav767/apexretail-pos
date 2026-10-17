@@ -13,6 +13,7 @@ import FinancialModules, { type FinancialModuleName } from "./FinancialModules";
 import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
 import PosSessionHeader from "./components/PosSessionHeader";
 import { PosFeatureBack, PosFeatureHub, type PosFeatureItem } from "./components/PosFeatureHub";
+import ProductToolsPage, { type ProductToolFeature } from "./ProductToolsPage";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -92,7 +93,14 @@ type Product = {
   category_id?: string | null;
   sku?: string | null;
   barcode?: string | null;
+  product_type?: string;
+  image_url?: string | null;
   unit?: string;
+  purchase_unit?: string | null;
+  units_per_purchase?: string | number;
+  track_inventory?: boolean;
+  tax_rate?: string | number | null;
+  tax_exempt?: boolean;
   selling_price?: string | number | null;
   cost_price?: string | number | null;
   stock_qty?: string | number;
@@ -206,7 +214,14 @@ type ProductForm = {
   name: string;
   sku: string;
   barcode: string;
+  product_type: string;
+  image_url: string;
   unit: string;
+  purchase_unit: string;
+  units_per_purchase: string;
+  track_inventory: boolean;
+  tax_rate: string;
+  tax_exempt: boolean;
   cost_price: string;
   selling_price: string;
   stock_qty: string;
@@ -216,6 +231,7 @@ type ProductForm = {
 type InventoryReceiveForm = {
   product_id: string;
   quantity: string;
+  received_unit: string;
   reason: string;
   unit_cost: string;
   reference: string;
@@ -242,12 +258,14 @@ type SettingsPageKey =
 type ModuleFeature =
   | "home" | "transaction-history" | "cancel-void-sales" | "credit-settlement"
   | "cashier-shifts" | "z-reports" | "goods-received" | "stock-adjustments"
-  | "inventory-overview" | "inventory-activity" | "sales-summary" | "inventory-status";
+  | "inventory-overview" | "inventory-activity" | "sales-summary" | "inventory-status"
+  | "all-products" | ProductToolFeature;
 
 const moduleFeatures: Record<string, ModuleFeature[]> = {
   "Sales Management": ["transaction-history", "cancel-void-sales", "credit-settlement", "cashier-shifts", "z-reports"],
   Inventory: ["goods-received", "stock-adjustments", "inventory-overview", "inventory-activity"],
   Reports: ["sales-summary", "inventory-status"],
+  Products: ["all-products", "categories", "composite-products", "product-variants", "units", "price-levels", "barcode-labels", "import-export"],
 };
 
 function featureFromLocation(moduleName: PosModuleName): ModuleFeature {
@@ -268,7 +286,14 @@ const emptyProductForm: ProductForm = {
   name: "",
   sku: "",
   barcode: "",
+  product_type: "standard",
+  image_url: "",
   unit: "each",
+  purchase_unit: "",
+  units_per_purchase: "1",
+  track_inventory: true,
+  tax_rate: "",
+  tax_exempt: false,
   cost_price: "",
   selling_price: "",
   stock_qty: "0",
@@ -278,6 +303,7 @@ const emptyProductForm: ProductForm = {
 const emptyReceiveForm: InventoryReceiveForm = {
   product_id: "",
   quantity: "",
+  received_unit: "",
   reason: "",
   unit_cost: "",
   reference: "",
@@ -847,7 +873,14 @@ export default function PosModulePage({
       name: product.name,
       sku: product.sku || "",
       barcode: product.barcode || "",
+      product_type: product.product_type || "standard",
+      image_url: product.image_url || "",
       unit: product.unit || "each",
+      purchase_unit: product.purchase_unit || "",
+      units_per_purchase: String(product.units_per_purchase || "1"),
+      track_inventory: product.track_inventory !== false,
+      tax_rate: product.tax_rate == null ? "" : String(product.tax_rate),
+      tax_exempt: Boolean(product.tax_exempt),
       cost_price: product.cost_price == null ? "" : String(product.cost_price),
       selling_price: product.selling_price == null ? "" : String(product.selling_price),
       stock_qty: String(product.stock_qty || "0"),
@@ -1145,7 +1178,14 @@ export default function PosModulePage({
         name: productForm.name.trim(),
         sku: productForm.sku.trim() || null,
         barcode: productForm.barcode.trim() || null,
+        product_type: productForm.product_type,
+        image_url: productForm.image_url.trim() || null,
         unit: productForm.unit,
+        purchase_unit: productForm.purchase_unit.trim() || null,
+        units_per_purchase: productForm.units_per_purchase || "1",
+        track_inventory: productForm.track_inventory,
+        tax_rate: productForm.tax_rate || null,
+        tax_exempt: productForm.tax_exempt,
         cost_price: productForm.cost_price || null,
         selling_price: productForm.selling_price || null,
         reorder_level: productForm.reorder_level || "0",
@@ -1234,6 +1274,7 @@ export default function PosModulePage({
         branch_id: selectedBranchId || null,
         product_id: receiveForm.product_id,
         quantity: receiveForm.quantity,
+        received_unit: receiveForm.received_unit || null,
         reason: receiveForm.reason.trim(),
         unit_cost: receiveForm.unit_cost || null,
         reference: receiveForm.reference.trim() || null,
@@ -1330,6 +1371,10 @@ export default function PosModulePage({
             "goods-received": "Goods Received", "stock-adjustments": "Stock Adjustments",
             "inventory-overview": "Inventory Overview", "inventory-activity": "Inventory Activity",
             "sales-summary": "Sales Summary", "inventory-status": "Inventory Status",
+            "all-products": "All Products", "categories": "Categories",
+            "composite-products": "Composite Products", "product-variants": "Product Variants",
+            "units": "Units", "price-levels": "Price Levels",
+            "barcode-labels": "Barcode Labels", "import-export": "Import / Export",
           } as Record<ModuleFeature, string>)[activeFeature]}
           cashierName={cashier?.name || "Employee"}
           shopName={localStorage.getItem("shop_name") || "Current shop"}
@@ -1660,8 +1705,26 @@ export default function PosModulePage({
           </div>
         )}
 
-        {!loading && activeModule === "Products" && (
+        {!loading && activeModule === "Products" && activeFeature === "home" && (
+          <PosFeatureHub
+            title="Products"
+            features={[
+              { id: "all-products", title: "All Products", detail: "Create, edit and search products", icon: "inventory" },
+              { id: "categories", title: "Categories", detail: "Hierarchy and product organization", icon: "settings" },
+              { id: "composite-products", title: "Composite Products", detail: "Recipes, ingredients and cost", icon: "transfer" },
+              { id: "product-variants", title: "Product Variants", detail: "SKU and barcode options", icon: "adjust" },
+              { id: "units", title: "Units", detail: "Case breaking and conversions", icon: "inventory" },
+              { id: "price-levels", title: "Price Levels", detail: "Quantity-based product prices", icon: "cash" },
+              { id: "barcode-labels", title: "Barcode Labels", detail: "Preview and print labels", icon: "printer" },
+              { id: "import-export", title: "Import / Export", detail: "CSV product records", icon: "report" },
+            ] as PosFeatureItem<ModuleFeature>[]}
+            onSelect={openFeature}
+          />
+        )}
+
+        {!loading && activeModule === "Products" && activeFeature === "all-products" && (
           <>
+            <PosFeatureBack label="Products" onClick={backToFeatureHub} />
             <div className="pos-module-card">
               <div className="pos-module-card-heading">
                 <div>
@@ -1745,6 +1808,23 @@ export default function PosModulePage({
                     />
                   </label>
 
+                  <label>
+                    Product type
+                    <select value={productForm.product_type} onChange={(event) => setProductForm((current) => ({ ...current, product_type: event.target.value }))}>
+                      <option value="standard">Standard stock</option>
+                      <option value="non_stock">Non-stock</option>
+                      <option value="service">Service</option>
+                      <option value="composite">Composite</option>
+                      <option value="bundle">Bundle</option>
+                      <option value="variable_weight">Variable weight</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Product image URL
+                    <input value={productForm.image_url} onChange={(event) => setProductForm((current) => ({ ...current, image_url: event.target.value }))} />
+                  </label>
+
                   <label className="pos-barcode-field">
                     Barcode
                     <span className="pos-barcode-input-row">
@@ -1784,6 +1864,25 @@ export default function PosModulePage({
                       <option value="litre">Litre</option>
                       <option value="ml">Millilitre</option>
                     </select>
+                  </label>
+
+                  <label>
+                    Purchase unit
+                    <input placeholder="Example: carton" value={productForm.purchase_unit} onChange={(event) => setProductForm((current) => ({ ...current, purchase_unit: event.target.value }))} />
+                  </label>
+
+                  <label>
+                    Units per purchase
+                    <input type="number" min="0.001" step="0.001" value={productForm.units_per_purchase} onChange={(event) => setProductForm((current) => ({ ...current, units_per_purchase: event.target.value }))} />
+                  </label>
+
+                  <label>
+                    Tax rate (%)
+                    <input type="number" min="0" max="100" step="0.01" value={productForm.tax_rate} disabled={productForm.tax_exempt} onChange={(event) => setProductForm((current) => ({ ...current, tax_rate: event.target.value }))} />
+                  </label>
+
+                  <label className="pos-checkbox-field">
+                    <input type="checkbox" checked={productForm.tax_exempt} onChange={(event) => setProductForm((current) => ({ ...current, tax_exempt: event.target.checked }))} /> Tax exempt
                   </label>
 
                   <label>
@@ -1980,6 +2079,19 @@ export default function PosModulePage({
           </>
         )}
 
+        {!loading && activeModule === "Products" && !["home", "all-products"].includes(activeFeature) && (
+          <>
+            <PosFeatureBack label="Products" onClick={backToFeatureHub} />
+            <ProductToolsPage
+              feature={activeFeature as ProductToolFeature}
+              companyId={companyId}
+              branchId={selectedBranchId || branchId}
+              canManage={canManageProducts}
+              onDataChanged={onProductsChanged}
+            />
+          </>
+        )}
+
         {!loading && activeModule === "Inventory" && activeFeature === "home" && (
           <PosFeatureHub
             title="Inventory"
@@ -2065,6 +2177,22 @@ export default function PosModulePage({
                             }))
                           }
                         />
+                      </label>
+
+                      <label>
+                        Receiving unit
+                        <select
+                          value={receiveForm.received_unit}
+                          onChange={(event) => setReceiveForm((current) => ({ ...current, received_unit: event.target.value }))}
+                        >
+                          <option value="">Base selling unit</option>
+                          {(() => {
+                            const product = products.find((item) => item.id === receiveForm.product_id);
+                            return product?.purchase_unit
+                              ? <option value={product.purchase_unit}>{product.purchase_unit} ({product.units_per_purchase || 1} {product.unit})</option>
+                              : null;
+                          })()}
+                        </select>
                       </label>
 
                       <label>

@@ -9,6 +9,8 @@ type InventoryProduct = {
   name: string;
   sku: string | null;
   unit: string;
+  purchase_unit: string | null;
+  units_per_purchase: string;
   cost_price: string;
   selling_price: string;
   stock_qty: string;
@@ -98,6 +100,7 @@ export default function InventoryPage({
   const [grn, setGrn] = useState({
     product_id: "",
     quantity: "",
+    received_unit: "",
     reason: "",
     unit_cost: "",
     reference: "",
@@ -239,6 +242,7 @@ export default function InventoryPage({
         branch_id: selectedBranchId || null,
         product_id: grn.product_id,
         quantity: grn.quantity,
+        received_unit: grn.received_unit || null,
         reason: grn.reason.trim(),
         unit_cost: grn.unit_cost || null,
         reference: grn.reference.trim() || null,
@@ -489,6 +493,19 @@ export default function InventoryPage({
                   })
                 }
               />
+            </label>
+
+            <label>
+              Receiving unit
+              <select value={grn.received_unit} onChange={(event) => setGrn({ ...grn, received_unit: event.target.value })}>
+                <option value="">Base selling unit</option>
+                {(() => {
+                  const product = products.find((item) => item.product_id === grn.product_id);
+                  return product?.purchase_unit
+                    ? <option value={product.purchase_unit}>{product.purchase_unit} ({product.units_per_purchase} {product.unit})</option>
+                    : null;
+                })()}
+              </select>
             </label>
 
             <label>

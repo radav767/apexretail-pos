@@ -157,6 +157,34 @@ class DiscountCheckoutTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(repo.saved["items"][0].line_cost, Decimal("-0.50"))
         self.assertEqual(repo.balance.quantity, Decimal("1"))
 
+    async def test_composite_refund_restores_immutable_component_snapshot(self):
+        repo, payload, original = await self.checkout("0", "1.00")
+        item = repo.saved["items"][0]
+        item.id = uuid4()
+        repo.db = RecordingDB()
+        repo.get_sale_for_update = AsyncMock(return_value=original)
+        repo.get_sale_items = AsyncMock(return_value=[item])
+        repo.list_refund_items_for_original_item = AsyncMock(return_value=[])
+        repo.get_sale_item_components = AsyncMock(return_value=[SimpleNamespace(
+            component_product_id=repo.product.id,
+            component_name="Recipe ingredient",
+            quantity=Decimal("0.500"),
+            unit_cost=Decimal("2.00"),
+        )])
+
+        refund = await SalesService(repo).create_refund(RefundCreate(
+            company_id=payload.company_id,
+            original_sale_id=original.id,
+            reason="Partial composite return",
+            items=[RefundItemCreate(sale_item_id=item.id, quantity="0.125")],
+        ), actor=None)
+
+        self.assertEqual(refund.total_amount, Decimal("-0.50"))
+        self.assertEqual(repo.balance.quantity, Decimal("1.000"))
+        movement = repo.saved["movements"][0]
+        self.assertEqual(movement.movement_type, "composite_refund")
+        self.assertEqual(movement.quantity, Decimal("0.250"))
+
     def test_invalid_client_amounts_rejected(self):
         for field in ("amount_received", "discount_amount", "sale_discount_amount"):
             for value in ("NaN", "Infinity", "-1", "0.001", "10000000000"):

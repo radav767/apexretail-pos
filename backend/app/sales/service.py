@@ -10,6 +10,7 @@ from app.employees.service import EmployeeService
 from app.models.inventory_movement import InventoryMovement
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
+from app.models.sale_item_component import SaleItemComponent
 from app.models.audit_event import AuditEvent
 from app.models.credit_receivable import CreditReceivable
 from zoneinfo import ZoneInfo
@@ -306,6 +307,7 @@ class SalesService:
         products = []
         balances = []
         inventory_movements = []
+        sale_item_components = []
         seen_products = set()
 
         for item in data.items:
@@ -321,25 +323,6 @@ class SalesService:
                 data.company_id,
                 item.product_id,
             )
-
-            balance = await self.repo.get_balance(
-                data.company_id,
-                branch,
-                product,
-            )
-
-            before_qty = Decimal(balance.quantity or 0)
-
-            if before_qty < item.quantity:
-                raise HTTPException(
-                    400,
-                    (
-                        f"Not enough stock for {product.name} "
-                        f"in the selected branch"
-                    ),
-                )
-
-            after_qty = before_qty - item.quantity
 
             selling_unit = (
                 str(
@@ -362,12 +345,37 @@ class SalesService:
             if selling_price <= 0:
                 raise HTTPException(400, "Unit price must be greater than zero")
 
-            cost_snapshot_available = product.cost_price is not None
-            unit_cost = (
-                Decimal(product.cost_price)
-                if cost_snapshot_available
-                else Decimal("0")
-            )
+            product_type = str(getattr(product, "product_type", "standard") or "standard")
+            track_inventory = bool(getattr(product, "track_inventory", True))
+            recipe_rows = []
+            if product_type in {"composite", "bundle"}:
+                recipe_rows = await self.repo.get_product_components(
+                    data.company_id,
+                    product.id,
+                )
+                if not recipe_rows:
+                    raise HTTPException(400, f"{product.name} has no active components")
+
+            if recipe_rows:
+                cost_snapshot_available = all(
+                    component_product.cost_price is not None
+                    for _, component_product in recipe_rows
+                )
+                unit_cost = sum(
+                    (
+                        Decimal(component.quantity)
+                        * Decimal(component_product.cost_price or 0)
+                        for component, component_product in recipe_rows
+                    ),
+                    Decimal("0"),
+                )
+            else:
+                cost_snapshot_available = product.cost_price is not None
+                unit_cost = (
+                    Decimal(product.cost_price)
+                    if cost_snapshot_available
+                    else Decimal("0")
+                )
 
             line_cost = (
                 unit_cost * item.quantity
@@ -419,14 +427,10 @@ class SalesService:
                 rounding=ROUND_HALF_UP,
             )
 
-            balance.quantity = after_qty
-            await self.repo.sync_product_total(product)
-
-            products.append(product)
-            balances.append(balance)
-
+            sale_item_id = uuid.uuid4()
             sale_items.append(
                 SaleItem(
+                    id=sale_item_id,
                     sale_id=sale_id,
                     product_id=product.id,
                     product_name=product.name,
@@ -449,28 +453,71 @@ class SalesService:
                 )
             )
 
-            inventory_movements.append(
-                InventoryMovement(
-                    company_id=data.company_id,
-                    shop_id=branch.shop_id,
-                    branch_id=branch.id,
-                    product_id=product.id,
-                    product_name=product.name,
-                    movement_type="sale",
-                    quantity=item.quantity,
-                    before_qty=before_qty,
-                    after_qty=after_qty,
-                    unit_cost=Decimal(
-                        product.cost_price or 0
-                    ),
-                    reference=receipt_number,
-                    reason="POS sale",
-                    notes=(
-                        f"Stock deducted by receipt "
-                        f"{receipt_number}"
-                    ),
+            stock_requirements = []
+            if recipe_rows:
+                for component, component_product in recipe_rows:
+                    required_quantity = (
+                        Decimal(component.quantity) * Decimal(item.quantity)
+                    ).quantize(Decimal("0.001"))
+                    stock_requirements.append(
+                        (component_product, required_quantity, component.unit)
+                    )
+                    sale_item_components.append(
+                        SaleItemComponent(
+                            company_id=data.company_id,
+                            sale_item_id=sale_item_id,
+                            component_product_id=component_product.id,
+                            component_name=component_product.name,
+                            quantity=required_quantity,
+                            unit=component.unit,
+                            unit_cost=Decimal(component_product.cost_price or 0),
+                        )
+                    )
+            elif track_inventory:
+                stock_requirements.append((product, Decimal(item.quantity), selling_unit))
+
+            for stock_product, required_quantity, requirement_unit in stock_requirements:
+                locked_product = await self.repo.get_product(
+                    data.company_id,
+                    stock_product.id,
                 )
-            )
+                balance = await self.repo.get_balance(
+                    data.company_id,
+                    branch,
+                    locked_product,
+                )
+                before_qty = Decimal(balance.quantity or 0)
+                if before_qty < required_quantity:
+                    raise HTTPException(
+                        400,
+                        f"Not enough stock for {locked_product.name} in the selected branch",
+                    )
+                after_qty = before_qty - required_quantity
+                balance.quantity = after_qty
+                await self.repo.sync_product_total(locked_product)
+                products.append(locked_product)
+                balances.append(balance)
+                inventory_movements.append(
+                    InventoryMovement(
+                        company_id=data.company_id,
+                        shop_id=branch.shop_id,
+                        branch_id=branch.id,
+                        product_id=locked_product.id,
+                        product_name=locked_product.name,
+                        movement_type="composite_sale" if recipe_rows else "sale",
+                        quantity=required_quantity,
+                        before_qty=before_qty,
+                        after_qty=after_qty,
+                        unit_cost=Decimal(locked_product.cost_price or 0),
+                        reference=receipt_number,
+                        reason="POS sale",
+                        notes=(
+                            f"Component for {product.name}; receipt {receipt_number}"
+                            if recipe_rows
+                            else f"Stock deducted by receipt {receipt_number}"
+                        ),
+                    )
+                )
 
         # Calculate the final tax snapshot.
         raw_item_total = total
@@ -792,11 +839,24 @@ class SalesService:
                 action="credit_sale_created",
                 details={"sale_id": str(sale.id), "customer_id": str(customer.id), "receivable_id": str(receivable_id), "amount": str(total)},
             )
+            if sale_item_components:
+                return await self.repo.save_credit_sale(
+                    sale, sale_items, products, balances, inventory_movements,
+                    receivable, audit, sale_item_components,
+                )
             return await self.repo.save_credit_sale(
-                sale, sale_items, products, balances, inventory_movements, receivable, audit
+                sale, sale_items, products, balances, inventory_movements,
+                receivable, audit,
             )
 
-        return await self.repo.save_sale(sale, sale_items, products, balances, inventory_movements)
+        if sale_item_components:
+            return await self.repo.save_sale(
+                sale, sale_items, products, balances, inventory_movements,
+                sale_item_components,
+            )
+        return await self.repo.save_sale(
+            sale, sale_items, products, balances, inventory_movements,
+        )
 
     async def create_refund(
         self,
@@ -885,15 +945,6 @@ class SalesService:
                 data.company_id,
                 original_item.product_id,
             )
-            balance = await self.repo.get_balance(
-                data.company_id,
-                branch,
-                product,
-            )
-            before_qty = Decimal(balance.quantity or 0)
-            after_qty = before_qty + refund_item.quantity
-            balance.quantity = after_qty
-            await self.repo.sync_product_total(product)
 
             ratio = refund_item.quantity / Decimal(original_item.quantity or 1)
             line_total = (Decimal(original_item.line_total or 0) * ratio).quantize(
@@ -908,8 +959,6 @@ class SalesService:
                 rounding=ROUND_HALF_UP,
             )
             total += line_total
-            products.append(product)
-            balances.append(balance)
             refund_sale_items.append(
                 SaleItem(
                     sale_id=refund_id,
@@ -929,23 +978,71 @@ class SalesService:
                     ),
                 )
             )
-            inventory_movements.append(
-                InventoryMovement(
-                    company_id=data.company_id,
-                    shop_id=branch.shop_id,
-                    branch_id=branch.id,
-                    product_id=product.id,
-                    product_name=product.name,
-                    movement_type="refund",
-                    quantity=refund_item.quantity,
-                    before_qty=before_qty,
-                    after_qty=after_qty,
-                    unit_cost=Decimal(product.cost_price or 0),
-                    reference=receipt_number,
-                    reason=data.reason.strip(),
-                    notes=f"Inventory restored by refund {receipt_number}",
+
+            component_snapshots = (
+                await self.repo.get_sale_item_components(
+                    data.company_id,
+                    original_item.id,
                 )
+                if hasattr(self.repo, "get_sale_item_components")
+                else []
             )
+            restore_requirements = []
+            if component_snapshots:
+                restore_requirements = [
+                    (
+                        snapshot.component_product_id,
+                        snapshot.component_name,
+                        (Decimal(snapshot.quantity) * ratio).quantize(Decimal("0.001")),
+                        Decimal(snapshot.unit_cost or 0),
+                        True,
+                    )
+                    for snapshot in component_snapshots
+                ]
+            elif bool(getattr(product, "track_inventory", True)):
+                restore_requirements = [
+                    (
+                        product.id,
+                        product.name,
+                        Decimal(refund_item.quantity),
+                        Decimal(product.cost_price or 0),
+                        False,
+                    )
+                ]
+
+            for restore_product_id, restore_name, restore_quantity, restore_cost, is_component in restore_requirements:
+                restore_product = await self.repo.get_product(
+                    data.company_id,
+                    restore_product_id,
+                )
+                balance = await self.repo.get_balance(
+                    data.company_id,
+                    branch,
+                    restore_product,
+                )
+                before_qty = Decimal(balance.quantity or 0)
+                after_qty = before_qty + restore_quantity
+                balance.quantity = after_qty
+                await self.repo.sync_product_total(restore_product)
+                products.append(restore_product)
+                balances.append(balance)
+                inventory_movements.append(
+                    InventoryMovement(
+                        company_id=data.company_id,
+                        shop_id=branch.shop_id,
+                        branch_id=branch.id,
+                        product_id=restore_product.id,
+                        product_name=restore_name,
+                        movement_type="composite_refund" if is_component else "refund",
+                        quantity=restore_quantity,
+                        before_qty=before_qty,
+                        after_qty=after_qty,
+                        unit_cost=restore_cost,
+                        reference=receipt_number,
+                        reason=data.reason.strip(),
+                        notes=f"Inventory restored by refund {receipt_number}",
+                    )
+                )
 
         refund_tax = (Decimal(original_sale.tax_amount or 0) * (total / Decimal(original_sale.subtotal_amount or 1))).quantize(money_quantum, rounding=ROUND_HALF_UP)
         refund_total = -(total + refund_tax)

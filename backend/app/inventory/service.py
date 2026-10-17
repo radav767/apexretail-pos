@@ -36,13 +36,25 @@ class InventoryService:
             product,
         )
 
+        received_unit = self._clean(data.received_unit)
+        base_quantity = Decimal(data.quantity)
+        conversion_factor = Decimal("1")
+        if received_unit:
+            purchase_unit = str(getattr(product, "purchase_unit", "") or "").strip().lower()
+            if not purchase_unit or received_unit.lower() != purchase_unit:
+                raise HTTPException(400, "Received unit does not match the product purchase unit")
+            conversion_factor = Decimal(getattr(product, "units_per_purchase", 1) or 1)
+            base_quantity = (Decimal(data.quantity) * conversion_factor).quantize(Decimal("0.001"))
+
         before_qty = Decimal(balance.quantity or 0)
-        after_qty = before_qty + data.quantity
+        after_qty = before_qty + base_quantity
 
         balance.quantity = after_qty
 
         if data.unit_cost is not None:
-            product.cost_price = data.unit_cost
+            product.cost_price = (
+                Decimal(data.unit_cost) / conversion_factor
+            ).quantize(Decimal("0.01"))
 
         await self.repo.sync_product_total(product)
 
@@ -53,14 +65,19 @@ class InventoryService:
             product_id=product.id,
             product_name=product.name,
             movement_type="grn",
-            quantity=data.quantity,
+            quantity=base_quantity,
             before_qty=before_qty,
             after_qty=after_qty,
             unit_cost=Decimal(product.cost_price or 0),
             reference=self._clean(data.reference),
             supplier=self._clean(data.supplier),
             reason=self._clean_reason(data.reason),
-            notes=self._clean(data.notes),
+            notes=(
+                f"{data.quantity} {received_unit} converted to {base_quantity} {product.unit}. "
+                f"{self._clean(data.notes) or ''}"
+            ).strip()
+            if received_unit
+            else self._clean(data.notes),
         )
 
         return await self.repo.apply_movement(
@@ -224,6 +241,10 @@ class InventoryService:
                 "name": product.name,
                 "sku": product.sku,
                 "unit": product.unit,
+                "purchase_unit": getattr(product, "purchase_unit", None),
+                "units_per_purchase": Decimal(
+                    getattr(product, "units_per_purchase", 1) or 1
+                ),
                 "cost_price": product.cost_price,
                 "selling_price": product.selling_price,
                 "stock_qty": product.stock_qty,

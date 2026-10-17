@@ -6,6 +6,9 @@ from app.models.device import Device
 from app.models.sale import Sale
 from app.models.employee import Employee
 from app.models.sale_item import SaleItem
+from app.models.sale_item_component import SaleItemComponent
+from app.models.product_component import ProductComponent
+from app.models.product import Product
 from app.models.shop import Shop
 from app.models.inventory_movement import InventoryMovement
 from app.models.category import Category
@@ -62,6 +65,32 @@ class SalesRepository:
 
     async def sync_product_total(self, product):
         return await self.stock.sync_product_total(product)
+
+    async def get_product_components(self, company_id, composite_product_id):
+        result = await self.db.execute(
+            select(ProductComponent, Product)
+            .join(Product, Product.id == ProductComponent.component_product_id)
+            .where(
+                ProductComponent.company_id == company_id,
+                ProductComponent.composite_product_id == composite_product_id,
+                ProductComponent.active == True,
+                ProductComponent.deleted == False,
+                Product.company_id == company_id,
+                Product.active == True,
+                Product.deleted == False,
+            )
+            .order_by(Product.id.asc())
+        )
+        return result.all()
+
+    async def get_sale_item_components(self, company_id, sale_item_id):
+        result = await self.db.execute(
+            select(SaleItemComponent).where(
+                SaleItemComponent.company_id == company_id,
+                SaleItemComponent.sale_item_id == sale_item_id,
+            )
+        )
+        return result.scalars().all()
 
     async def get_by_client_sale_id(
         self,
@@ -151,6 +180,7 @@ class SalesRepository:
         products,
         balances,
         inventory_movements,
+        sale_item_components=None,
     ):
         try:
             self.db.add(sale)
@@ -158,6 +188,7 @@ class SalesRepository:
             self.db.add_all(products)
             self.db.add_all(balances)
             self.db.add_all(inventory_movements)
+            self.db.add_all(sale_item_components or [])
 
             await self.db.commit()
             await self.db.refresh(sale)
@@ -176,6 +207,7 @@ class SalesRepository:
         inventory_movements,
         receivable,
         audit_event,
+        sale_item_components=None,
     ):
         try:
             self.db.add(sale)
@@ -183,6 +215,7 @@ class SalesRepository:
             self.db.add_all(products)
             self.db.add_all(balances)
             self.db.add_all(inventory_movements)
+            self.db.add_all(sale_item_components or [])
             # Establish the sale FK target before adding its receivable while
             # keeping every write inside this same database transaction.
             await self.db.flush()

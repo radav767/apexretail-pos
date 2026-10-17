@@ -20,6 +20,7 @@ import type { PosModuleName } from "../PosModulePage";
 type NavigationChild = {
   label: string;
   module: PosModuleName;
+  feature?: string;
 };
 
 type NavigationGroup = {
@@ -41,7 +42,7 @@ type Props = {
   canManageCredit: boolean;
   onToggle: () => void;
   onClose: () => void;
-  onNavigate: (module: PosModuleName) => void;
+  onNavigate: (module: PosModuleName, feature?: string) => void;
   onBackoffice: () => void;
   onLogout: () => void;
 };
@@ -93,8 +94,9 @@ export default function PosNavigation({
       icon: <CubeIcon />,
       visible: canManageProducts,
       children: [
-        { label: "Products", module: "Products" },
-        { label: "Categories", module: "Products" },
+        { label: "Products", module: "Products", feature: "all-products" },
+        { label: "Categories", module: "Products", feature: "categories" },
+        { label: "Composite Products", module: "Products", feature: "composite-products" },
       ],
     },
     {
@@ -169,7 +171,7 @@ export default function PosNavigation({
                 type="button"
                 className={activeModule === child.module ? "active" : ""}
                 key={child.label}
-                onClick={() => onNavigate(child.module)}
+                onClick={() => onNavigate(child.module, child.feature)}
               >{child.label}</button>)}
             </div>}
           </div>;

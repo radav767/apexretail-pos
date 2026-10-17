@@ -11,6 +11,7 @@ class GRNCreate(BaseModel):
     branch_id: UUID | None = None
     product_id: UUID
     quantity: Decimal = Field(gt=0)
+    received_unit: str | None = Field(default=None, max_length=20)
     reason: str | None = Field(
         default=None,
         min_length=1,
@@ -93,6 +94,8 @@ class InventoryProductOut(BaseModel):
     name: str
     sku: str | None
     unit: str
+    purchase_unit: str | None = None
+    units_per_purchase: Decimal = Decimal("1")
     cost_price: Decimal | None
     selling_price: Decimal | None
     stock_qty: Decimal
