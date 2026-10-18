@@ -11,7 +11,7 @@ test("credit checkout requires online customer selection and authoritative sale 
   assert.match(app, /Credit sales require an online connection/);
   assert.match(app, /searchCustomers\(companyId, query/);
   assert.match(customerApi, /api\.get\(`\/customers\/\$\{companyId\}`/);
-  assert.match(app, /customer_id:\s*paymentMethod === "credit"/);
+  assert.match(app, /customer_id:\s*saleCustomer\?\.id/);
   assert.match(app, /await api\.post\("\/sales", payload\)/);
   assert.match(app, /Confirm Credit Sale/);
 });

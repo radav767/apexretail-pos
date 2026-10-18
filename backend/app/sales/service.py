@@ -391,7 +391,9 @@ class SalesService:
             )
 
             line_total = (
-                Decimal(item.line_total)
+                selling_price * item.quantity
+                if level is not None
+                else Decimal(item.line_total)
                 if item.line_total is not None
                 else selling_price * item.quantity
             ).quantize(
@@ -702,7 +704,7 @@ class SalesService:
             amount_received = total
             change_due = Decimal("0")
 
-        if customer is not None and not customer.unlimited_credit:
+        if payment_method == "credit" and customer is not None and not customer.unlimited_credit:
             if customer.credit_limit is None:
                 raise HTTPException(409, "Customer credit policy has no monetary limit")
             current_outstanding = Decimal(await self.repo.customer_outstanding(data.company_id, customer.id))
@@ -833,7 +835,7 @@ class SalesService:
                 },
             )])
 
-        if customer is not None:
+        if payment_method == "credit" and customer is not None:
             receivable_id = uuid.uuid4()
             receivable = CreditReceivable(
                 id=receivable_id,

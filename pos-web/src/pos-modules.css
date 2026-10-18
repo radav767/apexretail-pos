@@ -889,3 +889,22 @@
   .pos-session-header, .pos-feature-back, .pos-product-picker, .pos-module-card-heading { display: none !important; }
   .pos-barcode-labels { grid-template-columns: repeat(3, 1fr); }
 }
+.pos-product-tool-form.pos-variant-form {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+}
+
+.pos-import-preview {
+  width: 100%;
+  margin-top: 18px;
+}
+
+.pos-import-error {
+  background: #fff5f5;
+  color: #9b1c1c;
+}
+
+@media (max-width: 720px) {
+  .pos-product-tool-form.pos-variant-form {
+    grid-template-columns: 1fr;
+  }
+}

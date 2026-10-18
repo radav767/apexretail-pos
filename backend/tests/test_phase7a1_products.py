@@ -1,0 +1,137 @@
+import unittest
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
+
+import pytest
+from app.products.import_preview import preview
+from app.sales.schema import SaleCreate, SaleItemCreate
+from app.sales.service import SalesService
+from tests.test_weighted_sales_and_subscriptions import FakeSalesRepo
+
+
+SETTINGS = {
+    "tax_name": "VAT",
+    "tax_rate": Decimal("0"),
+    "tax_inclusive": False,
+    "receipt_footer": "Thank you",
+}
+
+
+class VariantSalesRepo(FakeSalesRepo):
+    def __init__(self):
+        super().__init__()
+        self.product.product_type = "standard"
+        self.product.track_inventory = True
+        self.product.tax_rate = Decimal("15")
+        self.product.tax_exempt = False
+        self.variant = SimpleNamespace(
+            id=uuid4(), name="Large / Green", selling_price=Decimal("6.00"),
+            cost_price=Decimal("3.00"), active=True,
+        )
+        self.variant_balance = SimpleNamespace(quantity=Decimal("8.000"))
+        self.customer = None
+        self.level = None
+
+    async def get_variant(self, _company_id, product_id, variant_id):
+        if product_id == self.product.id and variant_id == self.variant.id:
+            return self.variant
+        return None
+
+    async def get_variant_balance(self, *_args):
+        return self.variant_balance
+
+    async def get_product_components(self, *_args):
+        return []
+
+    async def get_category_name(self, *_args):
+        return None
+
+    async def get_customer_for_update(self, *_args):
+        return self.customer
+
+    async def get_price_level(self, *_args):
+        return self.level
+
+
+class Phase7A1SaleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_variant_sale_uses_variant_price_and_deducts_exactly_once(self):
+        repo = VariantSalesRepo()
+        payload = SaleCreate(
+            company_id=uuid4(), client_sale_id=uuid4(), payment_method="card",
+            items=[SaleItemCreate(
+                product_id=repo.product.id, variant_id=repo.variant.id,
+                quantity="2", unit_price="6.00", line_total="12.00",
+            )],
+        )
+        with patch("app.sales.service.BusinessSettingsService.get", return_value=SETTINGS):
+            sale = await SalesService(repo).create_sale(payload, actor=None)
+
+        self.assertEqual(repo.variant_balance.quantity, Decimal("6.000"))
+        self.assertEqual(sale.total_amount, Decimal("13.80"))
+        item = repo.saved["items"][0]
+        self.assertEqual(item.variant_id, repo.variant.id)
+        self.assertEqual(item.variant_name_snapshot, "Large / Green")
+        self.assertEqual(item.tax_amount, Decimal("1.80"))
+        movement = repo.saved["movements"][0]
+        self.assertEqual(movement.movement_type, "variant_sale")
+        self.assertEqual(movement.variant_id, repo.variant.id)
+
+        repo.get_by_client_sale_id = AsyncMock(return_value=sale)
+        with patch("app.sales.service.BusinessSettingsService.get", return_value=SETTINGS):
+            replay = await SalesService(repo).create_sale(payload, actor=None)
+        self.assertIs(replay, sale)
+        self.assertEqual(repo.variant_balance.quantity, Decimal("6.000"))
+
+    async def test_customer_price_level_is_server_authoritative_without_receivable(self):
+        repo = VariantSalesRepo()
+        repo.product.tax_rate = None
+        repo.customer = SimpleNamespace(
+            id=uuid4(), name="Wholesale Buyer", customer_code="W001",
+            price_level_name="Wholesale", credit_enabled=False,
+            unlimited_credit=False, credit_limit=None, credit_terms_days=0,
+        )
+        repo.level = SimpleNamespace(name="Wholesale", price=Decimal("4.50"))
+        shift = SimpleNamespace(
+            id=uuid4(), device_id=None, employee_id=None,
+            shop_name_snapshot="Main Shop", branch_name_snapshot="Front",
+        )
+        actor = SimpleNamespace(
+            company_id=uuid4(), actor_type="user", role="owner",
+            permissions={}, user=SimpleNamespace(id=uuid4()), employee=None,
+        )
+        payload = SaleCreate(
+            company_id=actor.company_id, customer_id=repo.customer.id,
+            payment_method="cash", amount_received="4.50",
+            items=[SaleItemCreate(
+                product_id=repo.product.id, quantity="1",
+                unit_price="999.00", line_total="999.00",
+            )],
+        )
+        with patch("app.sales.service.BusinessSettingsService.get", return_value=SETTINGS):
+            sale = await SalesService(repo).create_sale(
+                payload, actor=actor, resolved_shift=shift,
+            )
+        self.assertEqual(sale.total_amount, Decimal("4.50"))
+        self.assertEqual(sale.price_level_name_snapshot, "Wholesale")
+        self.assertEqual(repo.saved["items"][0].unit_price, Decimal("4.50"))
+        self.assertEqual(repo.saved["items"][0].price_level_name_snapshot, "Wholesale")
+
+
+@pytest.mark.asyncio
+async def test_csv_import_preview_reports_valid_and_invalid_rows():
+    upload = SimpleNamespace(
+        filename="products.csv",
+        read=AsyncMock(return_value=(
+            b"name,sku,selling_price,stock_qty,variant_name,variant_sku\n"
+            b"T Shirt,TSHIRT,12.50,5,Small,TS-S\n"
+            b",BROKEN,4.00,2,,\n"
+        )),
+    )
+    result = await preview(upload)
+    assert result["total_rows"] == 2
+    assert result["valid_rows"] == 1
+    assert result["rows"][0]["values"]["variant_name"] == "Small"
+    assert result["rows"][1]["errors"]
+
