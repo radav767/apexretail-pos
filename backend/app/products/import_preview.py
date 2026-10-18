@@ -17,6 +17,7 @@ def xlsx(data):
                 for x in letters: idx=idx*26+ord(x.upper())-64
                 v=c.find(NS+"v"); value=v.text if v is not None and v.text else ""
                 if c.attrib.get("t")=="s" and value: value=shared[int(value)]
+                elif c.attrib.get("t")=="inlineStr": value="".join(n.text or "" for n in c.iter(NS+"t"))
                 cells[idx-1]=value
             out.append([cells.get(i,"") for i in range(max(cells,default=-1)+1)])
         return out

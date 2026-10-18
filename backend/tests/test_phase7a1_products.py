@@ -1,4 +1,6 @@
 import unittest
+import io
+import zipfile
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -137,6 +139,17 @@ async def test_csv_import_preview_reports_valid_and_invalid_rows():
     assert result["valid_rows"] == 1
     assert result["rows"][0]["values"]["variant_name"] == "Small"
     assert result["rows"][1]["errors"]
+
+
+@pytest.mark.asyncio
+async def test_xlsx_import_preview_supports_inline_excel_strings():
+    workbook = io.BytesIO()
+    with zipfile.ZipFile(workbook, "w") as archive:
+        archive.writestr("xl/worksheets/sheet1.xml", """<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>name</t></is></c><c r="B1" t="inlineStr"><is><t>sku</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Excel Product</t></is></c><c r="B2" t="inlineStr"><is><t>XLS-1</t></is></c></row></sheetData></worksheet>""")
+    upload = SimpleNamespace(filename="products.xlsx", read=AsyncMock(return_value=workbook.getvalue()))
+    result = await preview(upload)
+    assert result["valid_rows"] == 1
+    assert result["rows"][0]["values"]["name"] == "Excel Product"
 
 
 @pytest.mark.asyncio
