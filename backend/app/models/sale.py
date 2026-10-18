@@ -75,6 +75,7 @@ class Sale(Base):
     )
     customer_name_snapshot = Column(String(160), nullable=True)
     customer_code_snapshot = Column(String(40), nullable=True)
+    price_level_name_snapshot = Column(String(80), nullable=True)
     shift_id = Column(UUID(as_uuid=True), ForeignKey("cashier_shifts.id", ondelete="RESTRICT"), nullable=True, index=True)
     base_currency_code = Column(String(8), nullable=True)
     payment_currency_code = Column(String(8), nullable=True)

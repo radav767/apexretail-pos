@@ -102,8 +102,18 @@ type VariantRow = {
   sku: string | null;
   barcode: string | null;
   attributes: Record<string, string>;
+  cost_price: string | null;
   selling_price: string | null;
+  branch_id: string | null;
+  stock_qty: string;
+  reorder_level: string;
   active: boolean;
+};
+
+type ImportPreviewRow = {
+  row_number: number;
+  values: Record<string, string | null>;
+  errors: string[];
 };
 
 type PriceLevelRow = {
@@ -159,10 +169,18 @@ export default function ProductsPage({
   const [variantName, setVariantName] = useState("");
   const [variantSku, setVariantSku] = useState("");
   const [variantBarcode, setVariantBarcode] = useState("");
+  const [variantCost, setVariantCost] = useState("");
+  const [variantPrice, setVariantPrice] = useState("");
+  const [variantStock, setVariantStock] = useState("0");
+  const [variantReorder, setVariantReorder] = useState("0");
   const [priceLevels, setPriceLevels] = useState<PriceLevelRow[]>([]);
   const [priceName, setPriceName] = useState("");
   const [priceValue, setPriceValue] = useState("");
   const [priceMinimum, setPriceMinimum] = useState("1");
+  const [productImage, setProductImage] = useState<File | null>(null);
+  const [productImagePreview, setProductImagePreview] = useState("");
+  const [importPreview, setImportPreview] = useState<ImportPreviewRow[]>([]);
+  const [importFilename, setImportFilename] = useState("");
 
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -243,6 +261,8 @@ export default function ProductsPage({
       branch_id: current.branch_id || branches[0]?.id || "",
     }));
     setEditingProductId(null);
+    setProductImage(null);
+    setProductImagePreview("");
   }
 
   function startEditingProduct(product: Product) {
@@ -308,11 +328,13 @@ export default function ProductsPage({
         reorder_level: form.reorder_level || "0",
       };
 
+      let savedProduct: Product;
       if (editingProductId) {
-        await api.patch(
+        const response = await api.patch(
           `/products/${companyId}/${editingProductId}`,
           payload,
         );
+        savedProduct = response.data;
 
         setMessage("Product updated successfully");
       } else {
@@ -330,15 +352,26 @@ export default function ProductsPage({
           );
         }
 
-        await api.post("/products", {
+        const response = await api.post("/products", {
           company_id: companyId,
           branch_id: form.branch_id || null,
           create_request_key: createRequestKey,
           ...payload,
           stock_qty: form.stock_qty || "0",
         });
+        savedProduct = response.data;
 
         setMessage("Product created successfully");
+      }
+
+      if (productImage) {
+        const body = new FormData();
+        body.append("image", productImage);
+        await api.post(
+          `/products/images/${companyId}/${savedProduct.id}`,
+          body,
+          { headers: { "Content-Type": "multipart/form-data" } },
+        );
       }
 
       resetProductForm();
@@ -557,9 +590,15 @@ export default function ProductsPage({
       await api.post(`/products/variants/${companyId}/${selectedAdvancedProductId}`, {
         name: variantName.trim(), sku: variantSku.trim() || null,
         barcode: variantBarcode.trim() || null, attributes: {},
+        cost_price: variantCost || null,
+        selling_price: variantPrice || null,
+        branch_id: form.branch_id || branches[0]?.id || null,
+        stock_qty: variantStock || "0",
+        reorder_level: variantReorder || "0",
       });
       setVariantName(""); setVariantSku(""); setVariantBarcode("");
-      const response = await api.get(`/products/variants/${companyId}`, { params: { product_id: selectedAdvancedProductId } });
+      setVariantCost(""); setVariantPrice(""); setVariantStock("0"); setVariantReorder("0");
+      const response = await api.get(`/products/variants/${companyId}`, { params: { product_id: selectedAdvancedProductId, branch_id: form.branch_id || branches[0]?.id || undefined } });
       setVariants(response.data); setMessage("Variant created");
     } catch (error: any) { setMessage(error.response?.data?.detail || "Failed to create variant"); }
   }
@@ -583,19 +622,34 @@ export default function ProductsPage({
     URL.revokeObjectURL(url);
   }
 
-  async function importProducts(file: File) {
-    const lines = (await file.text()).split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) return;
-    const headers = lines[0].split(",").map((value) => value.trim());
-    const rows = lines.slice(1).map((line) => {
-      const values = line.split(",").map((value) => value.trim());
-      const record = Object.fromEntries(headers.map((header, index) => [header, values[index] || null]));
-      return { ...record, reorder_level: record.reorder_level || "0" };
-    });
+  async function previewImport(file: File) {
     try {
-      await api.post("/products/import", { company_id: companyId, branch_id: form.branch_id || branches[0]?.id || null, rows });
-      setMessage(`${rows.length} products imported`); await loadData();
+      const body = new FormData();
+      body.append("file", file);
+      const response = await api.post(`/products/import/preview/${companyId}`, body, { headers: { "Content-Type": "multipart/form-data" } });
+      setImportFilename(response.data.filename);
+      setImportPreview(response.data.rows);
+      setMessage(`${response.data.valid_rows} of ${response.data.total_rows} rows are valid`);
+    } catch (error: any) { setImportPreview([]); setMessage(error.response?.data?.detail || "Product import preview failed"); }
+  }
+
+  async function commitImport() {
+    const invalid = importPreview.filter((row) => row.errors.length);
+    if (!importPreview.length || invalid.length) {
+      setMessage("Correct all import errors before importing products");
+      return;
+    }
+    try {
+      setLoading(true);
+      await api.post("/products/import", {
+        company_id: companyId,
+        branch_id: form.branch_id || branches[0]?.id || null,
+        rows: importPreview.map((row) => row.values),
+      });
+      setMessage(`${importPreview.length} product rows imported`);
+      setImportPreview([]); setImportFilename(""); await loadData();
     } catch (error: any) { setMessage(error.response?.data?.detail || "Product import failed"); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -727,9 +781,15 @@ export default function ProductsPage({
             </label>
 
             <label>
-              Product image URL
-              <input value={form.image_url} placeholder="Optional HTTPS image" onChange={(event) => updateForm("image_url", event.target.value)} />
+              Product image
+              <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => {
+                const file = event.target.files?.[0] || null;
+                setProductImage(file);
+                setProductImagePreview(file ? URL.createObjectURL(file) : "");
+              }} />
+              <small>Camera, gallery or computer · JPEG, PNG or WebP · 5 MB max</small>
             </label>
+            {(productImagePreview || form.image_url) && <img className="product-image-preview" src={productImagePreview || form.image_url} alt="Product preview" />}
 
             <label>
               Barcode
@@ -1096,8 +1156,8 @@ export default function ProductsPage({
           </>}
 
           {activeFeature === "variants" && selectedAdvancedProductId && <>
-            <div className="advanced-inline-form"><input placeholder="Variant name" value={variantName} onChange={(event) => setVariantName(event.target.value)} /><input placeholder="SKU" value={variantSku} onChange={(event) => setVariantSku(event.target.value)} /><input placeholder="Barcode" value={variantBarcode} onChange={(event) => setVariantBarcode(event.target.value)} /><button onClick={() => void createVariant()}>Add variant</button></div>
-            <div className="products-table-wrapper"><table><thead><tr><th>Variant</th><th>SKU</th><th>Barcode</th><th>Status</th></tr></thead><tbody>{variants.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.sku || "—"}</td><td>{item.barcode || "—"}</td><td>{item.active ? "Active" : "Inactive"}</td></tr>)}</tbody></table></div>
+            <div className="advanced-inline-form variant-entry"><input placeholder="Variant name" value={variantName} onChange={(event) => setVariantName(event.target.value)} /><input placeholder="SKU" value={variantSku} onChange={(event) => setVariantSku(event.target.value)} /><input placeholder="Barcode" value={variantBarcode} onChange={(event) => setVariantBarcode(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Cost price" value={variantCost} onChange={(event) => setVariantCost(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Selling price" value={variantPrice} onChange={(event) => setVariantPrice(event.target.value)} /><input type="number" min="0" step="0.001" placeholder="Opening stock" value={variantStock} onChange={(event) => setVariantStock(event.target.value)} /><input type="number" min="0" step="0.001" placeholder="Reorder level" value={variantReorder} onChange={(event) => setVariantReorder(event.target.value)} /><button onClick={() => void createVariant()}>Add variant</button></div>
+            <div className="products-table-wrapper"><table><thead><tr><th>Variant</th><th>SKU</th><th>Barcode</th><th>Cost</th><th>Selling</th><th>Stock</th><th>Reorder</th><th>Status</th></tr></thead><tbody>{variants.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.sku || "—"}</td><td>{item.barcode || "—"}</td><td>{Number(item.cost_price || 0).toFixed(2)}</td><td>{Number(item.selling_price || 0).toFixed(2)}</td><td>{Number(item.stock_qty || 0)}</td><td>{Number(item.reorder_level || 0)}</td><td>{item.active ? "Active" : "Inactive"}</td></tr>)}</tbody></table></div>
           </>}
 
           {activeFeature === "units" && selectedAdvancedProductId && (() => { const product = products.find((item) => item.id === selectedAdvancedProductId); return product ? <div className="unit-conversion-card"><strong>1 {product.purchase_unit || product.unit}</strong><span>=</span><strong>{product.units_per_purchase} {product.unit}</strong><button onClick={() => { startEditingProduct(product); openFeature("all-products"); }}>Edit conversion</button></div> : null; })()}
@@ -1113,7 +1173,8 @@ export default function ProductsPage({
 
       {activeFeature === "import-export" && <section className="product-management-card import-export-page">
         <h2>Import / Export</h2>
-        <div className="import-export-actions"><label>Import CSV<input type="file" accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProducts(file); }} /></label><button type="button" onClick={() => void exportProducts()}>Export CSV</button></div>
+        <div className="import-export-actions"><label>Import CSV or Excel<input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void previewImport(file); }} /></label><button type="button" onClick={() => void exportProducts()}>Export CSV</button></div>
+        {importPreview.length > 0 && <div className="import-preview"><div className="products-list-header"><div><h3>{importFilename}</h3><p>{importPreview.length} rows · {importPreview.filter((row) => row.errors.length).length} errors</p></div><button type="button" disabled={loading || importPreview.some((row) => row.errors.length > 0)} onClick={() => void commitImport()}>Import valid preview</button></div><div className="products-table-wrapper"><table><thead><tr><th>Row</th><th>Product</th><th>SKU</th><th>Variant</th><th>Validation</th></tr></thead><tbody>{importPreview.map((row) => <tr key={row.row_number} className={row.errors.length ? "import-row-error" : ""}><td>{row.row_number}</td><td>{row.values.name || "—"}</td><td>{row.values.sku || "—"}</td><td>{row.values.variant_name || "—"}</td><td>{row.errors.length ? row.errors.join("; ") : "Ready"}</td></tr>)}</tbody></table></div></div>}
       </section>}
 
       <p className="products-message">{message}</p>

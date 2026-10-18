@@ -35,6 +35,7 @@ export type OfflineSalePayload = {
   sale_discount_amount?: string | null;
   items: Array<{
     product_id: string;
+    variant_id?: string | null;
     quantity: string;
     selling_unit?: string;
     unit_price?: string;

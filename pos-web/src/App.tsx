@@ -113,9 +113,13 @@ type Product = {
   stock_qty: string;
   unit?: string;
   active?: boolean;
+  tax_rate?: string|null; tax_exempt?: boolean;
+  variants?: Array<{id:string;product_id:string;name:string;sku?:string|null;barcode?:string|null;selling_price?:string|null;stock_qty:string;active:boolean}>;
+  price_levels?:Array<{product_id:string;name:string;price:string;minimum_quantity:string;active:boolean}>;
 };
 
 type CartItem = Product & {
+  cart_key:string; base_selling_price:string; variant_id?:string|null; variant_name?:string|null;
   line_discount_amount?: string;
   quantity: string;
   selling_unit: string;
@@ -344,6 +348,8 @@ const [loggedIn, setLoggedIn] = useState(
   const [selectedCreditCustomer, setSelectedCreditCustomer] =
     useState<CreditCustomer | null>(null);
   const [creditCustomersLoading, setCreditCustomersLoading] = useState(false);
+  const [variantProduct,setVariantProduct]=useState<Product|null>(null);
+  const [pricingCustomer,setPricingCustomer]=useState<CreditCustomer|null>(null);
   const [creditDialogMessage, setCreditDialogMessage] = useState("");
   const [menuOpen, setMenuOpen] = useState(() =>
     window.matchMedia("(min-width: 1024px)").matches,
@@ -784,7 +790,8 @@ const [loggedIn, setLoggedIn] = useState(
   let taxAmount = 0;
   let total = cartAmount;
 
-  if (configuredTaxRate > 0) {
+  const productTaxRules=discounted.items.some(item=>item.tax_exempt||item.tax_rate!=null);
+  if(productTaxRules){taxAmount=roundMoneyValue(discounted.items.reduce((sum,item)=>{const rate=item.tax_exempt?0:Number(item.tax_rate??configuredTaxRate),line=Number(item.line_total);return sum+(rate<=0?0:taxInclusive?line*rate/(100+rate):line*rate/100)},0));if(taxInclusive){total=cartAmount;subtotal=roundMoneyValue(total-taxAmount)}else{subtotal=cartAmount;total=roundMoneyValue(subtotal+taxAmount)}} else if (configuredTaxRate > 0) {
     if (taxInclusive) {
       total = cartAmount;
 
@@ -1597,11 +1604,9 @@ const [loggedIn, setLoggedIn] = useState(
     if (!id) return;
 
     try {
-      const productResponse = await api.get(
-        `/products/${id}`,
-      );
+      const [productResponse,variantResponse,priceResponse]=await Promise.all([api.get(`/products/${id}`),api.get(`/products/variants/${id}`,{params:{branch_id:selectedBranchId||undefined}}),api.get(`/products/price-levels/${id}`)]);
 
-      let loadedProducts = productResponse.data;
+      let loadedProducts = productResponse.data.map((product:Product)=>{const variants=variantResponse.data.filter((v:any)=>v.product_id===product.id&&v.active),price_levels=priceResponse.data.filter((v:any)=>v.product_id===product.id&&v.active);return {...product,variants,price_levels,stock_qty:variants.length?String(variants.reduce((n:number,v:any)=>n+Number(v.stock_qty||0),0)):product.stock_qty};});
 
       if (selectedBranchId) {
         const balanceResponse = await api.get(
@@ -1624,7 +1629,9 @@ const [loggedIn, setLoggedIn] = useState(
           (product: Product) => ({
             ...product,
             stock_qty:
-              balances.get(product.id) || "0",
+              product.variants?.length
+                ? product.stock_qty
+                : balances.get(product.id) || "0",
           }),
         );
       }
@@ -2102,7 +2109,10 @@ const [loggedIn, setLoggedIn] = useState(
 
 
 
+  function levelPrice(product:Product,quantity:string,base:string){const name=pricingCustomer?.price_level_name?.toLowerCase();return (product.price_levels||[]).filter(p=>p.name.toLowerCase()===name&&Number(p.minimum_quantity)<=Number(quantity)).sort((a,b)=>Number(b.minimum_quantity)-Number(a.minimum_quantity))[0]?.price||base;}
+  function choosePricingCustomer(id:string){const customer=creditCustomers.find(c=>c.id===id)||null;setPricingCustomer(customer);setCart(current=>current.map(item=>{const name=customer?.price_level_name?.toLowerCase();const price=(item.price_levels||[]).filter(p=>p.name.toLowerCase()===name&&Number(p.minimum_quantity)<=Number(item.quantity)).sort((a,b)=>Number(b.minimum_quantity)-Number(a.minimum_quantity))[0]?.price||item.base_selling_price;return {...item,selling_price:price,line_total:multiplyPriceByQuantity(price,item.quantity)}}));}
   function addToCart(product: Product) {
+    if(product.variants?.length){setVariantProduct(product);return;}
     const availableStock = parseQuantityToMillis(
       product.stock_qty,
     );
@@ -2126,7 +2136,7 @@ const [loggedIn, setLoggedIn] = useState(
 
     setCart((currentCart) => {
       const existing = currentCart.find(
-        (item) => item.id === product.id,
+        (item) => item.cart_key === product.id,
       );
 
       if (existing) {
@@ -2144,7 +2154,7 @@ const [loggedIn, setLoggedIn] = useState(
         }
 
         return currentCart.map((item) =>
-          item.id === product.id
+          item.cart_key === product.id
             ? {
                 ...item,
                 quantity: formatMillis(nextQuantity, false),
@@ -2161,10 +2171,12 @@ const [loggedIn, setLoggedIn] = useState(
         ...currentCart,
         {
           ...product,
+          cart_key:product.id,
+          base_selling_price:product.selling_price,
           quantity: "1.000",
-          selling_unit: product.unit || "each",
+          selling_unit: product.unit || "each", selling_price:levelPrice(product,"1.000",product.selling_price),
           line_total: multiplyPriceByQuantity(
-            product.selling_price,
+            levelPrice(product,"1.000",product.selling_price),
             "1.000",
           ),
         },
@@ -2172,7 +2184,15 @@ const [loggedIn, setLoggedIn] = useState(
     });
   }
 
+  function addVariant(product:Product,variant:NonNullable<Product["variants"]>[number]){
+    if(Number(variant.stock_qty)<=0){setMessage(`${product.name} — ${variant.name} is out of stock`);return;}
+    const key=`${product.id}:${variant.id}`,base=String(variant.selling_price??product.selling_price),price=levelPrice(product,"1.000",base);
+    setCart(current=>{const existing=current.find(i=>i.cart_key===key);if(existing){const q=Number(existing.quantity)+1;if(q>Number(variant.stock_qty))return current;return current.map(i=>i.cart_key===key?{...i,quantity:q.toFixed(3),line_total:multiplyPriceByQuantity(price,q.toFixed(3))}:i)}return [...current,{...product,cart_key:key,base_selling_price:price,variant_id:variant.id,variant_name:variant.name,stock_qty:variant.stock_qty,selling_price:price,quantity:"1.000",selling_unit:product.unit||"each",line_total:multiplyPriceByQuantity(price,"1.000")}];});setVariantProduct(null);
+  }
+
   function handleSalesBarcode(rawBarcode: string) {
+    const code=rawBarcode.trim().toLowerCase();
+    for(const product of products){const variant=product.variants?.find(v=>(v.barcode||"").trim().toLowerCase()===code);if(variant){addVariant(product,variant);setSalesScannerOpen(false);return;}}
     const resolution = resolveBarcodeProduct(products, rawBarcode);
     if (resolution.status === "not_found") {
       setMessage(`Product Not Found: ${resolution.barcode}`);
@@ -2207,7 +2227,7 @@ const [loggedIn, setLoggedIn] = useState(
   function changeQty(id: string, difference: number) {
     setCart((currentCart) =>
       currentCart.map((item) => {
-        if (item.id !== id) return item;
+        if (item.cart_key !== id) return item;
         if (item.selling_unit !== "each") {
           return item;
         }
@@ -2263,6 +2283,8 @@ const [loggedIn, setLoggedIn] = useState(
       ...currentCart,
       {
         ...weightedProduct,
+        cart_key:weightedProduct.id,
+        base_selling_price:weightedProduct.selling_price,
         quantity: formatMillis(quantityMillis, false),
         selling_unit: weightedProduct.unit || "kg",
         line_total: lineTotal,
@@ -2274,7 +2296,7 @@ const [loggedIn, setLoggedIn] = useState(
 
   function removeFromCart(id: string) {
     setCart((currentCart) =>
-      currentCart.filter((item) => item.id !== id)
+      currentCart.filter((item) => item.cart_key !== id)
     );
   }
 
@@ -2471,6 +2493,7 @@ const [loggedIn, setLoggedIn] = useState(
     setCreditDialogMessage("");
 
     const completedItems = discounted.items;
+    const saleCustomer=paymentMethod==="credit"?(creditCustomer||null):pricingCustomer;
     // Capture the original transaction time before the first submission. It
     // is attached only if this transaction has to be persisted offline.
     // Online requests deliberately omit both offline-only fields so the
@@ -2490,7 +2513,7 @@ const [loggedIn, setLoggedIn] = useState(
       branch_id: branchId || null,
       employee_id: cashier.id,
       customer_id:
-        paymentMethod === "credit" ? creditCustomer?.id || null : null,
+        saleCustomer?.id || null,
       device_id:
         localStorage.getItem("device_id") || null,
       device_key:
@@ -2504,6 +2527,7 @@ const [loggedIn, setLoggedIn] = useState(
       sale_discount_amount: discounted.sale_discount_amount,
       items: completedItems.map((item) => ({
         product_id: item.id,
+        variant_id:item.variant_id||null,
         quantity: item.quantity,
         selling_unit: item.selling_unit,
         unit_price: item.selling_price,
@@ -2571,6 +2595,7 @@ const [loggedIn, setLoggedIn] = useState(
       if (paymentMethod === "credit") {
         throw new Error("Credit sales are online-only and cannot be queued.");
       }
+      if(saleCustomer) throw new Error("Customer price levels require an online connection.");
       if (paymentCurrency && !paymentCurrency.is_base) {
         throw new Error("Foreign-currency payments cannot be queued offline. Reconnect and retry the payment.");
       }
@@ -2596,21 +2621,23 @@ const [loggedIn, setLoggedIn] = useState(
       await queueOfflineSale(queuedPayload);
       nonCreditSaleIdentityRef.current = null;
 
-      const rate =
-        Math.max(0, configuredTaxRate);
-
-      let offlineTaxAmount = 0;
-
-      if (rate > 0) {
-        if (taxInclusive) {
-          offlineTaxAmount =
-            total -
-            total / (1 + rate / 100);
-        } else {
-          offlineTaxAmount =
-            Math.max(0, total - cartAmount);
-        }
-      }
+      const rate = Math.max(0, configuredTaxRate);
+      const offlineTaxAmount = productTaxRules
+        ? roundMoneyValue(discounted.items.reduce((sum, item) => {
+            const itemRate = item.tax_exempt
+              ? 0
+              : Number(item.tax_rate ?? configuredTaxRate);
+            const line = Number(item.line_total);
+            if (itemRate <= 0) return sum;
+            return sum + (taxInclusive
+              ? line * itemRate / (100 + itemRate)
+              : line * itemRate / 100);
+          }, 0))
+        : rate > 0
+          ? taxInclusive
+            ? total - total / (1 + rate / 100)
+            : Math.max(0, total - cartAmount)
+          : 0;
 
       const offlineSubtotal =
         taxInclusive
@@ -3797,6 +3824,7 @@ const [loggedIn, setLoggedIn] = useState(
 
       <aside style={cartPanel} className="pos-sales-cart">
         <h2 style={{ marginTop: 0 }}>Current Sale</h2>
+        <label className="pos-pricing-customer">Customer pricing<select value={pricingCustomer?.id||""} onFocus={()=>{if(!creditCustomers.length)void loadCreditCustomers("")}} onChange={event=>choosePricingCustomer(event.target.value)}><option value="">Retail / standard</option>{creditCustomers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.price_level_name?` — ${customer.price_level_name}`:""}</option>)}</select></label>
 
         <div style={cartItemsArea}>
           {!cart.length && (
@@ -3806,9 +3834,10 @@ const [loggedIn, setLoggedIn] = useState(
           )}
 
           {cart.map((item, cartIndex) => (
-            <div key={item.id} style={cartRow} className="pos-cart-row">
+            <div key={item.cart_key} style={cartRow} className="pos-cart-row">
               <div className="pos-cart-item-summary">
                 <strong>{item.name}</strong>
+                {item.variant_name&&<small>{item.variant_name}</small>}
                 <p style={{ margin: "5px 0 0" }}>
                   {formatQuantity(
                     item.quantity,
@@ -3827,7 +3856,7 @@ const [loggedIn, setLoggedIn] = useState(
               <div style={quantityBox} className="pos-quantity-control" aria-label={`Quantity for ${item.name}`}>
                 <button
                   style={quantityButton}
-                  onClick={() => changeQty(item.id, -1)}
+                  onClick={() => changeQty(item.cart_key, -1)}
                   disabled={item.selling_unit !== "each"}
                 >
                   −
@@ -3842,7 +3871,7 @@ const [loggedIn, setLoggedIn] = useState(
 
                 <button
                   style={quantityButton}
-                  onClick={() => changeQty(item.id, 1)}
+                  onClick={() => changeQty(item.cart_key, 1)}
                   disabled={item.selling_unit !== "each"}
                 >
                   +
@@ -3853,7 +3882,7 @@ const [loggedIn, setLoggedIn] = useState(
                 style={removeButton}
                 className="pos-remove-item"
                 aria-label={`Remove ${item.name}`}
-                onClick={() => removeFromCart(item.id)}
+                onClick={() => removeFromCart(item.cart_key)}
               >
                 ×
               </button>
@@ -4145,6 +4174,8 @@ const [loggedIn, setLoggedIn] = useState(
           </div>
         </div>
       )}
+
+      {variantProduct&&<div style={overlay}><div style={modalCard} className="pos-variant-dialog" role="dialog"><h2>Choose {variantProduct.name}</h2><div className="pos-variant-options">{variantProduct.variants?.map(variant=><button key={variant.id} disabled={Number(variant.stock_qty)<=0} onClick={()=>addVariant(variantProduct,variant)}><strong>{variant.name}</strong><span>{formatMoney(variant.selling_price??variantProduct.selling_price)} · {variant.stock_qty} available</span></button>)}</div><button style={secondaryButton} onClick={()=>setVariantProduct(null)}>Cancel</button></div></div>}
 
       {weightedProduct && (
         <div style={overlay}>

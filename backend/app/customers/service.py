@@ -42,7 +42,7 @@ class CustomerService:
             return
         protected = {
             "customer_code", "active", "credit_enabled", "unlimited_credit",
-            "credit_limit", "credit_terms_days",
+            "credit_limit", "credit_terms_days", "price_level_name",
         }
         if protected.intersection(values):
             raise HTTPException(403, "Manager permission is required to change customer status or credit configuration")
@@ -65,6 +65,7 @@ class CustomerService:
             phone=self.clean(data.phone), email=self.clean(data.email), address=self.clean(data.address),
             credit_enabled=data.credit_enabled, unlimited_credit=data.unlimited_credit,
             credit_limit=data.credit_limit, credit_terms_days=data.credit_terms_days,
+            price_level_name=self.clean(data.price_level_name),
             active=data.active, deleted=False,
         )
         self.repo.db.add(AuditEvent(company_id=data.company_id, actor_user_id=actor.user.id if actor.actor_type == "user" else None, actor_employee_id=actor.employee.id if actor.actor_type == "employee" else None, action="customer_created", details={"customer_code": code}))
@@ -102,7 +103,7 @@ class CustomerService:
         )
         values.update(policy.model_dump())
         for key, value in values.items():
-            if key in {"name", "phone", "email", "address"}:
+            if key in {"name", "phone", "email", "address", "price_level_name"}:
                 value = self.clean(value)
             setattr(customer, key, value)
         self.repo.db.add(AuditEvent(company_id=company_id, actor_user_id=actor.user.id if actor.actor_type == "user" else None, actor_employee_id=actor.employee.id if actor.actor_type == "employee" else None, action="customer_updated", details={"customer_id": str(customer.id)}))

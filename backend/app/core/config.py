@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     entitlement_legacy_accept_until: str | None = None
     entitlement_max_token_lifetime_seconds: int = 43200
     entitlement_max_offline_grace_seconds: int = 259200
+    product_image_root: str = "/var/lib/apexretail/product-images"
+    product_image_max_bytes: int = 5242880
 
     class Config:
         env_file = ".env"

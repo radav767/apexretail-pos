@@ -42,6 +42,7 @@ class InventoryMovement(Base):
         nullable=False,
         index=True,
     )
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="SET NULL"), nullable=True, index=True)
 
     product_name = Column(
         String(160),

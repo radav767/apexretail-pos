@@ -32,5 +32,7 @@ from app.models.cashier_shift import CashierShift, CashierShiftCashMovement, Cas
 from app.models.offline_sale_resolution import OfflineSaleResolution
 from app.models.product_component import ProductComponent
 from app.models.product_variant import ProductVariant
+from app.models.variant_inventory_balance import VariantInventoryBalance
+from app.models.product_media import ProductMedia
 from app.models.product_price_level import ProductPriceLevel
 from app.models.sale_item_component import SaleItemComponent

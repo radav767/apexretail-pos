@@ -29,3 +29,4 @@ class Customer(Base, BaseModel):
     unlimited_credit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     credit_limit: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     credit_terms_days: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    price_level_name: Mapped[str | None] = mapped_column(String(80), nullable=True)

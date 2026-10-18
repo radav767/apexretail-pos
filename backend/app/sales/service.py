@@ -171,22 +171,20 @@ class SalesService:
             data.device_id = shift.device_id
             data.employee_id = shift.employee_id
 
-        if payment_method == "credit":
-            if data.customer_id is None:
-                raise HTTPException(400, "A customer is required for a credit sale")
+        if payment_method == "credit" and data.customer_id is None:
+            raise HTTPException(400, "A customer is required for a credit sale")
+        if data.customer_id is not None:
             if data.client_created_at is not None:
-                raise HTTPException(409, "Credit sales are online-only")
+                raise HTTPException(409, "Customer-specific pricing is online-only")
             if actor is None:
                 raise HTTPException(401, "Authentication is required for a credit sale")
-            if actor.actor_type == "employee" and not (actor.permissions or {}).get("credit_sales"):
+            if payment_method=="credit" and actor.actor_type == "employee" and not (actor.permissions or {}).get("credit_sales"):
                 raise HTTPException(403, "Credit sales permission denied")
             customer = await self.repo.get_customer_for_update(data.company_id, data.customer_id)
             if customer is None:
                 raise HTTPException(404, "Customer not found or inactive")
-            if not customer.credit_enabled:
+            if payment_method=="credit" and not customer.credit_enabled:
                 raise HTTPException(409, "Credit is not enabled for this customer")
-        elif data.customer_id is not None:
-            raise HTTPException(400, "customer_id is only supported for credit sales")
 
         if resolved_device is None and (data.device_id is not None or data.device_key):
             device = await self.repo.get_device(
@@ -309,20 +307,24 @@ class SalesService:
         inventory_movements = []
         sale_item_components = []
         seen_products = set()
+        product_tax_total=Decimal("0"); has_product_tax_rules=False
 
         for item in data.items:
-            if item.product_id in seen_products:
+            identity=(item.product_id,item.variant_id)
+            if identity in seen_products:
                 raise HTTPException(
                     400,
                     "The same product appears more than once",
                 )
 
-            seen_products.add(item.product_id)
+            seen_products.add(identity)
 
             product = await self.repo.get_product(
                 data.company_id,
                 item.product_id,
             )
+            variant=await self.repo.get_variant(data.company_id,product.id,item.variant_id) if item.variant_id and hasattr(self.repo,"get_variant") else None
+            if item.variant_id and variant is None: raise HTTPException(400,"Variant is missing or inactive")
 
             selling_unit = (
                 str(
@@ -335,10 +337,13 @@ class SalesService:
             ) or "each"
             if selling_unit not in VALID_PRODUCT_UNITS:
                 raise HTTPException(400, "Unsupported selling unit")
-            selling_price = (
+            base_price=Decimal(variant.selling_price if variant is not None and variant.selling_price is not None else product.selling_price or 0)
+            level_name=str(getattr(customer,"price_level_name","") or "").strip()
+            level=await self.repo.get_price_level(data.company_id,product.id,level_name,item.quantity) if level_name and hasattr(self.repo,"get_price_level") else None
+            selling_price = Decimal(level.price) if level is not None else (
                 Decimal(item.unit_price)
                 if item.unit_price is not None
-                else Decimal(product.selling_price or 0)
+                else base_price
             )
             if item.quantity <= 0:
                 raise HTTPException(400, "Quantity must be greater than zero")
@@ -370,9 +375,10 @@ class SalesService:
                     Decimal("0"),
                 )
             else:
-                cost_snapshot_available = product.cost_price is not None
+                effective_cost=variant.cost_price if variant is not None and variant.cost_price is not None else product.cost_price
+                cost_snapshot_available = effective_cost is not None
                 unit_cost = (
-                    Decimal(product.cost_price)
+                    Decimal(effective_cost)
                     if cost_snapshot_available
                     else Decimal("0")
                 )
@@ -426,6 +432,11 @@ class SalesService:
                 money_quantum,
                 rounding=ROUND_HALF_UP,
             )
+            explicit=getattr(product,"tax_rate",None) is not None or bool(getattr(product,"tax_exempt",False)); has_product_tax_rules|=explicit
+            effective_rate=Decimal("0") if getattr(product,"tax_exempt",False) else Decimal(getattr(product,"tax_rate",None) if getattr(product,"tax_rate",None) is not None else tax_rate)
+            fraction=effective_rate/Decimal("100")
+            item_tax=((line_total-line_total/(1+fraction)) if tax_inclusive and effective_rate>0 else (line_total*fraction)).quantize(money_quantum,rounding=ROUND_HALF_UP)
+            product_tax_total+=item_tax
 
             sale_item_id = uuid.uuid4()
             sale_items.append(
@@ -433,6 +444,8 @@ class SalesService:
                     id=sale_item_id,
                     sale_id=sale_id,
                     product_id=product.id,
+                    variant_id=variant.id if variant else None,
+                    variant_name_snapshot=variant.name if variant else None,
                     product_name=product.name,
                     category_id_snapshot=getattr(product, "category_id", None),
                     category_name_snapshot=(
@@ -450,6 +463,7 @@ class SalesService:
                     unit_cost=unit_cost,
                     line_cost=line_cost,
                     cost_snapshot_available=cost_snapshot_available,
+                    tax_rate_snapshot=effective_rate,tax_amount=item_tax,tax_exempt_snapshot=bool(getattr(product,"tax_exempt",False)),price_level_name_snapshot=level.name if level else None,
                 )
             )
 
@@ -474,14 +488,15 @@ class SalesService:
                         )
                     )
             elif track_inventory:
-                stock_requirements.append((product, Decimal(item.quantity), selling_unit))
+                stock_requirements.append((product, Decimal(item.quantity), selling_unit,variant))
 
-            for stock_product, required_quantity, requirement_unit in stock_requirements:
+            for requirement in stock_requirements:
+                stock_product,required_quantity,requirement_unit=requirement[:3]; stock_variant=requirement[3] if len(requirement)>3 else None
                 locked_product = await self.repo.get_product(
                     data.company_id,
                     stock_product.id,
                 )
-                balance = await self.repo.get_balance(
+                balance = await self.repo.get_variant_balance(data.company_id,branch,locked_product.id,stock_variant.id) if stock_variant else await self.repo.get_balance(
                     data.company_id,
                     branch,
                     locked_product,
@@ -494,7 +509,7 @@ class SalesService:
                     )
                 after_qty = before_qty - required_quantity
                 balance.quantity = after_qty
-                await self.repo.sync_product_total(locked_product)
+                if not stock_variant: await self.repo.sync_product_total(locked_product)
                 products.append(locked_product)
                 balances.append(balance)
                 inventory_movements.append(
@@ -503,8 +518,9 @@ class SalesService:
                         shop_id=branch.shop_id,
                         branch_id=branch.id,
                         product_id=locked_product.id,
-                        product_name=locked_product.name,
-                        movement_type="composite_sale" if recipe_rows else "sale",
+                        variant_id=stock_variant.id if stock_variant else None,
+                        product_name=f"{locked_product.name} — {stock_variant.name}" if stock_variant else locked_product.name,
+                        movement_type="composite_sale" if recipe_rows else "variant_sale" if stock_variant else "sale",
                         quantity=required_quantity,
                         before_qty=before_qty,
                         after_qty=after_qty,
@@ -579,7 +595,11 @@ class SalesService:
                 "discount_amount is required with discount components",
             )
 
-        if tax_rate > 0:
+        if has_product_tax_rules:
+            tax_amount=product_tax_total.quantize(money_quantum,rounding=ROUND_HALF_UP)
+            if tax_inclusive: total_amount=raw_item_total.quantize(money_quantum); subtotal_amount=total_amount-tax_amount
+            else: subtotal_amount=raw_item_total.quantize(money_quantum); total_amount=subtotal_amount+tax_amount
+        elif tax_rate > 0:
             tax_fraction = tax_rate / Decimal("100")
 
             if tax_inclusive:
@@ -746,6 +766,7 @@ class SalesService:
             customer_id=customer.id if customer else None,
             customer_name_snapshot=customer.name if customer else None,
             customer_code_snapshot=customer.customer_code if customer else None,
+            price_level_name_snapshot=getattr(customer,"price_level_name",None) if customer else None,
             shift_id=shift.id if shift else None,
             base_currency_code=base_currency.code,
             payment_currency_code=base_currency.code if payment_method == "credit" else payment_currency.code,
@@ -921,6 +942,7 @@ class SalesService:
         balances = []
         inventory_movements = []
         total = Decimal("0.00")
+        refund_tax = Decimal("0.00")
 
         seen = set()
         for refund_item in data.items:
@@ -959,6 +981,10 @@ class SalesService:
                 rounding=ROUND_HALF_UP,
             )
             total += line_total
+            item_tax = (
+                Decimal(getattr(original_item, "tax_amount", 0) or 0) * ratio
+            ).quantize(money_quantum, rounding=ROUND_HALF_UP)
+            refund_tax += item_tax
             refund_sale_items.append(
                 SaleItem(
                     sale_id=refund_id,
@@ -973,6 +999,20 @@ class SalesService:
                     line_total=-line_total,
                     unit_cost=original_item.unit_cost,
                     line_cost=-line_cost,
+                    variant_id=getattr(original_item, "variant_id", None),
+                    variant_name_snapshot=getattr(
+                        original_item, "variant_name_snapshot", None
+                    ),
+                    tax_rate_snapshot=getattr(
+                        original_item, "tax_rate_snapshot", None
+                    ),
+                    tax_amount=-item_tax,
+                    tax_exempt_snapshot=bool(
+                        getattr(original_item, "tax_exempt_snapshot", False)
+                    ),
+                    price_level_name_snapshot=getattr(
+                        original_item, "price_level_name_snapshot", None
+                    ),
                     cost_snapshot_available=(
                         original_item.cost_snapshot_available is True
                     ),
@@ -1000,30 +1040,59 @@ class SalesService:
                     for snapshot in component_snapshots
                 ]
             elif bool(getattr(product, "track_inventory", True)):
+                original_variant = None
+                if getattr(original_item, "variant_id", None):
+                    original_variant = await self.repo.get_variant(
+                        data.company_id,
+                        original_item.product_id,
+                        original_item.variant_id,
+                    )
+                    if original_variant is None:
+                        raise HTTPException(
+                            409,
+                            "The sold product variant is no longer available for refund",
+                        )
                 restore_requirements = [
                     (
                         product.id,
-                        product.name,
+                        (
+                            f"{product.name} — {original_item.variant_name_snapshot}"
+                            if original_variant
+                            else product.name
+                        ),
                         Decimal(refund_item.quantity),
-                        Decimal(product.cost_price or 0),
+                        Decimal(original_item.unit_cost or product.cost_price or 0),
                         False,
+                        original_variant,
                     )
                 ]
 
-            for restore_product_id, restore_name, restore_quantity, restore_cost, is_component in restore_requirements:
+            for requirement in restore_requirements:
+                restore_product_id, restore_name, restore_quantity, restore_cost, is_component = requirement[:5]
+                restore_variant = requirement[5] if len(requirement) > 5 else None
                 restore_product = await self.repo.get_product(
                     data.company_id,
                     restore_product_id,
                 )
-                balance = await self.repo.get_balance(
-                    data.company_id,
-                    branch,
-                    restore_product,
+                balance = (
+                    await self.repo.get_variant_balance(
+                        data.company_id,
+                        branch,
+                        restore_product.id,
+                        restore_variant.id,
+                    )
+                    if restore_variant
+                    else await self.repo.get_balance(
+                        data.company_id,
+                        branch,
+                        restore_product,
+                    )
                 )
                 before_qty = Decimal(balance.quantity or 0)
                 after_qty = before_qty + restore_quantity
                 balance.quantity = after_qty
-                await self.repo.sync_product_total(restore_product)
+                if not restore_variant:
+                    await self.repo.sync_product_total(restore_product)
                 products.append(restore_product)
                 balances.append(balance)
                 inventory_movements.append(
@@ -1032,8 +1101,15 @@ class SalesService:
                         shop_id=branch.shop_id,
                         branch_id=branch.id,
                         product_id=restore_product.id,
+                        variant_id=restore_variant.id if restore_variant else None,
                         product_name=restore_name,
-                        movement_type="composite_refund" if is_component else "refund",
+                        movement_type=(
+                            "composite_refund"
+                            if is_component
+                            else "variant_refund"
+                            if restore_variant
+                            else "refund"
+                        ),
                         quantity=restore_quantity,
                         before_qty=before_qty,
                         after_qty=after_qty,
@@ -1044,7 +1120,14 @@ class SalesService:
                     )
                 )
 
-        refund_tax = (Decimal(original_sale.tax_amount or 0) * (total / Decimal(original_sale.subtotal_amount or 1))).quantize(money_quantum, rounding=ROUND_HALF_UP)
+        # New sales carry per-line tax snapshots, including tax-exempt lines.
+        # Legacy rows predate those columns, so retain the historical aggregate
+        # proportional calculation only when no item-level tax is available.
+        if not any(getattr(item, "tax_amount", None) is not None for item in sale_items.values()):
+            refund_tax = (
+                Decimal(original_sale.tax_amount or 0)
+                * (total / Decimal(original_sale.subtotal_amount or 1))
+            ).quantize(money_quantum, rounding=ROUND_HALF_UP)
         refund_total = -(total + refund_tax)
         refund_method = data.refund_method or original_sale.payment_method
         refund_currency = await self.currency_from_base(

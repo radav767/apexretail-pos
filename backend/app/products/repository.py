@@ -15,6 +15,8 @@ from app.models.inventory_movement import InventoryMovement
 from app.models.product import Product
 from app.models.product_component import ProductComponent
 from app.models.product_variant import ProductVariant
+from app.models.product_media import ProductMedia
+from app.models.variant_inventory_balance import VariantInventoryBalance
 from app.models.product_price_level import ProductPriceLevel
 from app.models.product_creation_request import (
     ProductCreationRequest,
@@ -53,6 +55,8 @@ class ProductRepository:
             )
         )
         return result.scalar_one_or_none()
+    async def get_category_by_name(self,company_id,name):
+        return (await self.db.execute(select(Category).where(Category.company_id==company_id,func.lower(Category.name)==name.strip().lower(),Category.deleted==False))).scalar_one_or_none()
 
     async def find_category_by_name(
         self,
@@ -329,15 +333,21 @@ class ProductRepository:
         await self.db.commit()
         return await self.list_components(company_id, composite_product_id)
 
-    async def list_variants(self, company_id: UUID, product_id: UUID | None = None):
-        query = select(ProductVariant).where(
+    async def list_variants(self, company_id: UUID, product_id: UUID | None = None, branch_id: UUID | None = None):
+        query = select(ProductVariant,VariantInventoryBalance).outerjoin(VariantInventoryBalance,(VariantInventoryBalance.variant_id==ProductVariant.id)&(VariantInventoryBalance.branch_id==branch_id)&(VariantInventoryBalance.deleted==False)).where(
             ProductVariant.company_id == company_id,
             ProductVariant.deleted == False,
         )
         if product_id is not None:
             query = query.where(ProductVariant.product_id == product_id)
         result = await self.db.execute(query.order_by(ProductVariant.name.asc()))
-        return result.scalars().all()
+        return result.all()
+
+    async def get_variant_balance(self,company_id,branch,product_id,variant_id):
+        row=(await self.db.execute(select(VariantInventoryBalance).where(VariantInventoryBalance.company_id==company_id,VariantInventoryBalance.branch_id==branch.id,VariantInventoryBalance.variant_id==variant_id,VariantInventoryBalance.deleted==False).with_for_update())).scalar_one_or_none()
+        if row is None:
+            row=VariantInventoryBalance(company_id=company_id,shop_id=branch.shop_id,branch_id=branch.id,product_id=product_id,variant_id=variant_id,quantity=0,reorder_level=0); self.db.add(row); await self.db.flush()
+        return row
 
     async def get_variant(self, company_id: UUID, variant_id: UUID):
         result = await self.db.execute(
@@ -354,6 +364,8 @@ class ProductRepository:
         await self.db.commit()
         await self.db.refresh(variant)
         return variant
+    async def get_media(self,company_id,media_id):
+        return (await self.db.execute(select(ProductMedia).where(ProductMedia.company_id==company_id,ProductMedia.id==media_id))).scalar_one_or_none()
 
     async def list_price_levels(self, company_id: UUID, product_id: UUID | None = None):
         query = select(ProductPriceLevel).where(

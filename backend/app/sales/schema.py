@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class SaleItemCreate(BaseModel):
     product_id: UUID
+    variant_id: UUID | None = None
     quantity: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
     selling_unit: str | None = Field(default=None, max_length=20)
     unit_price: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
@@ -56,6 +57,7 @@ class SaleOut(BaseModel):
     customer_id: UUID | None = None
     customer_name_snapshot: str | None = None
     customer_code_snapshot: str | None = None
+    price_level_name_snapshot: str | None = None
     shift_id: UUID | None = None
     base_currency_code: str | None = None
     payment_currency_code: str | None = None
@@ -104,6 +106,8 @@ class SaleOut(BaseModel):
 class SaleItemOut(BaseModel):
     id: UUID
     product_id: UUID
+    variant_id: UUID | None = None
+    variant_name_snapshot: str | None = None
     original_sale_item_id: UUID | None = None
     product_name: str
     quantity: Decimal
@@ -113,6 +117,10 @@ class SaleItemOut(BaseModel):
     unit_price: Decimal
     line_total: Decimal
     line_discount_amount: Decimal | None = None
+    tax_rate_snapshot: Decimal | None = None
+    tax_amount: Decimal | None = None
+    tax_exempt_snapshot: bool | None = None
+    price_level_name_snapshot: str | None = None
 
     class Config:
         from_attributes = True

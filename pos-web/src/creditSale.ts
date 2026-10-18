@@ -13,6 +13,7 @@ export type CreditCustomer = {
   credit_terms_days: number;
   outstanding_balance: string;
   available_credit: string | null;
+  price_level_name?:string|null;
 };
 
 export type CreditProjection = {

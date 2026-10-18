@@ -10,6 +10,7 @@ from app.models.product import Product
 from app.models.product_variant import ProductVariant
 from app.models.product_price_level import ProductPriceLevel
 from app.models.audit_event import AuditEvent
+from app.models.inventory_movement import InventoryMovement
 from app.products.repository import ProductRepository
 from app.products.schema import (
     CategoryCreate,
@@ -456,20 +457,51 @@ class ProductService:
         await self.repo.update_product(product, {"cost_price": total_cost})
         return [self._component_out(component, item) for component, item in rows]
 
-    async def list_variants(self, company_id: UUID, product_id: UUID | None):
-        return await self.repo.list_variants(company_id, product_id)
+    async def list_variants(self, company_id: UUID, product_id: UUID | None, branch_id=None):
+        rows=await self.repo.list_variants(company_id,product_id,branch_id)
+        return [{"id":v.id,"company_id":v.company_id,"product_id":v.product_id,"name":v.name,"sku":v.sku,"barcode":v.barcode,"attributes":v.attributes or {},"cost_price":v.cost_price,"selling_price":v.selling_price,"active":v.active,"branch_id":branch_id,"stock_qty":b.quantity if b else 0,"reorder_level":b.reorder_level if b else 0} for v,b in rows]
 
     async def create_variant(self, company_id: UUID, product_id: UUID, data: ProductVariantCreate):
-        await self._require_product(company_id, product_id)
+        product = await self._require_product(company_id, product_id)
+        values = data.model_dump(exclude={"branch_id", "stock_qty", "reorder_level"})
         variant = ProductVariant(
             company_id=company_id,
             product_id=product_id,
-            **data.model_dump(),
+            **values,
             active=True,
             deleted=False,
         )
         try:
-            return await self.repo.save_variant(variant)
+            self.repo.db.add(variant)
+            await self.repo.db.flush()
+            if data.branch_id:
+                branch = await self.repo.resolve_branch(company_id, data.branch_id)
+                balance = await self.repo.get_variant_balance(
+                    company_id, branch, product_id, variant.id
+                )
+                before_qty = Decimal(balance.quantity or 0)
+                balance.quantity = data.stock_qty
+                balance.reorder_level = data.reorder_level
+                if data.stock_qty != before_qty:
+                    self.repo.db.add(
+                        InventoryMovement(
+                            company_id=company_id,
+                            shop_id=branch.shop_id,
+                            branch_id=branch.id,
+                            product_id=product_id,
+                            variant_id=variant.id,
+                            product_name=f"{product.name} — {variant.name}",
+                            movement_type="variant_opening_stock",
+                            quantity=data.stock_qty - before_qty,
+                            before_qty=before_qty,
+                            after_qty=data.stock_qty,
+                            unit_cost=Decimal(variant.cost_price or 0),
+                            reason="Variant opening stock",
+                        )
+                    )
+            await self.repo.db.commit()
+            rows = await self.list_variants(company_id, product_id, data.branch_id)
+            return next(row for row in rows if row["id"] == variant.id)
         except IntegrityError as error:
             raise HTTPException(409, "Variant SKU or barcode already exists") from error
 
@@ -477,9 +509,45 @@ class ProductService:
         variant = await self.repo.get_variant(company_id, variant_id)
         if not variant:
             raise HTTPException(404, "Variant not found")
-        for field, value in data.model_dump(exclude_unset=True).items():
+        changes = data.model_dump(exclude_unset=True)
+        branch_id = changes.pop("branch_id", None)
+        stock_qty = changes.pop("stock_qty", None)
+        reorder_level = changes.pop("reorder_level", None)
+        values = changes
+        for field, value in values.items():
             setattr(variant, field, value.strip() if isinstance(value, str) else value)
         try:
+            if branch_id is not None and (stock_qty is not None or reorder_level is not None):
+                product = await self._require_product(company_id, variant.product_id)
+                branch = await self.repo.resolve_branch(company_id, branch_id)
+                balance = await self.repo.get_variant_balance(
+                    company_id, branch, variant.product_id, variant.id
+                )
+                before_qty = Decimal(balance.quantity or 0)
+                if stock_qty is not None:
+                    balance.quantity = stock_qty
+                if reorder_level is not None:
+                    balance.reorder_level = reorder_level
+                if stock_qty is not None and stock_qty != before_qty:
+                    self.repo.db.add(
+                        InventoryMovement(
+                            company_id=company_id,
+                            shop_id=branch.shop_id,
+                            branch_id=branch.id,
+                            product_id=variant.product_id,
+                            variant_id=variant.id,
+                            product_name=f"{product.name} — {variant.name}",
+                            movement_type="variant_adjustment",
+                            quantity=stock_qty - before_qty,
+                            before_qty=before_qty,
+                            after_qty=stock_qty,
+                            unit_cost=Decimal(variant.cost_price or 0),
+                            reason="Variant stock adjustment",
+                        )
+                    )
+                await self.repo.db.commit()
+                rows = await self.list_variants(company_id, variant.product_id, branch_id)
+                return next(row for row in rows if row["id"] == variant.id)
             return await self.repo.save_variant(variant)
         except IntegrityError as error:
             raise HTTPException(409, "Variant SKU or barcode already exists") from error
@@ -529,18 +597,16 @@ class ProductService:
 
     async def import_products(self, data: ProductImportRequest, actor=None):
         created = []
+        batch={}
         for row in data.rows:
-            created.append(
-                await self.create_product(
-                    ProductCreate(
-                        company_id=data.company_id,
-                        branch_id=data.branch_id,
-                        create_request_key=f"import-{uuid.uuid4()}",
-                        stock_qty=Decimal("0"),
-                        **row.model_dump(),
-                    )
-                )
-            )
+            category_id=row.category_id
+            if not category_id and row.category_name:
+                category=await self.repo.get_category_by_name(data.company_id,row.category_name) or await self.create_category(CategoryCreate(company_id=data.company_id,name=row.category_name)); category_id=category.id
+            key=(row.sku or row.name).lower(); product=batch.get(key)
+            if not product:
+                product=await self.create_product(ProductCreate(company_id=data.company_id,branch_id=data.branch_id,create_request_key=f"import-{uuid.uuid4()}",category_id=category_id,name=row.name,sku=row.sku,barcode=row.barcode,product_type=row.product_type,unit=row.unit,purchase_unit=row.purchase_unit,units_per_purchase=row.units_per_purchase,cost_price=row.cost_price,selling_price=row.selling_price,stock_qty=row.stock_qty,reorder_level=row.reorder_level)); batch[key]=product; created.append(product)
+            if row.variant_name:
+                await self.create_variant(data.company_id,product.id,ProductVariantCreate(name=row.variant_name,sku=row.variant_sku,barcode=row.variant_barcode,cost_price=row.variant_cost_price,selling_price=row.variant_selling_price,branch_id=data.branch_id,stock_qty=row.variant_stock_qty,reorder_level=row.reorder_level))
         return created
 
     async def _require_product(self, company_id: UUID, product_id: UUID):

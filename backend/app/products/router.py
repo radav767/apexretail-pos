@@ -3,7 +3,8 @@ from uuid import UUID
 import csv
 import io
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import (
@@ -36,6 +37,8 @@ from app.products.schema import (
     ProductVariantUpdate,
 )
 from app.products.service import ProductService
+from app.products.media import store,path_for
+from app.products.import_preview import preview
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -43,6 +46,15 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 def get_service(db: AsyncSession = Depends(get_db)):
     return ProductService(ProductRepository(db))
+
+@router.post("/images/{company_id}/{product_id}")
+async def upload_image(company_id:UUID,product_id:UUID,image:UploadFile=File(...),db:AsyncSession=Depends(get_db),_actor:AuthActor=Depends(require_path_permission("manage_products")),_entitlement:None=Depends(require_billable_path_company)):
+    return await store(ProductRepository(db),company_id,product_id,image)
+@router.get("/images/{company_id}/{media_id}")
+async def read_image(company_id:UUID,media_id:UUID,db:AsyncSession=Depends(get_db),actor:AuthActor=Depends(get_auth_actor)):
+    ensure_catalog_access(actor,company_id); media=await ProductRepository(db).get_media(company_id,media_id)
+    if not media: raise HTTPException(404,"Product image not found")
+    return FileResponse(path_for(media),media_type=media.content_type,headers={"Cache-Control":"private,max-age=3600"})
 
 
 def ensure_catalog_access(actor: AuthActor, company_id: UUID) -> None:
@@ -207,11 +219,12 @@ async def replace_product_components(
 async def list_product_variants(
     company_id: UUID,
     product_id: UUID | None = Query(default=None),
+    branch_id: UUID | None = Query(default=None),
     service: ProductService = Depends(get_service),
     actor: AuthActor = Depends(get_auth_actor),
 ):
     ensure_catalog_access(actor, company_id)
-    return await service.list_variants(company_id, product_id)
+    return await service.list_variants(company_id, product_id, branch_id)
 
 
 @router.post("/variants/{company_id}/{product_id}", response_model=ProductVariantOut)
@@ -303,6 +316,10 @@ async def import_products(
     _entitlement: None = Depends(require_billable_body_company),
 ):
     return await service.import_products(data, actor=actor)
+
+@router.post("/import/preview/{company_id}")
+async def preview_import(company_id:UUID,file:UploadFile=File(...),_actor:AuthActor=Depends(require_path_permission("manage_products")),_entitlement:None=Depends(require_billable_path_company)):
+    return await preview(file)
 
 
 @router.get("/export/{company_id}")

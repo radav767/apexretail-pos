@@ -136,6 +136,9 @@ class ProductVariantCreate(BaseModel):
     attributes: dict[str, str] = Field(default_factory=dict)
     cost_price: Decimal | None = Field(default=None, ge=0)
     selling_price: Decimal | None = Field(default=None, ge=0)
+    branch_id: UUID | None = None
+    stock_qty: Decimal = Field(default=Decimal("0"), ge=0)
+    reorder_level: Decimal = Field(default=Decimal("0"), ge=0)
 
 
 class ProductVariantUpdate(BaseModel):
@@ -146,6 +149,9 @@ class ProductVariantUpdate(BaseModel):
     cost_price: Decimal | None = Field(default=None, ge=0)
     selling_price: Decimal | None = Field(default=None, ge=0)
     active: bool | None = None
+    branch_id: UUID | None = None
+    stock_qty: Decimal | None = Field(default=None, ge=0)
+    reorder_level: Decimal | None = Field(default=None, ge=0)
 
 
 class ProductVariantOut(ProductVariantCreate):
@@ -184,13 +190,23 @@ class ProductImportRow(BaseModel):
     sku: str | None = Field(default=None, max_length=80)
     barcode: str | None = Field(default=None, max_length=80)
     category_id: UUID | None = None
+    category_name: str | None = Field(default=None,max_length=120)
     product_type: Literal[
         "standard", "non_stock", "service", "composite", "bundle", "variable_weight"
     ] = "standard"
     unit: Literal["each", "kg", "g", "litre", "ml"] = "each"
+    purchase_unit: str | None = Field(default=None,max_length=20)
+    units_per_purchase: Decimal = Field(default=Decimal("1"),gt=0)
     cost_price: Decimal | None = Field(default=None, ge=0)
     selling_price: Decimal | None = Field(default=None, ge=0)
+    stock_qty: Decimal = Field(default=Decimal("0"),ge=0)
     reorder_level: Decimal = Field(default=Decimal("0"), ge=0)
+    variant_name: str | None = Field(default=None,max_length=120)
+    variant_sku: str | None = Field(default=None,max_length=80)
+    variant_barcode: str | None = Field(default=None,max_length=80)
+    variant_cost_price: Decimal | None = Field(default=None,ge=0)
+    variant_selling_price: Decimal | None = Field(default=None,ge=0)
+    variant_stock_qty: Decimal = Field(default=Decimal("0"),ge=0)
 
 
 class ProductImportRequest(BaseModel):

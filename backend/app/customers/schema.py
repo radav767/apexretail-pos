@@ -30,6 +30,7 @@ class CustomerCreate(CreditPolicy):
     email: str | None = Field(default=None, max_length=160)
     address: str | None = Field(default=None, max_length=1000)
     active: bool = True
+    price_level_name: str | None = Field(default=None,max_length=80)
 
 
 class CustomerUpdate(BaseModel):
@@ -43,6 +44,7 @@ class CustomerUpdate(BaseModel):
     credit_limit: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
     credit_terms_days: int | None = Field(default=None, ge=0, le=3650)
     active: bool | None = None
+    price_level_name: str | None = Field(default=None,max_length=80)
 
 
 class CustomerOut(BaseModel):
@@ -57,6 +59,7 @@ class CustomerOut(BaseModel):
     unlimited_credit: bool
     credit_limit: Decimal | None
     credit_terms_days: int
+    price_level_name: str | None = None
     active: bool
     outstanding_balance: Decimal = Decimal("0.00")
     available_credit: Decimal | None = None

@@ -21,6 +21,7 @@ type Customer = {
   active: boolean;
   outstanding_balance: string | number;
   available_credit: string | number | null;
+  price_level_name:string|null;
 };
 
 type CustomerTransaction = {
@@ -77,6 +78,7 @@ type CustomerForm = {
   unlimitedCredit: boolean;
   creditLimit: string;
   creditTermsDays: string;
+  priceLevelName:string;
 };
 
 const emptyForm: CustomerForm = {
@@ -90,6 +92,7 @@ const emptyForm: CustomerForm = {
   unlimitedCredit: false,
   creditLimit: "",
   creditTermsDays: "0",
+  priceLevelName:"",
 };
 
 function amount(value: string | number | null | undefined, currency?: string) {
@@ -184,6 +187,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
       unlimitedCredit: customer.unlimited_credit,
       creditLimit: customer.credit_limit === null ? "" : String(customer.credit_limit),
       creditTermsDays: String(customer.credit_terms_days),
+      priceLevelName:customer.price_level_name||"",
     });
     setEditorOpen(true);
     setMessage("");
@@ -223,6 +227,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
       unlimited_credit: form.creditEnabled && form.unlimitedCredit,
       credit_limit: form.creditEnabled && !form.unlimitedCredit ? Number(form.creditLimit) : null,
       credit_terms_days: terms,
+      price_level_name:form.priceLevelName||null,
     };
 
     setSaving(true);
@@ -359,6 +364,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
             <label>Phone<input maxLength={60} value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} /></label>
             <label>Email<input type="email" maxLength={160} value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} /></label>
             <label className="customer-address-field">Address<textarea maxLength={1000} value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} /></label>
+            <label>Price level<select value={form.priceLevelName} onChange={event=>setForm(current=>({...current,priceLevelName:event.target.value}))}><option value="">Retail / standard</option><option>Wholesale</option><option>VIP</option><option>Custom</option></select></label>
           </div>
 
           <fieldset className="customer-credit-policy"><legend>Credit configuration</legend>

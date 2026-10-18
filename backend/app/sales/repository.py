@@ -9,6 +9,9 @@ from app.models.sale_item import SaleItem
 from app.models.sale_item_component import SaleItemComponent
 from app.models.product_component import ProductComponent
 from app.models.product import Product
+from app.models.product_variant import ProductVariant
+from app.models.product_price_level import ProductPriceLevel
+from app.models.variant_inventory_balance import VariantInventoryBalance
 from app.models.shop import Shop
 from app.models.inventory_movement import InventoryMovement
 from app.models.category import Category
@@ -62,6 +65,15 @@ class SalesRepository:
             branch,
             product,
         )
+    async def get_variant(self,company_id,product_id,variant_id):
+        return (await self.db.execute(select(ProductVariant).where(ProductVariant.company_id==company_id,ProductVariant.product_id==product_id,ProductVariant.id==variant_id,ProductVariant.active==True,ProductVariant.deleted==False).with_for_update())).scalar_one_or_none()
+    async def get_variant_balance(self,company_id,branch,product_id,variant_id):
+        row=(await self.db.execute(select(VariantInventoryBalance).where(VariantInventoryBalance.company_id==company_id,VariantInventoryBalance.branch_id==branch.id,VariantInventoryBalance.variant_id==variant_id,VariantInventoryBalance.deleted==False).with_for_update())).scalar_one_or_none()
+        if row is None:
+            row=VariantInventoryBalance(company_id=company_id,shop_id=branch.shop_id,branch_id=branch.id,product_id=product_id,variant_id=variant_id,quantity=0,reorder_level=0); self.db.add(row); await self.db.flush()
+        return row
+    async def get_price_level(self,company_id,product_id,name,quantity):
+        return (await self.db.execute(select(ProductPriceLevel).where(ProductPriceLevel.company_id==company_id,ProductPriceLevel.product_id==product_id,func.lower(ProductPriceLevel.name)==name.lower(),ProductPriceLevel.minimum_quantity<=quantity,ProductPriceLevel.active==True,ProductPriceLevel.deleted==False).order_by(ProductPriceLevel.minimum_quantity.desc()).limit(1))).scalar_one_or_none()
 
     async def sync_product_total(self, product):
         return await self.stock.sync_product_total(product)
