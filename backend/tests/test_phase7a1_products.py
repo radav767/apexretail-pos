@@ -7,6 +7,8 @@ from uuid import uuid4
 import pytest
 from app.products.import_preview import preview
 from app.products.media import store
+from app.products.schema import ProductImportRequest
+from app.products.service import ProductService
 from app.sales.schema import SaleCreate, SaleItemCreate
 from app.sales.service import SalesService
 from tests.test_weighted_sales_and_subscriptions import FakeSalesRepo
@@ -158,4 +160,25 @@ async def test_product_media_rejects_cross_tenant_product_and_spoofed_image():
     with pytest.raises(Exception) as error:
         await store(product_repo, uuid4(), uuid4(), spoofed)
     assert getattr(error.value, "status_code", None) == 415
+
+
+@pytest.mark.asyncio
+async def test_variant_import_does_not_duplicate_parent_opening_stock():
+    company_id, branch_id, product_id = uuid4(), uuid4(), uuid4()
+    service = ProductService(SimpleNamespace(get_category_by_name=AsyncMock(return_value=None)))
+    service.create_product = AsyncMock(return_value=SimpleNamespace(id=product_id))
+    service.create_variant = AsyncMock()
+    data = ProductImportRequest.model_validate({
+        "company_id": company_id,
+        "branch_id": branch_id,
+        "rows": [
+            {"name": "T Shirt", "sku": "TS", "stock_qty": "99", "variant_name": "Small", "variant_sku": "TS-S", "variant_stock_qty": "4"},
+            {"name": "T Shirt", "sku": "TS", "stock_qty": "99", "variant_name": "Large", "variant_sku": "TS-L", "variant_stock_qty": "7"},
+        ],
+    })
+    await service.import_products(data)
+    parent = service.create_product.await_args.args[0]
+    assert parent.stock_qty == Decimal("0")
+    assert service.create_product.await_count == 1
+    assert service.create_variant.await_count == 2
 

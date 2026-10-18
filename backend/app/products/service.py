@@ -598,15 +598,20 @@ class ProductService:
     async def import_products(self, data: ProductImportRequest, actor=None):
         created = []
         batch={}
+        variant_keys = {
+            (row.sku or row.name).lower()
+            for row in data.rows
+            if row.variant_name
+        }
         for row in data.rows:
             category_id=row.category_id
             if not category_id and row.category_name:
                 category=await self.repo.get_category_by_name(data.company_id,row.category_name) or await self.create_category(CategoryCreate(company_id=data.company_id,name=row.category_name)); category_id=category.id
             key=(row.sku or row.name).lower(); product=batch.get(key)
             if not product:
-                product=await self.create_product(ProductCreate(company_id=data.company_id,branch_id=data.branch_id,create_request_key=f"import-{uuid.uuid4()}",category_id=category_id,name=row.name,sku=row.sku,barcode=row.barcode,product_type=row.product_type,unit=row.unit,purchase_unit=row.purchase_unit,units_per_purchase=row.units_per_purchase,cost_price=row.cost_price,selling_price=row.selling_price,stock_qty=row.stock_qty,reorder_level=row.reorder_level)); batch[key]=product; created.append(product)
+                product=await self.create_product(ProductCreate(company_id=data.company_id,branch_id=data.branch_id,create_request_key=f"import-{uuid.uuid4()}",category_id=category_id,name=row.name,sku=row.sku,barcode=row.barcode,product_type=row.product_type,unit=row.unit,purchase_unit=row.purchase_unit,units_per_purchase=row.units_per_purchase,cost_price=row.cost_price,selling_price=row.selling_price,stock_qty=Decimal("0") if key in variant_keys else row.stock_qty,reorder_level=row.reorder_level)); batch[key]=product; created.append(product)
             if row.variant_name:
-                await self.create_variant(data.company_id,product.id,ProductVariantCreate(name=row.variant_name,sku=row.variant_sku,barcode=row.variant_barcode,cost_price=row.variant_cost_price,selling_price=row.variant_selling_price,branch_id=data.branch_id,stock_qty=row.variant_stock_qty,reorder_level=row.reorder_level))
+                await self.create_variant(data.company_id,product.id,ProductVariantCreate(name=row.variant_name,sku=row.variant_sku,barcode=row.variant_barcode,cost_price=row.variant_cost_price,selling_price=row.variant_selling_price,branch_id=data.branch_id,stock_qty=row.variant_stock_qty,reorder_level=row.variant_reorder_level))
         return created
 
     async def _require_product(self, company_id: UUID, product_id: UUID):

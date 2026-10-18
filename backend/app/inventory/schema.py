@@ -74,6 +74,7 @@ class InventoryMovementOut(BaseModel):
     shop_id: UUID | None = None
     branch_id: UUID | None = None
     product_id: UUID
+    variant_id: UUID | None = None
     product_name: str
     movement_type: str
     quantity: Decimal

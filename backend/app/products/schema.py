@@ -207,6 +207,7 @@ class ProductImportRow(BaseModel):
     variant_cost_price: Decimal | None = Field(default=None,ge=0)
     variant_selling_price: Decimal | None = Field(default=None,ge=0)
     variant_stock_qty: Decimal = Field(default=Decimal("0"),ge=0)
+    variant_reorder_level: Decimal = Field(default=Decimal("0"), ge=0)
 
 
 class ProductImportRequest(BaseModel):
