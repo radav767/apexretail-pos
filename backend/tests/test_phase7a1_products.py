@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from app.products.import_preview import preview
+from app.products.media import store
 from app.sales.schema import SaleCreate, SaleItemCreate
 from app.sales.service import SalesService
 from tests.test_weighted_sales_and_subscriptions import FakeSalesRepo
@@ -134,4 +135,27 @@ async def test_csv_import_preview_reports_valid_and_invalid_rows():
     assert result["valid_rows"] == 1
     assert result["rows"][0]["values"]["variant_name"] == "Small"
     assert result["rows"][1]["errors"]
+
+
+@pytest.mark.asyncio
+async def test_product_media_rejects_cross_tenant_product_and_spoofed_image():
+    foreign_repo = SimpleNamespace(get_product=AsyncMock(return_value=None))
+    missing = SimpleNamespace(
+        filename="photo.png", content_type="image/png",
+        read=AsyncMock(return_value=b"\x89PNG\r\n\x1a\ncontent"),
+    )
+    with pytest.raises(Exception) as error:
+        await store(foreign_repo, uuid4(), uuid4(), missing)
+    assert getattr(error.value, "status_code", None) == 404
+
+    product_repo = SimpleNamespace(
+        get_product=AsyncMock(return_value=SimpleNamespace(image_url=None))
+    )
+    spoofed = SimpleNamespace(
+        filename="photo.png", content_type="image/png",
+        read=AsyncMock(return_value=b"not-a-png"),
+    )
+    with pytest.raises(Exception) as error:
+        await store(product_repo, uuid4(), uuid4(), spoofed)
+    assert getattr(error.value, "status_code", None) == 415
 

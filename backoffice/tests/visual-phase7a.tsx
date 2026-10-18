@@ -34,7 +34,10 @@ api.defaults.adapter = async (config) => {
     { component_product_id: "patty", component_name: "Beef Patty", quantity: "1", unit: "each", component_cost: "1.80", total_cost: "1.80" },
     { component_product_id: "sauce", component_name: "House Sauce", quantity: "40", unit: "ml", component_cost: "0.01", total_cost: "0.40" },
   ];
-  else if (url.includes("/products/variants/")) data = [{ id: "v1", product_id: "burger", name: "Large", sku: "BURGER-L", barcode: "600100010", attributes: {}, selling_price: "8.25", active: true }];
+  else if (url.includes("/products/variants/")) data = [
+    { id: "v1", product_id: "burger", name: "Large / Green", sku: "BURGER-L-GRN", barcode: "600100010", attributes: { size: "Large", colour: "Green" }, cost_price: "3.20", selling_price: "8.25", branch_id: "fixture-branch", stock_qty: "18", reorder_level: "4", active: true },
+    { id: "v2", product_id: "burger", name: "Medium / Black", sku: "BURGER-M-BLK", barcode: "600100011", attributes: { size: "Medium", colour: "Black" }, cost_price: "2.90", selling_price: "7.25", branch_id: "fixture-branch", stock_qty: "27", reorder_level: "6", active: true },
+  ];
   else if (url.includes("/products/price-levels/")) data = [{ id: "p1", product_id: "burger", name: "Wholesale", price: "5.80", minimum_quantity: "10", active: true }];
   else if (url.includes("/products/")) data = products;
   return { data, status: 200, statusText: "OK", headers: {}, config };

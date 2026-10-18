@@ -256,6 +256,9 @@ export default function ProductsPage({
   }
 
   function resetProductForm() {
+    if (productImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(productImagePreview);
+    }
     setForm((current) => ({
       ...emptyForm,
       branch_id: current.branch_id || branches[0]?.id || "",

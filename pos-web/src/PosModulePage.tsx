@@ -425,6 +425,8 @@ export default function PosModulePage({
   const [editingProductId, setEditingProductId] = useState("");
   const [productForm, setProductForm] =
     useState<ProductForm>(emptyProductForm);
+  const [productImage, setProductImage] = useState<File | null>(null);
+  const [productImagePreview, setProductImagePreview] = useState("");
   const [receiveForm, setReceiveForm] =
     useState<InventoryReceiveForm>(emptyReceiveForm);
   const [adjustmentForm, setAdjustmentForm] =
@@ -1093,6 +1095,11 @@ export default function PosModulePage({
 
   function resetProductForm() {
     setEditingProductId("");
+    if (productImagePreview.startsWith("blob:")) {
+      URL.revokeObjectURL(productImagePreview);
+    }
+    setProductImage(null);
+    setProductImagePreview("");
     setProductForm({
       ...emptyProductForm,
       branch_id: selectedBranchId || branches[0]?.id || "",
@@ -1191,11 +1198,13 @@ export default function PosModulePage({
         reorder_level: productForm.reorder_level || "0",
       };
 
+      let savedProduct: Product;
       if (editingProductId) {
-        await api.patch(
+        const response = await api.patch(
           `/products/${companyId}/${editingProductId}`,
           payload,
         );
+        savedProduct = response.data;
         setNotice("Product updated successfully.");
       } else {
         const createRequestKey =
@@ -1215,14 +1224,25 @@ export default function PosModulePage({
           }));
         }
 
-        await api.post("/products", {
+        const response = await api.post("/products", {
           company_id: companyId,
           branch_id: productForm.branch_id,
           create_request_key: createRequestKey,
           ...payload,
           stock_qty: productForm.stock_qty || "0",
         });
+        savedProduct = response.data;
         setNotice("Product created successfully.");
+      }
+
+      if (productImage) {
+        const body = new FormData();
+        body.append("image", productImage);
+        await api.post(
+          `/products/images/${companyId}/${savedProduct.id}`,
+          body,
+          { headers: { "Content-Type": "multipart/form-data" } },
+        );
       }
 
       resetProductForm();
@@ -1821,9 +1841,15 @@ export default function PosModulePage({
                   </label>
 
                   <label>
-                    Product image URL
-                    <input value={productForm.image_url} onChange={(event) => setProductForm((current) => ({ ...current, image_url: event.target.value }))} />
+                    Product image
+                    <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setProductImage(file);
+                      setProductImagePreview(file ? URL.createObjectURL(file) : "");
+                    }} />
+                    <small>Camera or gallery · JPEG, PNG or WebP · 5 MB max</small>
                   </label>
+                  {productImagePreview && <img className="pos-product-image-preview" src={productImagePreview} alt="Product preview" />}
 
                   <label className="pos-barcode-field">
                     Barcode
