@@ -8,6 +8,7 @@ import {
 
 import { api } from "../api/client";
 import type { ReceiptSnapshot } from "../printing/types";
+import { rememberPrintIntent, flushPrintIntents } from "../printing/queue";
 
 const DATABASE_NAME = "apexretail_pos";
 const DATABASE_VERSION = 1;
@@ -600,7 +601,13 @@ async function performSynchronization(): Promise<OfflineSyncResult> {
        * identity. Retrying the same queued sale must not
        * create a second transaction.
        */
-      await api.post("/sales", payload);
+      const committed = await api.post("/sales", payload);
+      // Financial synchronization is already committed. Print failures must
+      // neither resubmit it nor keep the financial queue marked failed.
+      try {
+        rememberPrintIntent(payload.company_id, committed.data.id, true);
+        void flushPrintIntents().catch(error => console.warn("Synchronized sale print is pending", error));
+      } catch (printError) { console.warn("Cannot persist non-financial print intent", printError); }
 
       await database.run(
         `

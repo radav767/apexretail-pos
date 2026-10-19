@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import ShopsDevicesPage from "./ShopsDevicesPage";
 import CurrencySettingsPanel from "./CurrencySettingsPanel";
+import PrinterManagement from "../../../pos-web/src/printing/PrinterManagement";
 import "./settings.css";
 
 type SettingsSection =
@@ -12,7 +13,8 @@ type SettingsSection =
   | "shops"
   | "receipts"
   | "subscription"
-  | "devices";
+  | "devices"
+  | "printers";
 
 type AggregateSettings = {
   company_id: string;
@@ -257,6 +259,7 @@ export default function SettingsPage({
 
   const summaryCards = useMemo(
     () => [
+      { id: "printers" as const, title: "Printers & kitchen", description: "Stations, product routing and print queue." },
       {
         id: "company" as const,
         title: "Company",
@@ -732,6 +735,8 @@ export default function SettingsPage({
           ))}
         </section>
       ) : null}
+
+      {section === "printers" && <PrinterManagement companyId={companyId} api={api} canManage />}
 
       {section === "company" ? (
         <section className="settings-card">

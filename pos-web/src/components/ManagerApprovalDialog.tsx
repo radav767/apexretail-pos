@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, getApiErrorMessage } from "../api/client";
 
 export type ManagerApprovalRequest = {
-  action: "large_discount" | "refund" | "price_override" | "stock_adjustment" | "cash_movement" | "shift_exception";
+  action: "large_discount" | "refund" | "price_override" | "stock_adjustment" | "cash_movement" | "shift_exception" | "print_retry" | "receipt_reprint";
   reason: string;
   context?: Record<string, unknown>;
 };

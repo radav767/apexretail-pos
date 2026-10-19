@@ -1,4 +1,5 @@
 import { applyDiscounts } from "./discounts";
+import { flushPrintIntents, scheduleSalePrint } from "./printing/queue";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
@@ -301,6 +302,12 @@ function initialPosModule(): PosModuleName {
 }
 
 function App() {
+  useEffect(() => {
+    const recover = () => { void flushPrintIntents().catch(error => console.warn("Print queue needs review", error)); };
+    window.addEventListener("online", recover);
+    const timer = window.setInterval(recover, 30000);
+    return () => { window.removeEventListener("online", recover); window.clearInterval(timer); };
+  }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -1401,6 +1408,12 @@ const [loggedIn, setLoggedIn] = useState(
   ) {
     try {
       await archiveReceiptSnapshot(snapshot);
+
+      // Printing runs after sale commit and cannot resubmit the sale. Offline
+      // provisional receipts keep their existing path until server sync.
+      if (snapshot.status !== "offline_pending") {
+        if (await scheduleSalePrint(snapshot.company_id, snapshot.id)) return;
+      }
 
       if (!printerConfig.enabled || !printerConfig.autoPrint) {
         return;

@@ -43,6 +43,7 @@ import com.getcapacitor.annotation.PermissionCallback;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.Socket;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -165,6 +166,7 @@ public class ApexPrinterPlugin extends Plugin {
         result.put("packageName", getContext().getPackageName());
         result.put("bridgeAvailable", getBridge() != null);
         result.put("webViewAvailable", getBridge() != null && getBridge().getWebView() != null);
+        result.put("networkPrinting", true);
         result.put("androidSdkInt", Build.VERSION.SDK_INT);
         call.resolve(result);
     }
@@ -415,6 +417,8 @@ public class ApexPrinterPlugin extends Plugin {
                     printBluetooth(printerId, payload, copies);
                 } else if ("usb".equals(connectionType)) {
                     printUsb(printerId, payload, copies);
+                } else if ("network".equals(connectionType)) {
+                    printNetwork(printerId, payload, copies);
                 } else {
                     throw new PrinterException("Unsupported printer connection", "unsupported_connection");
                 }
@@ -426,6 +430,18 @@ public class ApexPrinterPlugin extends Plugin {
                 call.reject(exception.getMessage(), "print_failed");
             }
         });
+    }
+
+    // Only explicit RFC1918 IPv4 endpoints on the standard ESC/POS port.
+    // No DNS, loopback, internet destinations, or cloud-side network access.
+    private void printNetwork(String printerId, byte[] payload, int copies) throws Exception {
+        try (Socket socket = new Socket()) {
+            socket.connect(PrinterNetworkTarget.parse(printerId), 5000);
+            socket.setSoTimeout(5000);
+            OutputStream stream = socket.getOutputStream();
+            for (int copy = 0; copy < copies; copy++) stream.write(payload);
+            stream.flush();
+        }
     }
 
     @PluginMethod

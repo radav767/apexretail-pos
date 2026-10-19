@@ -1,6 +1,7 @@
 export type PrinterConnectionType =
   | "bluetooth"
   | "usb"
+  | "network"
   | "system";
 
 export type PrinterPaperWidth = "58mm" | "80mm";

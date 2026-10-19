@@ -10,3 +10,4 @@ backups/
 *.dump
 *.apk
 *.tar.gz
+/phase7c-evidence/

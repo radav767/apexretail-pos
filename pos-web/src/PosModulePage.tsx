@@ -15,6 +15,7 @@ import PosSessionHeader from "./components/PosSessionHeader";
 import ManagerApprovalDialog, { type ManagerApprovalRequest } from "./components/ManagerApprovalDialog";
 import { PosFeatureBack, PosFeatureHub, type PosFeatureItem } from "./components/PosFeatureHub";
 import ProductToolsPage, { type ProductToolFeature } from "./ProductToolsPage";
+import PrinterPanel from "./printing/PrinterPanel";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -2717,6 +2718,7 @@ export default function PosModulePage({
 
                 {activeSettingsPage === "printer" ? (
                   <>
+                    <PrinterPanel companyId={companyId} canManage={canManageSettings} />
                     {!canManageSettings && (
                       <div className="pos-module-notice">
                         Printer changes require settings permission or owner access.

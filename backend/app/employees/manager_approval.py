@@ -16,12 +16,14 @@ from app.models import AuditEvent, Employee, ManagerAuthorization
 ALLOWED_ACTIONS = {
     "large_discount", "refund", "price_override", "stock_adjustment",
     "cash_movement", "shift_exception",
+    "receipt_reprint", "print_retry",
 }
 APPROVAL_TTL_SECONDS = 120
 ACTION_PERMISSIONS = {
     "large_discount": "sales_discount", "refund": "sales_refund",
     "price_override": "sales_price_override", "stock_adjustment": "inventory_adjust",
     "cash_movement": "cash_movements_manage", "shift_exception": "shifts_close",
+    "receipt_reprint": "sales_receipt_reprint", "print_retry": "printers_manage",
 }
 
 

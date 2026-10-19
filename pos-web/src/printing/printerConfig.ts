@@ -29,6 +29,7 @@ type NativePrinterBridge = {
     bridgeAvailable: boolean;
     webViewAvailable: boolean;
     androidSdkInt: number;
+    networkPrinting?: boolean;
   }>;
   getConfig(): Promise<{ config?: Partial<PrinterConfig> }>;
   saveConfig(options: { config: PrinterConfig }): Promise<{ config: PrinterConfig }>;
@@ -67,7 +68,7 @@ function sanitizeConfig(value: Partial<PrinterConfig> | null | undefined): Print
   return {
     enabled: Boolean(value?.enabled),
     connectionType:
-      value?.connectionType === "usb" || value?.connectionType === "system"
+      value?.connectionType === "usb" || value?.connectionType === "system" || value?.connectionType === "network"
         ? value.connectionType
         : "bluetooth",
     selectedPrinterId: String(value?.selectedPrinterId || ""),
@@ -306,14 +307,17 @@ export async function sendReceiptToPrinter(options: {
   }
 
   if (!isNativeAndroid()) {
-    throw new Error("Bluetooth and USB ESC/POS printing are available only in the Android app.");
+    throw new Error("Direct Bluetooth, USB and LAN printing require the Android app. In Chrome use a system printer configured by your operating system.");
   }
 
   if (!options.config.selectedPrinterId) {
     throw new Error("Select a printer before printing.");
   }
 
-  await verifyNativePrinterBridge();
+  const status = await verifyNativePrinterBridge();
+  if (options.config.connectionType === "network" && !status?.networkPrinting) {
+    throw new Error("LAN printing needs the Phase 7C Android bridge. Use system printing until an approved APK update is installed.");
+  }
   await printerBridge.printReceipt({
     connectionType: options.config.connectionType,
     printerId: options.config.selectedPrinterId,
