@@ -1,4 +1,6 @@
 import hmac
+import hashlib
+import json
 import secrets
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -19,11 +21,15 @@ from app.employees.schema import (
     EmployeeUpdate,
     PinLoginRequest,
 )
+from app.employees.permissions import PERMISSION_KEYS, ROLE_TEMPLATES, has_permission, normalize_permissions
 from app.models import (
     AuditEvent,
     Device,
     Employee,
     EmployeeShopAccess,
+    EmployeeDeviceAccess,
+    EmployeeRole,
+    ManagerAuthorization,
     PosSession,
     Shop,
 )
@@ -32,92 +38,7 @@ from app.devices.authority import (
     hash_device_identity,
     terminal_authority_error,
 )
-from sqlalchemy import select, text
-
-
-PERMISSION_KEYS = {
-    "sales",
-    "discounts",
-    "refunds",
-    "manage_inventory",
-    "manage_products",
-    "reports",
-    "inventory_valuation",
-    "employees",
-    "settings",
-    "manage_devices",
-    "customers_view",
-    "customers_manage",
-    "credit_sales",
-    "credit_settlements",
-    "expenses_manage",
-    "expenses_create",
-    "expense_reports",
-    "currencies_manage",
-}
-
-
-ROLE_PERMISSIONS = {
-    "administrator": {
-        "sales": True, "discounts": True, "refunds": True,
-        "manage_inventory": True, "manage_products": True,
-        "reports": True, "employees": True, "settings": True,
-        "inventory_valuation": True,
-        "manage_devices": True,
-        "customers_view": True, "customers_manage": True,
-        "credit_sales": True, "credit_settlements": True,
-        "expenses_manage": True, "expenses_create": True, "expense_reports": True,
-        "currencies_manage": True,
-    },
-    "cashier": {
-        "sales": True,
-        "discounts": False,
-        "refunds": False,
-        "manage_inventory": False,
-        "manage_products": False,
-        "reports": False,
-        "inventory_valuation": False,
-        "employees": False,
-        "settings": False,
-        "manage_devices": False,
-        "customers_view": True, "customers_manage": False,
-        "credit_sales": False, "credit_settlements": False,
-        "expenses_manage": False, "expenses_create": True, "expense_reports": False,
-        "currencies_manage": False,
-    },
-    "manager": {
-        "sales": True,
-        "discounts": True,
-        "refunds": True,
-        "manage_inventory": True,
-        "manage_products": True,
-        "reports": True,
-        "inventory_valuation": True,
-        "employees": True,
-        "settings": False,
-        "manage_devices": False,
-        "customers_view": True, "customers_manage": True,
-        "credit_sales": True, "credit_settlements": True,
-        "expenses_manage": True, "expenses_create": True, "expense_reports": True,
-        "currencies_manage": True,
-    },
-    "owner": {
-        "sales": True,
-        "discounts": True,
-        "refunds": True,
-        "manage_inventory": True,
-        "manage_products": True,
-        "reports": True,
-        "inventory_valuation": True,
-        "employees": True,
-        "settings": True,
-        "manage_devices": True,
-        "customers_view": True, "customers_manage": True,
-        "credit_sales": True, "credit_settlements": True,
-        "expenses_manage": True, "expenses_create": True, "expense_reports": True,
-        "currencies_manage": True,
-    },
-}
+from sqlalchemy import delete, select, text
 
 
 class EmployeeService:
@@ -143,34 +64,50 @@ class EmployeeService:
         role: str,
         supplied: dict[str, bool] | None,
     ):
-        permissions = dict(
-            ROLE_PERMISSIONS.get(
-                role,
-                ROLE_PERMISSIONS["cashier"],
-            )
-        )
+        supplied = dict(supplied or {})
+        if "inventory" in supplied and "manage_inventory" not in supplied:
+            supplied["manage_inventory"] = supplied["inventory"]
+        if "products" in supplied and "manage_products" not in supplied:
+            supplied["manage_products"] = supplied["products"]
+        return normalize_permissions(role, supplied)
 
-        if supplied:
-            legacy_permissions = {
-                "manage_inventory": supplied.get(
-                    "manage_inventory",
-                    supplied.get("inventory"),
-                ),
-                "manage_products": supplied.get(
-                    "manage_products",
-                    supplied.get("products"),
-                ),
-            }
+    @staticmethod
+    async def effective_permissions(employee: Employee, db) -> dict[str, bool]:
+        if not getattr(employee, "role_id", None):
+            return EmployeeService.build_permissions(employee.role, employee.permissions)
+        role = (await db.execute(select(EmployeeRole).where(
+            EmployeeRole.id == employee.role_id,
+            EmployeeRole.company_id == employee.company_id,
+            EmployeeRole.active == True,
+            EmployeeRole.deleted == False,
+        ))).scalar_one_or_none()
+        if role is None:
+            return normalize_permissions("kitchen_staff", {})
+        return normalize_permissions("kitchen_staff", {
+            **role.permissions, **(employee.role_overrides or {}),
+        })
 
-            for key, value in legacy_permissions.items():
-                if value is not None:
-                    permissions[key] = bool(value)
+    @staticmethod
+    def custom_overrides(role_permissions: dict, supplied: dict | None) -> dict:
+        supplied = supplied or {}
+        return {key: bool(value) for key, value in supplied.items()
+                if key in PERMISSION_KEYS and bool(value) != bool(role_permissions.get(key))}
 
-            for key, value in supplied.items():
-                if key in PERMISSION_KEYS:
-                    permissions[key] = bool(value)
+    @staticmethod
+    def ensure_grantable(actor, role: str, permissions: dict[str, bool]):
+        if actor is None or (actor.actor_type == "user" and actor.role in {"owner", "administrator"}):
+            return
+        if role in {"owner", "administrator"}:
+            raise HTTPException(403, "Only a business owner may assign this role")
+        for key, value in permissions.items():
+            if value and not has_permission(actor.permissions, key):
+                raise HTTPException(403, f"Cannot grant permission: {key}")
 
-        return permissions
+    @staticmethod
+    def ensure_branch_access(actor, branch_id):
+        if actor is not None and actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+            if actor.employee is None or actor.employee.branch_id != branch_id:
+                raise HTTPException(403, "Branch access denied")
 
     def normalize_employee_view(
         self,
@@ -181,6 +118,8 @@ class EmployeeService:
 
         return {
             **row,
+            "role_name": row.get("role_name") or row["role"],
+            "device_ids": row.get("device_ids") or [],
             "permissions": self.build_permissions(
                 row["role"],
                 row["permissions"],
@@ -253,7 +192,9 @@ class EmployeeService:
     async def create(
         self,
         data: EmployeeCreate,
+        actor=None,
     ):
+        self.ensure_branch_access(actor, data.branch_id)
         await self.validate_location(
             data.company_id,
             data.shop_id,
@@ -265,6 +206,26 @@ class EmployeeService:
             data.pin,
         )
 
+        if data.role not in ROLE_TEMPLATES and data.role != "manager" and not data.role_id:
+            raise HTTPException(400, "Unknown employee role")
+        role_permissions = data.permissions
+        role_name = data.role
+        role_overrides = {}
+        if data.role_id:
+            custom_role = await self.repo.get_role(data.company_id, data.role_id)
+            if custom_role is None:
+                raise HTTPException(400, "The selected role is unavailable")
+            role_name = custom_role.name
+            role_overrides = self.custom_overrides(custom_role.permissions, data.permissions)
+            role_permissions = {**custom_role.permissions, **role_overrides}
+        normalized_permissions = self.build_permissions(
+            "kitchen_staff" if data.role_id else role_name, role_permissions
+        )
+        self.ensure_grantable(actor, role_name, normalized_permissions)
+        devices = await self.repo.validate_devices(data.company_id, data.device_ids)
+        if devices is None:
+            raise HTTPException(400, "One or more selected devices are unavailable")
+
         employee = Employee(
             company_id=data.company_id,
             shop_id=data.shop_id,
@@ -273,41 +234,59 @@ class EmployeeService:
             email=self.clean_optional(data.email),
             phone=self.clean_optional(data.phone),
             pin=hash_password(data.pin),
-            role=data.role,
-            permissions=self.build_permissions(
-                data.role,
-                data.permissions,
-            ),
+            role="custom" if data.role_id else role_name,
+            role_id=data.role_id,
+            role_overrides=role_overrides,
+            device_restricted=data.device_restricted,
+            permissions=normalized_permissions,
             active=True,
             deleted=False,
         )
 
-        await self.repo.save(employee)
+        try:
+            self.repo.db.add(employee)
+            await self.repo.db.flush()
+            await self.repo.set_devices(employee, devices)
+            self.repo.db.add(AuditEvent(
+                company_id=data.company_id,
+                actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+                actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+                action="employee_created",
+                details={"employee_id": str(employee.id), "role": role_name},
+            ))
+            await self.repo.db.commit()
+            await self.repo.db.refresh(employee)
+        except Exception:
+            await self.repo.db.rollback()
+            raise
 
-        return self.normalize_employee_view(
-            await self.repo.get_view(
-                data.company_id,
-                employee.id,
-            )
-        )
+        row = dict(await self.repo.get_view(data.company_id, employee.id))
+        row["device_ids"] = await self.repo.device_ids(employee.id)
+        return self.normalize_employee_view(row)
 
     async def list_employees(
         self,
         company_id: UUID,
+        actor=None,
     ):
         rows = await self.repo.list_employees(
             company_id,
         )
-        return [
-            self.normalize_employee_view(row)
-            for row in rows
-        ]
+        result = []
+        for row in rows:
+            if actor and actor.actor_type == "employee" and actor.role not in {"owner", "administrator"} and row["branch_id"] != actor.employee.branch_id:
+                continue
+            view = dict(row)
+            view["device_ids"] = await self.repo.device_ids(row["id"])
+            result.append(self.normalize_employee_view(view))
+        return result
 
     async def update(
         self,
         company_id: UUID,
         employee_id: UUID,
         data: EmployeeUpdate,
+        actor=None,
     ):
         employee = await self.repo.get_employee(
             company_id,
@@ -320,8 +299,18 @@ class EmployeeService:
                 "Employee not found",
             )
 
+        before = {
+            "name": employee.name,
+            "role": employee.role,
+            "role_id": str(employee.role_id) if employee.role_id else None,
+            "branch_id": str(employee.branch_id),
+            "active": employee.active,
+        }
+        self.ensure_branch_access(actor, employee.branch_id)
+
         shop_id = data.shop_id or employee.shop_id
         branch_id = data.branch_id or employee.branch_id
+        self.ensure_branch_access(actor, branch_id)
 
         await self.validate_location(
             company_id,
@@ -361,10 +350,29 @@ class EmployeeService:
             and data.role != employee.role
         )
 
-        if data.role is not None:
+        if data.role_id is not None:
+            custom_role = await self.repo.get_role(company_id, data.role_id)
+            if custom_role is None:
+                raise HTTPException(400, "The selected role is unavailable")
+            employee.role_id = custom_role.id
+            employee.role = "custom"
+            employee.role_overrides = self.custom_overrides(custom_role.permissions, data.permissions)
+            employee.permissions = self.build_permissions("kitchen_staff", {**custom_role.permissions, **employee.role_overrides})
+            role_changed = True
+        elif data.role is not None:
+            if data.role not in ROLE_TEMPLATES and data.role != "manager":
+                raise HTTPException(400, "Unknown employee role")
+            employee.role_id = None
+            employee.role_overrides = {}
             employee.role = data.role
 
-        if (
+        if data.role_id is None and employee.role_id is not None and data.permissions is not None:
+            custom_role = await self.repo.get_role(company_id, employee.role_id)
+            if custom_role is None:
+                raise HTTPException(400, "The selected role is unavailable")
+            employee.role_overrides = self.custom_overrides(custom_role.permissions, data.permissions)
+            employee.permissions = self.build_permissions("kitchen_staff", {**custom_role.permissions, **employee.role_overrides})
+        elif data.role_id is None and (
             data.permissions is not None
             or role_changed
         ):
@@ -372,23 +380,47 @@ class EmployeeService:
                 employee.role,
                 data.permissions,
             )
+        self.ensure_grantable(actor, employee.role, employee.permissions)
 
         if data.active is not None:
             employee.active = data.active
 
+        if data.device_restricted is not None:
+            employee.device_restricted = data.device_restricted
+        if data.device_ids is not None:
+            devices = await self.repo.validate_devices(company_id, data.device_ids)
+            if devices is None:
+                raise HTTPException(400, "One or more selected devices are unavailable")
+            await self.repo.set_devices(employee, devices)
+
+        if data.active is False:
+            sessions = await self.repo.db.execute(select(PosSession).where(
+                PosSession.employee_id == employee.id, PosSession.revoked_at.is_(None)
+            ))
+            now = datetime.now(timezone.utc)
+            for session in sessions.scalars().all():
+                session.revoked_at = now
+                session.revoke_reason = "employee_deactivated"
+
+        self.repo.db.add(AuditEvent(
+            company_id=company_id,
+            actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+            actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+            action="employee_deactivated" if data.active is False else "employee_updated",
+            details={"employee_id": str(employee.id), "before": before, "pin_changed": data.pin is not None},
+        ))
+
         await self.repo.save(employee)
 
-        return self.normalize_employee_view(
-            await self.repo.get_view(
-                company_id,
-                employee.id,
-            )
-        )
+        row = dict(await self.repo.get_view(company_id, employee.id))
+        row["device_ids"] = await self.repo.device_ids(employee.id)
+        return self.normalize_employee_view(row)
 
     async def delete(
         self,
         company_id: UUID,
         employee_id: UUID,
+        actor=None,
     ):
         employee = await self.repo.get_employee(
             company_id,
@@ -407,6 +439,16 @@ class EmployeeService:
                 "The owner employee cannot be deleted",
             )
 
+        self.ensure_branch_access(actor, employee.branch_id)
+        self.ensure_grantable(actor, employee.role, employee.permissions)
+
+        self.repo.db.add(AuditEvent(
+            company_id=company_id,
+            actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+            actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+            action="employee_deactivated",
+            details={"employee_id": str(employee.id), "name": employee.name},
+        ))
         await self.repo.soft_delete(employee)
 
         return {
@@ -475,10 +517,7 @@ class EmployeeService:
                         ),
                         {"device_key": data.device_key.strip()},
                     )
-                permissions = self.build_permissions(
-                    employee.role,
-                    employee.permissions,
-                )
+                permissions = await self.effective_permissions(employee, self.repo.db)
                 shop_id = data.shop_id or employee.shop_id
                 if employee.role == "owner":
                     shops = (await self.repo.db.execute(select(Shop.id).where(Shop.company_id == data.company_id, Shop.active == True, Shop.deleted == False))).scalars().all()
@@ -488,6 +527,11 @@ class EmployeeService:
                     raise HTTPException(403, "Employee is not authorised for this shop")
                 shop_rows = (await self.repo.db.execute(select(Shop).where(Shop.id.in_(shops), Shop.company_id == data.company_id, Shop.active == True, Shop.deleted == False).order_by(Shop.name.asc()))).scalars().all()
                 terminal_rows = (await self.repo.db.execute(select(Device).where(Device.company_id == data.company_id, Device.shop_id.in_(shops), Device.active == True, Device.deleted == False, Device.removed_at.is_(None), Device.deactivated_at.is_(None)).order_by(Device.shop_id, Device.pos_number.asc().nullslast()))).scalars().all()
+                if getattr(employee, "device_restricted", False):
+                    allowed_device_ids = set(await self.repo.device_ids(employee.id))
+                    terminal_rows = [row for row in terminal_rows if row.id in allowed_device_ids]
+                if employee.role not in {"owner", "administrator"}:
+                    terminal_rows = [row for row in terminal_rows if row.branch_id == employee.branch_id]
                 if data.shop_id is None and data.device_id is None:
                     return {"id": employee.id, "company_id": employee.company_id, "shop_id": None, "branch_id": None, "name": employee.name, "role": employee.role, "permissions": permissions, "access_token": "", "selection_required": True, "shops": [{"id": str(s.id), "name": s.name} for s in shop_rows], "terminals": [{"id": str(d.id), "shop_id": str(d.shop_id), "branch_id": str(d.branch_id), "name": d.friendly_name or d.name, "pos_number": d.pos_number} for d in terminal_rows]}
                 q = select(Device).where(Device.company_id == data.company_id, Device.shop_id == shop_id, Device.active == True, Device.deleted == False, Device.removed_at.is_(None), Device.deactivated_at.is_(None))
@@ -496,6 +540,10 @@ class EmployeeService:
                 device = (await self.repo.db.execute(q.order_by(Device.pos_number.asc().nullslast()).with_for_update())).scalars().first()
                 if not device:
                     raise HTTPException(409, "No active POS terminal is available for this shop")
+                if employee.role not in {"owner", "administrator"} and device.branch_id != employee.branch_id:
+                    raise HTTPException(403, "Employee is not authorized for this branch")
+                if getattr(employee, "device_restricted", False) and not await self.repo.device_allowed(employee.id, device.id):
+                    raise HTTPException(403, "This employee is not authorized for this POS device")
                 now = datetime.now(timezone.utc)
                 existing = (await self.repo.db.execute(select(PosSession).where(PosSession.employee_id == employee.id, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update())).scalars().first()
                 terminal_existing = (await self.repo.db.execute(select(PosSession).where(PosSession.device_id == device.id, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update())).scalars().first()
@@ -541,6 +589,11 @@ class EmployeeService:
                         resumable.token_hash = hash_session_token(token)
                     resumable.expires_at = now + timedelta(hours=12)
                     resumable.last_authenticated_at = now
+                    self.repo.db.add(AuditEvent(
+                        company_id=data.company_id, actor_employee_id=employee.id,
+                        device_id=device.id, action="employee_login",
+                        details={"resumed": True},
+                    ))
                     response = {
                         "id": employee.id,
                         "company_id": employee.company_id,
@@ -644,6 +697,11 @@ class EmployeeService:
                     ))
                 token = create_session_token()
                 self.repo.db.add(PosSession(id=uuid.uuid4(), company_id=data.company_id, employee_id=employee.id, device_id=device.id, shop_id=device.shop_id, branch_id=device.branch_id, token_hash=hash_session_token(token), expires_at=now + timedelta(hours=12), last_authenticated_at=now))
+                self.repo.db.add(AuditEvent(
+                    company_id=data.company_id, actor_employee_id=employee.id,
+                    device_id=device.id, action="employee_login",
+                    details={"resumed": False},
+                ))
                 response = {
                     "id": employee.id,
                     "company_id": employee.company_id,

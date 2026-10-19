@@ -7,6 +7,9 @@ from fastapi import HTTPException
 
 from app.auth.dependencies import AuthActor
 from app.employees.service import EmployeeService
+from app.employees.manager_approval import consume_manager_authorization
+from app.employees.permissions import has_permission
+from app.financial_access import enforce_actor_branch
 from app.models.inventory_movement import InventoryMovement
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
@@ -102,6 +105,9 @@ class SalesService:
         resolution_record=None,
     ):
         device = resolved_device
+        discount_approved = False
+        requires_discount_approval = False
+        price_override_approved = False
         employee = resolved_employee
         customer = None
 
@@ -112,7 +118,7 @@ class SalesService:
             if actor.actor_type == "employee":
                 if (
                     not actor.permissions
-                    or actor.permissions.get("sales") is False
+                    or not has_permission(actor.permissions, "sales_process")
                 ):
                     raise HTTPException(
                         403,
@@ -122,14 +128,18 @@ class SalesService:
                 if (
                     data.discount_amount is not None
                     and data.discount_amount > 0
-                    and not actor.permissions.get("discounts")
+                    and not has_permission(actor.permissions, "sales_discount")
                 ):
-                    raise HTTPException(
-                        403,
-                        "Discount permission denied",
-                    )
+                    requires_discount_approval = True
 
-                data.employee_id = actor.employee.id
+                if actor.employee is not None:
+                    data.employee_id = actor.employee.id
+
+        # A malformed employee actor cannot obtain or consume a manager
+        # authorization. Preserve the authorization failure before payload
+        # validation without touching a repository.
+        if requires_discount_approval and (actor is None or actor.employee is None):
+            raise HTTPException(403, "Manager approval required")
 
         # An Android device may submit the same queued sale more than
         # once when connectivity returns. Return the existing sale
@@ -244,6 +254,19 @@ class SalesService:
         if existing_client_sale:
             return existing_client_sale
 
+        # Consume approval only after the idempotency lookup. If the first
+        # response was lost after commit, a retry must return the committed
+        # sale rather than reject its correctly single-use approval token.
+        if requires_discount_approval:
+            await consume_manager_authorization(
+                self.repo.db, actor, data.discount_authorization_token,
+                "large_discount", {
+                    "client_sale_id": str(data.client_sale_id or ""),
+                    "discount_amount": str(data.discount_amount),
+                },
+            )
+            discount_approved = True
+
         sale_id = uuid.uuid4()
 
         receipt_number = (
@@ -339,6 +362,20 @@ class SalesService:
                 raise HTTPException(400, "Unsupported selling unit")
             base_price=Decimal(variant.selling_price if variant is not None and variant.selling_price is not None else product.selling_price or 0)
             level_name=str(getattr(customer,"price_level_name","") or "").strip()
+            if (
+                item.unit_price is not None
+                and Decimal(item.unit_price) != base_price
+                and level_name == ""
+                and actor is not None
+                and actor.actor_type == "employee"
+                and not has_permission(actor.permissions, "sales_price_override")
+                and not price_override_approved
+            ):
+                await consume_manager_authorization(
+                    self.repo.db, actor, data.price_override_authorization_token,
+                    "price_override", {"client_sale_id": str(data.client_sale_id or "")},
+                )
+                price_override_approved = True
             level=await self.repo.get_price_level(data.company_id,product.id,level_name,item.quantity) if level_name and hasattr(self.repo,"get_price_level") else None
             selling_price = Decimal(level.price) if level is not None else (
                 Decimal(item.unit_price)
@@ -735,10 +772,7 @@ class SalesService:
                     "Employee is not assigned to this branch",
                 )
 
-            permissions = EmployeeService.build_permissions(
-                employee.role,
-                employee.permissions,
-            )
+            permissions = await EmployeeService.effective_permissions(employee, self.repo.db)
 
             if permissions.get("sales") is False:
                 raise HTTPException(
@@ -746,7 +780,7 @@ class SalesService:
                     "Permission denied",
                 )
 
-            if discount_amount and not permissions.get("discounts"):
+            if discount_amount and not has_permission(permissions, "sales_discount") and not discount_approved:
                 raise HTTPException(403, "Discount permission denied")
 
         if total >= Decimal("10000000000"):
@@ -811,6 +845,25 @@ class SalesService:
             payment_method=payment_method,
             status="completed",
         )
+
+        if discount_amount and hasattr(self.repo.db, "add"):
+            self.repo.db.add(AuditEvent(
+                company_id=data.company_id,
+                actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+                actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+                device_id=device.id if device else None,
+                action="sale_discount_applied",
+                details={"sale_id": str(sale.id), "amount": str(discount_amount)},
+            ))
+        if price_override_approved and hasattr(self.repo.db, "add"):
+            self.repo.db.add(AuditEvent(
+                company_id=data.company_id,
+                actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+                actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+                device_id=device.id if device else None,
+                action="sale_price_override",
+                details={"sale_id": str(sale.id)},
+            ))
 
         if resolution_record is not None:
             # The evidence FK targets the new sale. Flush that immutable target
@@ -894,10 +947,13 @@ class SalesService:
                 actor.actor_type == "employee"
                 and (
                     not actor.permissions
-                    or actor.permissions.get("refunds") is False
+                    or not has_permission(actor.permissions, "sales_refund")
                 )
             ):
-                raise HTTPException(403, "Permission denied")
+                await consume_manager_authorization(
+                    self.repo.db, actor, data.manager_authorization_token,
+                    "refund", {"original_sale_id": str(data.original_sale_id)},
+                )
 
         original_sale = await self.repo.get_sale_for_update(
             data.company_id,
@@ -1193,7 +1249,10 @@ class SalesService:
         self,
         company_id,
         limit: int = 100,
+        actor=None,
     ):
+        if actor is not None and actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+            return await self.repo.list_sales(company_id, limit, branch_id=actor.employee.branch_id)
         return await self.repo.list_sales(
             company_id,
             limit,
@@ -1213,8 +1272,8 @@ class SalesService:
 
             if actor.actor_type == "employee":
                 permissions = actor.permissions or {}
-                has_sales_permission = bool(permissions.get("sales"))
-                has_refunds_permission = bool(permissions.get("refunds"))
+                has_sales_permission = has_permission(permissions, "sales_receipt_reprint" if mark_reprint else "sales_history_view")
+                has_refunds_permission = has_permission(permissions, "sales_refund")
                 if (
                     (mark_reprint and not has_sales_permission)
                     or (
@@ -1236,6 +1295,8 @@ class SalesService:
             raise HTTPException(404, "Sale not found")
 
         sale, items = sale_with_items
+        if actor is not None:
+            enforce_actor_branch(actor, sale.branch_id)
 
         receipt_items = []
         for item in items:

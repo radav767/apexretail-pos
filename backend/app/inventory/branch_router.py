@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import (
     AuthActor,
+    get_auth_actor,
+    ensure_company_access,
     require_billable_body_company,
     require_body_permission,
 )
@@ -20,6 +22,8 @@ from app.inventory.branch_schema import (
 from app.inventory.branch_service import (
     BranchInventoryService,
 )
+from app.financial_access import enforce_actor_branch
+from app.employees.permissions import has_permission
 
 
 router = APIRouter(
@@ -44,7 +48,7 @@ async def create_inventory_branch(
     data: BranchCreate,
     service: BranchInventoryService = Depends(get_service),
     _actor: AuthActor = Depends(
-        require_body_permission("manage_inventory")
+        require_body_permission("branches_manage")
     ),
     _entitlement: None = Depends(
         require_billable_body_company
@@ -60,8 +64,13 @@ async def create_inventory_branch(
 async def list_inventory_branches(
     company_id: UUID,
     service: BranchInventoryService = Depends(get_service),
+    actor: AuthActor = Depends(get_auth_actor),
 ):
-    return await service.branches(company_id)
+    ensure_company_access(actor, company_id)
+    rows = await service.branches(company_id)
+    if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+        rows = [row for row in rows if row["id"] == actor.employee.branch_id]
+    return rows
 
 
 @router.get(
@@ -72,8 +81,16 @@ async def branch_inventory_overview(
     company_id: UUID,
     branch_id: UUID | None = Query(default=None),
     service: BranchInventoryService = Depends(get_service),
+    actor: AuthActor = Depends(get_auth_actor),
 ):
-    return await service.overview(
+    ensure_company_access(actor, company_id)
+    if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+        branch_id = branch_id or actor.employee.branch_id
+        enforce_actor_branch(actor, branch_id)
+    rows = await service.overview(
         company_id,
         branch_id,
     )
+    if actor.actor_type == "employee" and not has_permission(actor.permissions, "product_costs_view"):
+        rows = [{**row, "cost_price": None, "stock_value": None} for row in rows]
+    return rows

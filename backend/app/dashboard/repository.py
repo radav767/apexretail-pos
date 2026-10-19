@@ -68,7 +68,7 @@ class DashboardRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_summary(self, company_id):
+    async def get_summary(self, company_id, branch_id=None):
         now = datetime.now(timezone.utc)
         start_today = now.replace(
             hour=0,
@@ -77,6 +77,28 @@ class DashboardRepository:
             microsecond=0,
         )
         end_today = start_today + timedelta(days=1)
+
+        if branch_id is not None:
+            # Use the existing authoritative branch balances and sale rows.
+            # The company-wide path below retains its original calculation.
+            result = await self.db.execute(text("""
+                SELECT
+                  (SELECT coalesce(sum(s.total_amount),0) FROM sales s
+                   WHERE s.company_id=:company AND s.branch_id=:branch
+                     AND s.status='completed' AND s.created_at>=:start_at
+                     AND s.created_at<:end_at) AS today_sales,
+                  (SELECT count(*) FROM sales s
+                   WHERE s.company_id=:company AND s.branch_id=:branch
+                     AND s.status='completed' AND s.created_at>=:start_at
+                     AND s.created_at<:end_at) AS today_transactions,
+                  count(p.id) AS total_products,
+                  count(p.id) FILTER (WHERE b.quantity<=b.reorder_level) AS low_stock_products,
+                  coalesce(sum(b.quantity*p.cost_price),0) AS stock_value
+                FROM inventory_balances b JOIN products p ON p.id=b.product_id
+                WHERE b.company_id=:company AND b.branch_id=:branch
+                  AND p.company_id=:company AND p.active=true AND p.deleted=false
+            """), {"company": company_id, "branch": branch_id, "start_at": start_today, "end_at": end_today})
+            return dict(result.mappings().one())
 
         sales_result = await self.db.execute(
             select(

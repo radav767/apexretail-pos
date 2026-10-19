@@ -30,6 +30,7 @@ class SalesHistoryActionsTest(unittest.TestCase):
         sale = SimpleNamespace(
             id=sale_id,
             company_id=company_id,
+            branch_id=uuid4(),
             original_sale_id=None,
             reprint_count=0,
             last_reprinted_at=None,
@@ -98,7 +99,7 @@ class SalesHistoryActionsTest(unittest.TestCase):
             actor_type="employee",
             company_id=company_id,
             role="cashier",
-            employee=SimpleNamespace(id=uuid4()),
+            employee=SimpleNamespace(id=uuid4(), branch_id=sale.branch_id),
             permissions={"sales": False, "refunds": True},
         )
 

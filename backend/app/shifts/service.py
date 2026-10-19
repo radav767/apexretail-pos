@@ -20,6 +20,8 @@ from app.models import (
 )
 from app.sales.repository import SalesRepository
 from app.sales.service import SalesService
+from app.employees.manager_approval import consume_manager_authorization
+from app.employees.permissions import has_permission, normalize_permissions
 from app.shifts.repository import ShiftRepository
 from app.shifts.schema import CashMovementCreate
 
@@ -143,6 +145,8 @@ class ShiftService:
 
     async def open(self, data, actor):
         session = self.require_pos_actor(actor)
+        if not has_permission(normalize_permissions(actor.role, actor.permissions), "shifts_open"):
+            raise HTTPException(403, "Shift opening permission denied")
         existing_key = await self.repo.by_open_key(actor.company_id, data.idempotency_key.strip())
         if existing_key:
             if existing_key.employee_id != actor.employee.id or existing_key.device_id != session.device_id:
@@ -273,6 +277,8 @@ class ShiftService:
 
     async def close(self, shift_id, data, actor):
         session = self.require_pos_actor(actor)
+        if not has_permission(normalize_permissions(actor.role, actor.permissions), "shifts_close"):
+            raise HTTPException(403, "Shift closing permission denied")
         if not data.confirmed:
             raise HTTPException(400, "Shift closure must be confirmed")
         shift = await self.repo.by_id(actor.company_id, shift_id, for_update=True)
@@ -327,7 +333,10 @@ class ShiftService:
 
     @staticmethod
     def _can_manage_shifts(actor):
-        return actor.role in {"owner", "administrator", "manager"} or bool((actor.permissions or {}).get("shifts_manage"))
+        return actor.role in {"owner", "administrator", "manager"} or bool((actor.permissions or {}).get("shifts_manage")) or (
+            has_permission(actor.permissions, "approve_restricted_actions")
+            and has_permission(actor.permissions, "shifts_close")
+        )
 
     async def manager_close(self, shift_id, data, actor):
         if actor.company_id is None or not self._can_manage_shifts(actor):
@@ -414,6 +423,15 @@ class ShiftService:
             if shift is not None and self._movement_matches(existing, shift, actor, data):
                 return self._movement_output(existing, actor.employee.name)
             raise HTTPException(409, "Cash movement idempotency key is already in use")
+
+        if not has_permission(normalize_permissions(actor.role, actor.permissions), "cash_movements_manage"):
+            await consume_manager_authorization(
+                self.repo.db, actor, data.manager_authorization_token,
+                "cash_movement", {
+                    "shift_id": str(shift_id), "movement_type": data.movement_type,
+                    "currency_code": data.currency_code, "amount": str(data.amount),
+                },
+            )
 
         shift = await self.repo.by_id(actor.company_id, shift_id, for_update=True)
         if shift is None:
@@ -580,6 +598,8 @@ class ShiftService:
 
     async def z_report(self, shift_id, actor, *, reprint=False):
         enforce_actor_company(actor, actor.company_id)
+        if actor.actor_type == "employee" and not has_permission(normalize_permissions(actor.role, actor.permissions), "z_reports_view"):
+            raise HTTPException(403, "Z Report permission denied")
         shift = await self.repo.by_id(actor.company_id, shift_id)
         if shift is None:
             raise HTTPException(404, "Shift not found")

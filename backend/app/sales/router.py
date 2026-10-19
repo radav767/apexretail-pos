@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import (
     AuthActor,
-    get_optional_auth_actor,
+    get_auth_actor,
     require_billable_body_company,
 )
 from app.db.session import get_db
@@ -15,6 +15,8 @@ from app.models.sale import Sale
 from app.sales.repository import SalesRepository
 from app.sales.schema import RefundCreate, SaleCreate, SaleOut, SaleReceiptOut
 from app.sales.service import SalesService
+from app.employees.permissions import has_permission
+from app.financial_access import enforce_actor_branch
 
 
 router = APIRouter(
@@ -37,7 +39,7 @@ async def create_sale(
     data: SaleCreate,
     service: SalesService = Depends(get_service),
     actor: AuthActor | None = Depends(
-        get_optional_auth_actor
+        get_auth_actor
     ),
     _entitlement: None = Depends(
         require_billable_body_company
@@ -54,7 +56,7 @@ async def create_refund(
     data: RefundCreate,
     service: SalesService = Depends(get_service),
     actor: AuthActor | None = Depends(
-        get_optional_auth_actor
+        get_auth_actor
     ),
     _entitlement: None = Depends(
         require_billable_body_company
@@ -76,7 +78,7 @@ async def sale_by_client_id(
     company_id: UUID,
     client_sale_id: UUID,
     service: SalesService = Depends(get_service),
-    actor: AuthActor | None = Depends(get_optional_auth_actor),
+    actor: AuthActor | None = Depends(get_auth_actor),
 ):
     return await service.by_client_sale_id(
         company_id,
@@ -96,7 +98,7 @@ async def list_sales_history_by_date(
     branch_id: UUID | None = Query(default=None),
     limit: int = Query(default=500, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    actor: AuthActor | None = Depends(get_optional_auth_actor),
+    actor: AuthActor | None = Depends(get_auth_actor),
 ):
     """
     Return transactions for one selected Zimbabwe calendar date.
@@ -109,13 +111,14 @@ async def list_sales_history_by_date(
             actor.actor_type == "employee"
             and (
                 not actor.permissions
-                or not (
-                    actor.permissions.get("sales")
-                    or actor.permissions.get("refunds")
-                )
+                or not has_permission(actor.permissions, "sales_history_view")
             )
         ):
             raise HTTPException(403, "Permission denied")
+
+    if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+        branch_id = branch_id or actor.employee.branch_id
+        enforce_actor_branch(actor, branch_id)
 
     zimbabwe_timezone = timezone(timedelta(hours=2))
 
@@ -162,7 +165,7 @@ async def get_sale_receipt(
     mark_reprint: bool = Query(default=True),
     service: SalesService = Depends(get_service),
     actor: AuthActor | None = Depends(
-        get_optional_auth_actor
+        get_auth_actor
     ),
 ):
     if mark_reprint:
@@ -188,7 +191,7 @@ async def list_sales(
     company_id: UUID,
     limit: int = Query(default=100, ge=1, le=500),
     service: SalesService = Depends(get_service),
-    actor: AuthActor | None = Depends(get_optional_auth_actor),
+    actor: AuthActor | None = Depends(get_auth_actor),
 ):
     if actor is not None:
         if actor.company_id != company_id:
@@ -197,14 +200,12 @@ async def list_sales(
             actor.actor_type == "employee"
             and (
                 not actor.permissions
-                or not (
-                    actor.permissions.get("sales")
-                    or actor.permissions.get("refunds")
-                )
+                or not has_permission(actor.permissions, "sales_history_view")
             )
         ):
             raise HTTPException(403, "Permission denied")
     return await service.list_sales(
         company_id,
         limit,
+        actor=actor,
     )

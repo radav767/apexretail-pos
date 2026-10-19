@@ -11,7 +11,8 @@ from app.auth.security import decode_access_token, hash_session_token
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.employees.service import EmployeeService
-from app.models import Employee, User, PosSession
+from app.employees.permissions import has_permission
+from app.models import Employee, EmployeeDeviceAccess, User, PosSession
 from datetime import datetime, timezone, timedelta
 from app.subscriptions.service import SubscriptionService
 
@@ -84,6 +85,16 @@ async def resolve_auth_actor(
         employee = result.scalar_one_or_none()
         if not employee:
             session.revoked_at = datetime.now(timezone.utc); session.revoke_reason = "employee_inactive"; await db.commit(); return None
+        if getattr(employee, "device_restricted", False):
+            allowed = (await db.execute(select(EmployeeDeviceAccess.id).where(
+                EmployeeDeviceAccess.employee_id == employee.id,
+                EmployeeDeviceAccess.device_id == session.device_id,
+            ))).scalar_one_or_none()
+            if allowed is None:
+                session.revoked_at = datetime.now(timezone.utc)
+                session.revoke_reason = "device_access_revoked"
+                await db.commit()
+                return None
         session.last_authenticated_at = datetime.now(timezone.utc)
         session.expires_at = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=12)
         actor = AuthActor(
@@ -91,10 +102,7 @@ async def resolve_auth_actor(
             company_id=employee.company_id,
             role=employee.role,
             employee=employee,
-            permissions=EmployeeService.build_permissions(
-                employee.role,
-                employee.permissions,
-            ),
+            permissions=await EmployeeService.effective_permissions(employee, db),
             pos_session=session,
         )
         await db.commit()
@@ -145,10 +153,12 @@ async def resolve_auth_actor(
                 "Employee session is no longer valid",
             )
 
-        permissions = EmployeeService.build_permissions(
-            employee.role,
-            employee.permissions,
-        )
+        if getattr(employee, "device_restricted", False):
+            # Legacy JWTs do not bind a register. Restricted employees must
+            # authenticate through the existing device-bound POS session.
+            raise HTTPException(401, "Device-bound PIN authentication is required")
+
+        permissions = await EmployeeService.effective_permissions(employee, db)
 
         return AuthActor(
             actor_type="employee",
@@ -200,7 +210,7 @@ def require_permission(permission_key: str):
         if actor.role in {"owner", "administrator"}:
             return actor
 
-        if actor.permissions and actor.permissions.get(permission_key):
+        if has_permission(actor.permissions, permission_key):
             return actor
 
         raise HTTPException(403, "Permission denied")

@@ -13,6 +13,7 @@ import {
 import PosModulePage, { type PosModuleName } from "./PosModulePage";
 import PosNavigation from "./components/PosNavigation";
 import PosSessionHeader from "./components/PosSessionHeader";
+import ManagerApprovalDialog, { type ManagerApprovalRequest } from "./components/ManagerApprovalDialog";
 import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
 import {
   projectCreditSale,
@@ -335,6 +336,8 @@ const [loggedIn, setLoggedIn] = useState(
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [saleDiscount, setSaleDiscount] = useState("0");
+  const [managerApproval, setManagerApproval] = useState<ManagerApprovalRequest | null>(null);
+  const [discountAuthorizationToken, setDiscountAuthorizationToken] = useState("");
   const [search, setSearch] = useState("");
   const [salesScannerOpen, setSalesScannerOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("cash");
@@ -428,6 +431,7 @@ const [loggedIn, setLoggedIn] = useState(
   const activeDiscoveryScopeRef = useRef<string | null>(null);
   const saleSubmissionInFlightRef = useRef(false);
   const creditClientSaleIdRef = useRef<string | null>(null);
+  const approvalClientSaleIdRef = useRef<string | null>(null);
   const nonCreditSaleIdentityRef = useRef<{
     fingerprint: string;
     clientSaleId: string;
@@ -2099,6 +2103,9 @@ const [loggedIn, setLoggedIn] = useState(
     setPinMessage("");
     setCart([]);
     setSaleDiscount("0");
+    setDiscountAuthorizationToken("");
+    setManagerApproval(null);
+    approvalClientSaleIdRef.current = null;
     setShowTender(false);
     setAmountReceived("");
     setReceipt(null);
@@ -2440,6 +2447,15 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
+    if (Number(discounted.discount_amount) > 0 && !cashier.permissions?.discounts && !cashier.permissions?.sales_discount && !discountAuthorizationToken) {
+      approvalClientSaleIdRef.current ||= (paymentMethod === "credit" ? creditClientSaleIdRef.current : null) || createClientSaleId();
+      setManagerApproval({
+        action: "large_discount", reason: "Approve this sale discount",
+        context: { client_sale_id: approvalClientSaleIdRef.current, discount_amount: discounted.discount_amount },
+      });
+      return;
+    }
+
     if (paymentMethod === "credit") {
       if (!(await isDeviceOnline())) {
         setCreditDialogMessage(
@@ -2500,8 +2516,8 @@ const [loggedIn, setLoggedIn] = useState(
     // backend validates them against the cashier's currently open shift.
     const offlineClientCreatedAt = new Date().toISOString();
     let clientSaleId = paymentMethod === "credit"
-      ? creditClientSaleIdRef.current || createClientSaleId()
-      : createClientSaleId();
+      ? approvalClientSaleIdRef.current || creditClientSaleIdRef.current || createClientSaleId()
+      : approvalClientSaleIdRef.current || createClientSaleId();
 
     if (paymentMethod === "credit") {
       creditClientSaleIdRef.current = clientSaleId;
@@ -2525,6 +2541,7 @@ const [loggedIn, setLoggedIn] = useState(
       shift_id: currentShift?.id || null,
       discount_amount: discounted.discount_amount,
       sale_discount_amount: discounted.sale_discount_amount,
+      discount_authorization_token: discountAuthorizationToken || undefined,
       items: completedItems.map((item) => ({
         product_id: item.id,
         variant_id:item.variant_id||null,
@@ -2592,6 +2609,9 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     const completeOfflineSale = async () => {
+      if (discountAuthorizationToken) {
+        throw new Error("Manager-approved sales must complete online. Reconnect and retry this same transaction.");
+      }
       if (paymentMethod === "credit") {
         throw new Error("Credit sales are online-only and cannot be queued.");
       }
@@ -2708,6 +2728,8 @@ const [loggedIn, setLoggedIn] = useState(
       setShowTender(false);
       setCart([]);
       setSaleDiscount("0");
+      setDiscountAuthorizationToken("");
+      approvalClientSaleIdRef.current = null;
       setAmountReceived("");
 
       setMessage(
@@ -2750,6 +2772,8 @@ const [loggedIn, setLoggedIn] = useState(
       setShowCreditSale(false);
       setCart([]);
       setSaleDiscount("0");
+      setDiscountAuthorizationToken("");
+      approvalClientSaleIdRef.current = null;
       setAmountReceived("");
       setMessage("Sale completed successfully");
 
@@ -2809,6 +2833,9 @@ const [loggedIn, setLoggedIn] = useState(
           isAndroidNativeApp() &&
           isNetworkFailure(error)
         ) {
+          if (discountAuthorizationToken) {
+            throw new Error("Manager-approved sales must complete online. Reconnect and retry this same transaction.");
+          }
           if (!(await canCreateOfflineSale())) {
             throw new Error(
               entitlementVerificationMessage || entitlementSnapshot?.message ||
@@ -2832,6 +2859,7 @@ const [loggedIn, setLoggedIn] = useState(
       }
     } catch (error: any) {
       const failureMessage = getApiErrorMessage(error, "Sale failed");
+      if (error?.response?.status === 403 && discountAuthorizationToken) setDiscountAuthorizationToken("");
       if (paymentMethod === "credit") {
         setCreditDialogMessage(failureMessage);
       } else {
@@ -2890,6 +2918,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   function logout() {
+    void api.post("/employees/session/logout").catch(() => undefined);
     clearAuthenticationPreservingDeviceIdentity();
 
     setBranchId("");
@@ -2902,6 +2931,9 @@ const [loggedIn, setLoggedIn] = useState(
     setProducts([]);
     setCart([]);
     setSaleDiscount("0");
+    setDiscountAuthorizationToken("");
+    setManagerApproval(null);
+    approvalClientSaleIdRef.current = null;
     setReceipt(null);
     setReceiptItems([]);
     setBusinessSettings(null);
@@ -3890,7 +3922,7 @@ const [loggedIn, setLoggedIn] = useState(
           ))}
         </div>
 
-        {cashier?.permissions?.discounts && <label className="pos-whole-sale-discount-field"><span>Sale discount</span>
+        {(cashier?.permissions?.discounts || cashier?.permissions?.sales_discount || cashier?.permissions?.sales_process) && <label className="pos-whole-sale-discount-field"><span>Sale discount</span>{!cashier?.permissions?.discounts && !cashier?.permissions?.sales_discount && <small>Manager approval required</small>}
           <input aria-label="Sale discount" inputMode="decimal" value={saleDiscount} disabled={processing}
             onChange={(event) => setSaleDiscount(event.target.value)} />
         </label>}
@@ -4174,6 +4206,8 @@ const [loggedIn, setLoggedIn] = useState(
           </div>
         </div>
       )}
+
+      {managerApproval && <ManagerApprovalDialog companyId={companyId} request={managerApproval} onCancel={() => setManagerApproval(null)} onApproved={(token) => { setDiscountAuthorizationToken(token); setManagerApproval(null); setMessage("Manager approval confirmed. Confirm payment to complete the sale."); }}/>}
 
       {variantProduct&&<div style={overlay}><div style={modalCard} className="pos-variant-dialog" role="dialog"><h2>Choose {variantProduct.name}</h2><div className="pos-variant-options">{variantProduct.variants?.map(variant=><button key={variant.id} disabled={Number(variant.stock_qty)<=0} onClick={()=>addVariant(variantProduct,variant)}><strong>{variant.name}</strong><span>{formatMoney(variant.selling_price??variantProduct.selling_price)} · {variant.stock_qty} available</span></button>)}</div><button style={secondaryButton} onClick={()=>setVariantProduct(null)}>Cancel</button></div></div>}
 

@@ -3,7 +3,10 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Branch, DeviceTombstone, Employee, Shop
+from app.models import (
+    Branch, Device, DeviceTombstone, Employee, EmployeeDeviceAccess,
+    EmployeeRole, Shop,
+)
 
 
 class EmployeeRepository:
@@ -23,7 +26,10 @@ class EmployeeRepository:
                 Employee.email,
                 Employee.phone,
                 Employee.role,
+                Employee.role_id,
+                EmployeeRole.name.label("role_name"),
                 Employee.permissions,
+                Employee.device_restricted,
                 Employee.active,
             )
             .join(
@@ -34,6 +40,7 @@ class EmployeeRepository:
                 Branch,
                 Branch.id == Employee.branch_id,
             )
+            .outerjoin(EmployeeRole, EmployeeRole.id == Employee.role_id)
         )
 
     async def is_deleted_device_identity(
@@ -128,6 +135,56 @@ class EmployeeRepository:
         )
 
         return result.first()
+
+    async def get_role(self, company_id: UUID, role_id: UUID):
+        result = await self.db.execute(select(EmployeeRole).where(
+            EmployeeRole.id == role_id,
+            EmployeeRole.company_id == company_id,
+            EmployeeRole.active == True,
+            EmployeeRole.deleted == False,
+        ))
+        return result.scalar_one_or_none()
+
+    async def validate_devices(self, company_id: UUID, device_ids: list[UUID]):
+        if not device_ids:
+            return []
+        result = await self.db.execute(select(Device.id).where(
+            Device.company_id == company_id,
+            Device.id.in_(set(device_ids)),
+            Device.active == True,
+            Device.deleted == False,
+            Device.removed_at.is_(None),
+        ))
+        found = list(result.scalars().all())
+        if len(set(found)) != len(set(device_ids)):
+            return None
+        return found
+
+    async def device_ids(self, employee_id: UUID):
+        result = await self.db.execute(select(EmployeeDeviceAccess.device_id).where(
+            EmployeeDeviceAccess.employee_id == employee_id,
+        ))
+        return list(result.scalars().all())
+
+    async def set_devices(self, employee: Employee, device_ids: list[UUID]):
+        await self.db.execute(
+            __import__("sqlalchemy").delete(EmployeeDeviceAccess).where(
+                EmployeeDeviceAccess.employee_id == employee.id
+            )
+        )
+        for device_id in set(device_ids):
+            self.db.add(EmployeeDeviceAccess(
+                company_id=employee.company_id,
+                employee_id=employee.id,
+                device_id=device_id,
+            ))
+
+    async def device_allowed(self, employee_id: UUID, device_id: UUID):
+        result = await self.db.execute(select(EmployeeDeviceAccess.id).where(
+            EmployeeDeviceAccess.employee_id == employee_id,
+            EmployeeDeviceAccess.device_id == device_id,
+        ))
+        return result.scalar_one_or_none() is not None
 
     async def active_pin_candidates(
         self,

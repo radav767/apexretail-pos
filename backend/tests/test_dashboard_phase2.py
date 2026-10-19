@@ -275,7 +275,7 @@ class DashboardPhase2ApiTest(unittest.IsolatedAsyncioTestCase):
         actor = AuthActor(
             actor_type="employee",
             company_id=company_id or self.company_id,
-            role="manager",
+            role="administrator" if reports else "cashier",
             permissions={"reports": reports},
         )
         async def auth_actor_override():

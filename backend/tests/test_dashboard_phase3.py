@@ -156,11 +156,13 @@ class DashboardPhase3ApiSecurityTest(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         app.dependency_overrides.clear()
 
-    def set_actor(self, company_id=None, reports=True):
+    def set_actor(self, company_id=None, reports=True, role=None):
+        self.branch_id = uuid4()
         async def override_actor():
             return AuthActor(
                 actor_type="employee", company_id=company_id or self.company_id,
-                role="manager", permissions={"reports": reports},
+                role=role or ("administrator" if reports else "cashier"), permissions={"reports": reports},
+                employee=SimpleNamespace(id=uuid4(), branch_id=self.branch_id),
             )
 
         app.dependency_overrides[get_auth_actor] = override_actor
@@ -223,3 +225,13 @@ class DashboardPhase3ApiSecurityTest(unittest.IsolatedAsyncioTestCase):
         self.set_actor(reports=False)
         response = await self.request(f"/api/dashboard/analytics-v3/{self.company_id}")
         self.assertEqual(response.status_code, 403)
+
+    async def test_branch_employee_is_scoped_and_cannot_view_company_analytics(self):
+        self.set_actor(role="manager")
+        response = await self.request(f"/api/dashboard/summary/{self.company_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["stock_value"])
+        self.service.get_summary.assert_awaited_once_with(self.company_id, branch_id=self.branch_id)
+        response = await self.request(f"/api/dashboard/analytics-v3/{self.company_id}")
+        self.assertEqual(response.status_code, 403)
+        self.service.get_phase3_summary.assert_not_awaited()

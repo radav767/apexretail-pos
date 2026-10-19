@@ -27,7 +27,7 @@ export function canViewSaleReceipt(
 ): boolean {
   return (
     isPrivilegedSalesActor(actor) ||
-    actor?.permissions?.sales === true
+    (actor?.permissions?.sales_history_view ?? actor?.permissions?.sales) === true
   );
 }
 
@@ -36,7 +36,7 @@ export function canRefundSale(
 ): boolean {
   return (
     isPrivilegedSalesActor(actor) ||
-    actor?.permissions?.refunds === true
+    (actor?.permissions?.sales_refund ?? actor?.permissions?.refunds) === true
   );
 }
 

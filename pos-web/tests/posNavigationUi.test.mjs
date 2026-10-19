@@ -56,7 +56,8 @@ test("module feature hubs are permission-aware and support browser history", () 
   for (const label of ["Transaction History", "Cancel / Void Sales", "Credit Settlement", "Cashier Shifts", "Z Reports", "Goods Received (GRN)", "Stock Adjustments", "Inventory Overview", "Inventory Activity", "Sales Summary", "Inventory Status"]) {
     assert.ok(modulePage.includes(label), `missing focused feature ${label}`);
   }
-  assert.match(modulePage, /permitted: canCreateRefunds/);
+  assert.match(modulePage, /permitted: canViewSalesReceipts/);
+  assert.match(modulePage, /ManagerApprovalDialog/);
   assert.match(modulePage, /permitted: canManageInventory/);
   assert.match(modulePage, /window\.history\.pushState/);
   assert.match(modulePage, /window\.addEventListener\("popstate"/);

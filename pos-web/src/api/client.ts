@@ -111,12 +111,14 @@ api.interceptors.request.use((config) => {
   }
 
   return config;
-});
+}, undefined, { synchronous: true });
 
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401 && typeof window !== "undefined") {
+    // A late best-effort logout belongs to the previous cashier. Its rejection
+    // must never invalidate a new cashier who has already authenticated.
+    if (error?.response?.status === 401 && error?.config?.url !== "/employees/session/logout" && typeof window !== "undefined") {
       localStorage.removeItem("employee_token");
       localStorage.removeItem("employee_id");
       window.dispatchEvent(new CustomEvent("apex-session-invalidated"));

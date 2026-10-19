@@ -125,8 +125,8 @@ class ProductComponentOut(BaseModel):
     component_name: str
     quantity: Decimal
     unit: str
-    component_cost: Decimal
-    total_cost: Decimal
+    component_cost: Decimal | None
+    total_cost: Decimal | None
 
 
 class ProductVariantCreate(BaseModel):

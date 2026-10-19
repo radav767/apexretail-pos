@@ -12,6 +12,7 @@ import { KeyboardWedgeDetector } from "./barcode/keyboardWedge";
 import FinancialModules, { type FinancialModuleName } from "./FinancialModules";
 import ShiftManagementPage, { type ShiftRecord } from "./ShiftManagementPage";
 import PosSessionHeader from "./components/PosSessionHeader";
+import ManagerApprovalDialog, { type ManagerApprovalRequest } from "./components/ManagerApprovalDialog";
 import { PosFeatureBack, PosFeatureHub, type PosFeatureItem } from "./components/PosFeatureHub";
 import ProductToolsPage, { type ProductToolFeature } from "./ProductToolsPage";
 import {
@@ -421,6 +422,9 @@ export default function PosModulePage({
     Record<string, string>
   >({});
   const [refundReason, setRefundReason] = useState("");
+  const [managerApproval, setManagerApproval] = useState<ManagerApprovalRequest | null>(null);
+  const [refundAuthorization, setRefundAuthorization] = useState<{ saleId: string; token: string } | null>(null);
+  const [stockAuthorization, setStockAuthorization] = useState<{ fingerprint: string; token: string } | null>(null);
   const [selectedBranchId, setSelectedBranchId] = useState(branchId);
   const [editingProductId, setEditingProductId] = useState("");
   const [productForm, setProductForm] =
@@ -459,7 +463,7 @@ export default function PosModulePage({
     Boolean(cashier?.permissions?.manage_inventory);
   const canManageSettings =
     cashier?.role === "owner" ||
-    Boolean(cashier?.permissions?.settings);
+    Boolean(cashier?.permissions?.printers_manage ?? cashier?.permissions?.settings);
   const canViewSalesReceipts = canViewSaleReceipt(cashier);
   const canCreateRefunds = canRefundSale(cashier);
 
@@ -705,6 +709,7 @@ export default function PosModulePage({
     !isSavingPrinter &&
     (!requiresPrinterSelection || hasValidPrinterSelection);
   const canTestPrint =
+    canManageSettings &&
     !isTestingPrinter &&
     printerDraft.enabled &&
     (!requiresPrinterSelection || hasValidPrinterSelection);
@@ -949,10 +954,6 @@ export default function PosModulePage({
       setError("Sales permission is required to view receipts.");
       return;
     }
-    if (mode === "refund" && !canCreateRefunds) {
-      setError("Refunds permission is required to refund a sale.");
-      return;
-    }
     if (mode === "refund" && !isRefundableSale(sale)) {
       setError("This sale has no remaining refundable amount.");
       return;
@@ -1007,8 +1008,8 @@ export default function PosModulePage({
     if (!receiptDialog || receiptDialog.mode !== "refund") {
       return;
     }
-    if (!canCreateRefunds) {
-      setError("Refunds permission is required to refund a sale.");
+    if (!canCreateRefunds && refundAuthorization?.saleId !== receiptDialog.receipt.id) {
+      setManagerApproval({ action: "refund", reason: "Approve this transaction refund", context: { original_sale_id: receiptDialog.receipt.id } });
       return;
     }
     if (!refundReason.trim()) {
@@ -1051,6 +1052,7 @@ export default function PosModulePage({
         device_key: localStorage.getItem("device_key") || undefined,
         reason: refundReason.trim(),
         refund_method: receiptDialog.receipt.payment_method,
+        manager_authorization_token: refundAuthorization?.saleId === receiptDialog.receipt.id ? refundAuthorization.token : undefined,
         items: selectedItems.map(({ item, quantity }) => ({
           sale_item_id: item.id,
           quantity,
@@ -1058,11 +1060,13 @@ export default function PosModulePage({
       });
 
       setReceiptDialog(null);
+      setRefundAuthorization(null);
       setNotice(
         `Refund ${String(response.data?.receipt_number || "")} completed.`.trim(),
       );
       setSalesRefreshSignal((current) => current + 1);
     } catch (requestError: unknown) {
+      if ((requestError as { response?: { status?: number } })?.response?.status === 403) setRefundAuthorization(null);
       setError(
         getApiErrorMessage(requestError, "Refund failed."),
       );
@@ -1264,11 +1268,6 @@ export default function PosModulePage({
       return;
     }
 
-    if (!canManageInventory) {
-      setError("You do not have permission to manage inventory.");
-      return;
-    }
-
     if (!receiveForm.product_id) {
       setError("Select a product.");
       return;
@@ -1325,13 +1324,24 @@ export default function PosModulePage({
       return;
     }
 
-    if (!canManageInventory) {
-      setError("You do not have permission to manage inventory.");
+    if (!adjustmentForm.product_id) {
+      setError("Select a product.");
       return;
     }
 
-    if (!adjustmentForm.product_id) {
-      setError("Select a product.");
+    const approvalContext = {
+      product_id: adjustmentForm.product_id,
+      branch_id: selectedBranchId || branchId,
+      adjustment_type: adjustmentForm.adjustment_type,
+      quantity: adjustmentForm.quantity,
+    };
+    const approvalFingerprint = JSON.stringify(approvalContext);
+    if (!canManageInventory && stockAuthorization?.fingerprint !== approvalFingerprint) {
+      setManagerApproval({
+        action: "stock_adjustment",
+        reason: "Approve this stock adjustment",
+        context: approvalContext,
+      });
       return;
     }
 
@@ -1361,6 +1371,7 @@ export default function PosModulePage({
         reason: adjustmentForm.reason.trim(),
         reference: adjustmentForm.reference.trim() || null,
         notes: adjustmentForm.notes.trim() || null,
+        manager_authorization_token: stockAuthorization?.fingerprint === approvalFingerprint ? stockAuthorization.token : undefined,
       });
 
       setAdjustmentForm((current) => ({
@@ -1368,8 +1379,10 @@ export default function PosModulePage({
         product_id: current.product_id,
       }));
       setNotice("Inventory adjustment saved.");
+      setStockAuthorization(null);
       await refreshProductAndInventoryData();
     } catch (requestError: unknown) {
+      if ((requestError as { response?: { status?: number } })?.response?.status === 403) setStockAuthorization(null);
       setError(
         getApiErrorMessage(
           requestError,
@@ -1420,7 +1433,7 @@ export default function PosModulePage({
             title="Sales Management"
             features={[
               { id: "transaction-history", title: "Transaction History", detail: "View completed sales and receipts", icon: "clock" },
-              { id: "cancel-void-sales", title: "Cancel / Void Sales", detail: "Review permitted refunds and void actions", icon: "void", permitted: canCreateRefunds },
+              { id: "cancel-void-sales", title: "Cancel / Void Sales", detail: "Review refunds and manager-approved actions", icon: "void", permitted: canViewSalesReceipts },
               { id: "credit-settlement", title: "Credit Settlement", detail: "Manage supported customer settlements", icon: "cash", permitted: cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(cashier?.permissions?.credit_settlements) },
               { id: "cashier-shifts", title: "Cashier Shifts", detail: "Open, reconcile and close this shift", icon: "transfer" },
               { id: "z-reports", title: "Z Reports", detail: "View and reprint immutable reports", icon: "report" },
@@ -1548,7 +1561,7 @@ export default function PosModulePage({
                               Reprint
                             </button>
                           )}
-                          {canCreateRefunds && isRefundableSale(sale) && (
+                          {canViewSalesReceipts && isRefundableSale(sale) && (
                             <button
                               type="button"
                               className="pos-inline-button danger"
@@ -2123,7 +2136,7 @@ export default function PosModulePage({
             title="Inventory"
             features={[
               { id: "goods-received", title: "Goods Received (GRN)", detail: "Receive stock from suppliers", icon: "inventory", permitted: canManageInventory },
-              { id: "stock-adjustments", title: "Stock Adjustments", detail: "Record corrections and physical counts", icon: "adjust", permitted: canManageInventory },
+              { id: "stock-adjustments", title: "Stock Adjustments", detail: "Record corrections and physical counts", icon: "adjust" },
               { id: "inventory-overview", title: "Inventory Overview", detail: "Review current branch balances", icon: "chart" },
               { id: "inventory-activity", title: "Inventory Activity", detail: "Review auditable stock movements", icon: "clock" },
             ] as PosFeatureItem<ModuleFeature>[]}
@@ -2162,9 +2175,9 @@ export default function PosModulePage({
                 </label>
               </div>
 
-              {canManageInventory ? (
+              {(canManageInventory || activeFeature === "stock-adjustments") ? (
                 <div className="pos-module-management-grid">
-                  <section className="pos-module-subcard">
+                  {canManageInventory && activeFeature === "goods-received" && <section className="pos-module-subcard">
                     <h3>Receive / Add Stock</h3>
                     <p>{selectedBranchName}</p>
 
@@ -2300,9 +2313,9 @@ export default function PosModulePage({
                         </button>
                       </div>
                     </div>
-                  </section>
+                  </section>}
 
-                  <section className="pos-module-subcard">
+                  {activeFeature === "stock-adjustments" && <section className="pos-module-subcard">
                     <h3>Stock Adjustment</h3>
                     <p>Use this for removals, corrections, or physical counts.</p>
 
@@ -2411,7 +2424,7 @@ export default function PosModulePage({
                         </button>
                       </div>
                     </div>
-                  </section>
+                  </section>}
                 </div>
               ) : null}
             </div>
@@ -3173,6 +3186,31 @@ export default function PosModulePage({
           </>
         )}
       </div>
+      {managerApproval && (
+        <ManagerApprovalDialog
+          companyId={companyId}
+          request={managerApproval}
+          onCancel={() => setManagerApproval(null)}
+          onApproved={(token) => {
+            if (managerApproval.action === "refund" && receiptDialog) {
+              setRefundAuthorization({ token, saleId: receiptDialog.receipt.id });
+              setNotice("Manager approval confirmed. Submit the refund again to continue.");
+            } else if (managerApproval.action === "stock_adjustment") {
+              setStockAuthorization({
+                token,
+                fingerprint: JSON.stringify({
+                  product_id: adjustmentForm.product_id,
+                  branch_id: selectedBranchId || branchId,
+                  adjustment_type: adjustmentForm.adjustment_type,
+                  quantity: adjustmentForm.quantity,
+                }),
+              });
+              setNotice("Manager approval confirmed. Save the adjustment again to continue.");
+            }
+            setManagerApproval(null);
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -3,6 +3,9 @@ from app.models.shop import Shop
 from app.models.branch import Branch
 from app.models.user import User
 from app.models.employee import Employee
+from app.models.employee_role import EmployeeRole
+from app.models.employee_device_access import EmployeeDeviceAccess
+from app.models.manager_authorization import ManagerAuthorization
 from app.models.device import Device
 from app.models.device_tombstone import DeviceTombstone
 from app.models.category import Category

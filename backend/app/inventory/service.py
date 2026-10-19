@@ -10,6 +10,9 @@ from app.inventory.schema import (
     StockTakeCreate,
 )
 from app.models.inventory_movement import InventoryMovement
+from app.models.audit_event import AuditEvent
+from app.employees.manager_approval import consume_manager_authorization
+from app.employees.permissions import has_permission
 
 
 LEGACY_GRN_REASON = "Stock received - legacy client"
@@ -89,7 +92,18 @@ class InventoryService:
     async def adjust_stock(
         self,
         data: StockAdjustmentCreate,
+        actor=None,
     ):
+        if actor is not None and actor.actor_type == "employee" and not has_permission(actor.permissions, "inventory_adjust"):
+            await consume_manager_authorization(
+                self.repo.db, actor, data.manager_authorization_token,
+                "stock_adjustment", {
+                    "product_id": str(data.product_id),
+                    "branch_id": str(data.branch_id or actor.employee.branch_id),
+                    "adjustment_type": data.adjustment_type,
+                    "quantity": str(data.quantity),
+                },
+            )
         branch = await self.repo.resolve_branch(
             data.company_id,
             data.branch_id,
@@ -155,6 +169,19 @@ class InventoryService:
             reason=data.reason.strip(),
             notes=self._clean(data.notes),
         )
+        self.repo.db.add(AuditEvent(
+            company_id=data.company_id,
+            actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+            actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+            device_id=actor.pos_session.device_id if actor and actor.actor_type == "employee" and actor.pos_session else None,
+            action="inventory_adjustment",
+            reason=data.reason.strip(),
+            details={
+                "product_id": str(product.id), "branch_id": str(branch.id),
+                "before_qty": str(before_qty), "after_qty": str(after_qty),
+                "adjustment_type": data.adjustment_type,
+            },
+        ))
 
         return await self.repo.apply_movement(
             product,
@@ -265,7 +292,10 @@ class InventoryService:
         self,
         company_id: UUID,
         limit: int,
+        actor=None,
     ):
+        if actor is not None and actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+            return await self.repo.list_history(company_id, limit, branch_id=actor.employee.branch_id)
         return await self.repo.list_history(
             company_id,
             limit,

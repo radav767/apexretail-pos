@@ -11,7 +11,7 @@ class DashboardSummary(BaseModel):
     today_transactions: int
     total_products: int
     low_stock_products: int
-    stock_value: Decimal
+    stock_value: Decimal | None
 
 
 class DashboardMetric(BaseModel):

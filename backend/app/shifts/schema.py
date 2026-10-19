@@ -52,6 +52,7 @@ class CashMovementCreate(BaseModel):
     amount: Decimal = Field(gt=0, max_digits=18, decimal_places=4)
     reason: str = Field(min_length=1, max_length=500)
     idempotency_key: str = Field(min_length=8, max_length=100)
+    manager_authorization_token: str | None = Field(default=None, max_length=200)
 
     @field_validator("currency_code")
     @classmethod

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, getApiErrorMessage } from "./api/client";
 import { isDeviceOnline } from "./offline/offlineAuth";
+import ManagerApprovalDialog, { type ManagerApprovalRequest } from "./components/ManagerApprovalDialog";
 import "./shift-management.css";
 
-type Cashier = { id: string; name: string; role: string };
+type Cashier = { id: string; name: string; role: string; permissions?: Record<string, boolean> };
 type CurrencyConfig = {
   code: string; display_name: string; symbol: string; decimal_places: number;
   active: boolean; cash_accepted: boolean;
@@ -90,6 +91,9 @@ export default function ShiftManagementPage({ companyId, cashier, onBackToSales,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [managerApproval, setManagerApproval] = useState<ManagerApprovalRequest | null>(null);
+  const [movementApproval, setMovementApproval] = useState<{ fingerprint: string; token: string } | null>(null);
+  const movementRetry = useRef<{ fingerprint: string; key: string } | null>(null);
   const mutationInFlight = useRef(false);
 
   const cashCurrencies = useMemo(
@@ -200,16 +204,27 @@ export default function ShiftManagementPage({ companyId, cashier, onBackToSales,
       mutationInFlight.current = false;
       return;
     }
+    const approvalContext = { shift_id: shift.id, movement_type: movementType, currency_code: movementCurrency, amount: movementAmount.trim() };
+    const fingerprint = JSON.stringify({ ...approvalContext, reason: movementReason.trim() });
+    if (cashier?.permissions?.cash_movements_manage === false && movementApproval?.fingerprint !== fingerprint) {
+      setManagerApproval({ action: "cash_movement", reason: "Approve this cash drawer movement", context: approvalContext });
+      mutationInFlight.current = false;
+      return;
+    }
+    if (movementRetry.current?.fingerprint !== fingerprint) movementRetry.current = { fingerprint, key: idempotencyKey() };
     setBusy(true); setError(""); setNotice("");
     try {
       await api.post(`/shifts/${shift.id}/cash-movements`, {
         movement_type: movementType, currency_code: movementCurrency,
-        amount: movementAmount.trim(), reason: movementReason.trim(), idempotency_key: idempotencyKey(),
+        amount: movementAmount.trim(), reason: movementReason.trim(), idempotency_key: movementRetry.current.key,
+        manager_authorization_token: movementApproval?.fingerprint === fingerprint ? movementApproval.token : undefined,
       });
       setMovementAmount(""); setMovementReason("");
+      setMovementApproval(null); movementRetry.current = null;
       setNotice(movementType === "cash_in" ? "Cash-in recorded." : "Cash-out recorded.");
       await refresh();
     } catch (requestError) {
+      if ((requestError as { response?: { status?: number } })?.response?.status === 403) setMovementApproval(null);
       setError(getApiErrorMessage(requestError, "Cash movement was not recorded."));
     } finally { mutationInFlight.current = false; setBusy(false); }
   }
@@ -331,5 +346,12 @@ export default function ShiftManagementPage({ companyId, cashier, onBackToSales,
     {historyDetail && <div className="pos-shift-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setHistoryDetail(null); }}><section className="pos-shift-modal" role="dialog" aria-modal="true" aria-labelledby="pos-shift-history-title"><header><div><h2 id="pos-shift-history-title">{historyDetail.shift_number}</h2><p>{historyDetail.cashier_name} · {historyDetail.register_name}</p></div><button type="button" onClick={() => setHistoryDetail(null)}>Close</button></header><p>{historyDetail.status.toUpperCase()} · Opened {new Date(historyDetail.opened_at).toLocaleString()} · Closed {historyDetail.closed_at ? new Date(historyDetail.closed_at).toLocaleString() : "—"}</p><div className="pos-shift-currency-grid">{historyDetail.currencies.filter((row) => row.cash_accepted).map((row) => <article key={row.currency_code}><strong>{row.currency_code}</strong><p>Opening: {amountLabel(row.opening_float, row)}</p><p>Cash sales: {amountLabel(row.cash_sales, row)}</p><p>Cash in/out: {amountLabel(row.cash_in, row)} / {amountLabel(row.cash_out, row)}</p><p>Expected: {amountLabel(row.expected_cash, row)}</p><p>Counted: {row.counted_cash === null ? "Not counted" : amountLabel(row.counted_cash, row)}</p><p>Variance: {row.variance === null ? "Open" : amountLabel(row.variance, row)}</p></article>)}</div>{historyDetail.cash_movements?.length ? <div className="pos-shift-movements"><h3>Cash movements</h3>{historyDetail.cash_movements.map((row) => { const currency = historyDetail.currencies.find((item) => item.currency_code === row.currency_code)!; return <article key={row.id}><span>{row.movement_type === "cash_in" ? "Cash in" : "Cash out"}: {row.reason}<small>{row.actor_name || "Cashier"} · {new Date(row.created_at).toLocaleString()}</small></span><b>{amountLabel(row.amount, currency)}</b></article>; })}</div> : null}<button type="button" onClick={() => void printSummary(historyDetail)}>Print shift summary</button></section></div>}
 
     {zReport && <div className="pos-shift-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setZReport(null); }}><section className="pos-shift-modal pos-z-report-modal" role="dialog" aria-modal="true" aria-labelledby="pos-z-report-title"><header><div><p className="pos-shift-eyebrow">Immutable closing snapshot</p><h2 id="pos-z-report-title">Z Report · {zReport.shift_number}</h2><p>{zReport.cashier_name} · {zReport.register_name}</p></div><button type="button" onClick={() => setZReport(null)}>Close</button></header><div className="pos-z-report-summary"><span>Gross sales<strong>{zReport.summary.gross_sales_base ?? "0.00"}</strong></span><span>Discounts<strong>{zReport.summary.discounts_base ?? "0.00"}</strong></span><span>Refunds<strong>{zReport.summary.refunds_base ?? "0.00"}</strong></span><span>Net sales<strong>{zReport.summary.net_sales_base ?? "0.00"} {zReport.summary.base_currency_code}</strong></span></div><div className="pos-shift-currency-grid">{zReport.currencies.map((row) => <article key={row.currency_code}><header><strong>{row.currency_name}</strong><span>{row.currency_code}</span></header><p>Opening: {amountLabel(row.opening_float, row)}</p><p>Cash sales: {amountLabel(row.cash_sales, row)}</p><p>Expected: {amountLabel(row.expected_cash, row)}</p><p>Counted: {amountLabel(row.counted_cash, row)}</p><p>Variance: {amountLabel(row.variance, row)}</p></article>)}</div><div className="pos-z-report-actions">{zReportPdfUrl && <a className="pos-shift-button" href={zReportPdfUrl} target="_blank" rel="noreferrer" download={`${zReport.shift_number}.pdf`}>View PDF</a>}<button type="button" onClick={() => void printZReport(zReport)} disabled={busy}>Print Z Report</button><button type="button" onClick={onBackToSales}>Return to Sales</button></div>{zReportPdfUrl && <object className="pos-z-report-pdf" data={zReportPdfUrl} type="application/pdf" aria-label={`PDF Z Report ${zReport.shift_number}`}><p>PDF preview is unavailable on this device. Use View PDF to open or save it.</p></object>}</section></div>}
+    {managerApproval && <ManagerApprovalDialog companyId={companyId} request={managerApproval}
+      onCancel={() => setManagerApproval(null)}
+      onApproved={(token) => {
+        setMovementApproval({ token, fingerprint: JSON.stringify({ ...managerApproval.context, reason: movementReason.trim() }) });
+        setManagerApproval(null);
+        setNotice("Manager approval confirmed. Submit the cash movement again to continue.");
+      }} />}
   </main>;
 }

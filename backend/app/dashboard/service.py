@@ -11,7 +11,9 @@ class DashboardService:
     def __init__(self, repo: DashboardRepository):
         self.repo = repo
 
-    async def get_summary(self, company_id):
+    async def get_summary(self, company_id, branch_id=None):
+        if branch_id is not None:
+            return await self.repo.get_summary(company_id, branch_id=branch_id)
         return await self.repo.get_summary(company_id)
 
     async def get_phase2_summary(

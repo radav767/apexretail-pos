@@ -32,6 +32,7 @@ class StockAdjustmentCreate(BaseModel):
     reason: str = Field(min_length=1, max_length=160)
     reference: str | None = Field(default=None, max_length=80)
     notes: str | None = Field(default=None, max_length=1000)
+    manager_authorization_token: str | None = Field(default=None, max_length=200)
 
 
 class StockTakeItem(BaseModel):
@@ -80,7 +81,7 @@ class InventoryMovementOut(BaseModel):
     quantity: Decimal
     before_qty: Decimal
     after_qty: Decimal
-    unit_cost: Decimal
+    unit_cost: Decimal | None
     reference: str | None
     supplier: str | None
     reason: str | None

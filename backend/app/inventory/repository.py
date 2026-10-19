@@ -105,12 +105,13 @@ class InventoryRepository:
         self,
         company_id: UUID,
         limit: int,
+        branch_id=None,
     ):
+        query = select(InventoryMovement).where(InventoryMovement.company_id == company_id)
+        if branch_id is not None:
+            query = query.where(InventoryMovement.branch_id == branch_id)
         result = await self.db.execute(
-            select(InventoryMovement)
-            .where(
-                InventoryMovement.company_id == company_id,
-            )
+            query
             .order_by(InventoryMovement.created_at.desc())
             .limit(limit)
         )

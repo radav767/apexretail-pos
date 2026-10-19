@@ -131,6 +131,14 @@ class DeviceTakeoverPostgresTest(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         if not hasattr(self, "engine"):
             return
+        async with self.engine.connect() as connection:
+            protected = (await connection.execute(text("SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='audit_events_append_only')"))).scalar_one()
+        if protected:
+            # These tests commit across concurrent connections. Retain their
+            # audit evidence in the prefix-guarded disposable database rather
+            # than disabling the Phase 7B protection for fixture cleanup.
+            await self.engine.dispose()
+            return
         async with self.engine.begin() as connection:
             for table in ("audit_events", "pos_sessions"):
                 await connection.execute(

@@ -299,7 +299,7 @@ class RouteCompatibilityTest(unittest.IsolatedAsyncioTestCase):
         ) as client:
             return await client.request(method, path, **kwargs)
 
-    async def test_legacy_sale_without_bearer_header_uses_legacy_flow(self):
+    async def test_sale_without_bearer_header_is_rejected_before_service(self):
         company_id = uuid4()
         branch_id = uuid4()
         employee_id = uuid4()
@@ -358,12 +358,8 @@ class RouteCompatibilityTest(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIsNone(recorded["actor"])
-        self.assertEqual(
-            recorded["employee_id"],
-            employee_id,
-        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(recorded, {})
 
     async def test_unauthorized_product_management_is_rejected(self):
         company_id = uuid4()
@@ -724,7 +720,7 @@ class RouteCompatibilityTest(unittest.IsolatedAsyncioTestCase):
 
         with dependency_overrides(
             {
-                get_optional_auth_actor: sales_actor,
+                get_auth_actor: sales_actor,
                 get_sales_service: lambda: FakeSalesService(),
             }
         ):

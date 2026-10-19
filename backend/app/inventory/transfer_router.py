@@ -11,6 +11,7 @@ from app.inventory.schema import InventoryMovementOut
 from app.inventory.transfer_repository import TransferRepository
 from app.inventory.transfer_schema import TransferCreate
 from app.inventory.transfer_service import TransferService
+from app.financial_access import enforce_actor_branch
 
 
 router = APIRouter(
@@ -33,10 +34,11 @@ async def create_stock_transfer(
     data: TransferCreate,
     service: TransferService = Depends(get_service),
     _actor: AuthActor = Depends(
-        require_body_permission("manage_inventory")
+        require_body_permission("inventory_transfer")
     ),
     _entitlement: None = Depends(
         require_billable_body_company
     ),
 ):
+    enforce_actor_branch(_actor, data.source_branch_id)
     return await service.transfer(data)

@@ -33,6 +33,7 @@ export type OfflineSalePayload = {
   amount_received?: string;
   discount_amount?: string | null;
   sale_discount_amount?: string | null;
+  discount_authorization_token?: string;
   items: Array<{
     product_id: string;
     variant_id?: string | null;

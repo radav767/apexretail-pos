@@ -19,6 +19,7 @@ from app.dashboard.schema import (
 )
 from app.dashboard.service import DashboardService
 from app.db.session import get_db
+from app.employees.permissions import has_permission
 
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -37,8 +38,8 @@ async def require_dashboard_reports_access(
         return actor
     if actor.role in {"owner", "administrator"}:
         return actor
-    if actor.permissions and actor.permissions.get("reports"):
-        return actor
+    if has_permission(actor.permissions, "profits_view"):
+        raise HTTPException(403, "Use branch-scoped financial reports for this employee")
     raise HTTPException(403, "Permission denied")
 
 
@@ -49,8 +50,18 @@ async def require_dashboard_reports_access(
 async def dashboard_summary(
     company_id: UUID,
     service: DashboardService = Depends(get_service),
-    _actor: AuthActor = Depends(require_dashboard_reports_access),
+    _actor: AuthActor = Depends(get_auth_actor),
 ):
+    ensure_company_access(_actor, company_id)
+    if _actor.actor_type == "employee" and _actor.role not in {"owner", "administrator"}:
+        if not has_permission(_actor.permissions, "revenue_view"):
+            raise HTTPException(403, "Revenue permission denied")
+        if _actor.employee is None:
+            raise HTTPException(403, "Branch access denied")
+        result = await service.get_summary(company_id, branch_id=_actor.employee.branch_id)
+        if not has_permission(_actor.permissions, "inventory_valuation_view"):
+            result = {**result, "stock_value": None}
+        return result
     return await service.get_summary(company_id)
 
 

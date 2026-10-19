@@ -29,6 +29,13 @@ def get_reports_service(db: AsyncSession = Depends(get_db)):
     return ReportsService(ReportsRepository(db))
 
 
+def scoped_branch(actor, branch_id):
+    if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+        branch_id = branch_id or actor.employee.branch_id
+        enforce_actor_branch(actor, branch_id)
+    return branch_id
+
+
 @router.get("/financial-summary/{company_id}", response_model=FinancialSummaryResponse)
 async def financial_summary(
     company_id: UUID,
@@ -37,7 +44,7 @@ async def financial_summary(
     branch_id: UUID | None = None,
     shop_id: UUID | None = None,
     service: ReportsService = Depends(get_reports_service),
-    actor: AuthActor = Depends(require_path_permission("reports")),
+    actor: AuthActor = Depends(require_path_permission("profits_view")),
 ):
     if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
         if branch_id is not None:
@@ -54,8 +61,9 @@ async def sales_history_v4(
     company_id: UUID,
     query: SalesHistoryQuery = Depends(),
     service: ReportsService = Depends(get_reports_service),
-    _actor: AuthActor = Depends(require_path_permission("reports")),
+    _actor: AuthActor = Depends(require_path_permission("profits_view")),
 ):
+    query.branch_id = scoped_branch(_actor, query.branch_id)
     return await service.sales_history(company_id, query)
 
 
@@ -64,8 +72,9 @@ async def sales_history_v4_csv(
     company_id: UUID,
     query: SalesHistoryQuery = Depends(),
     service: ReportsService = Depends(get_reports_service),
-    _actor: AuthActor = Depends(require_path_permission("reports")),
+    _actor: AuthActor = Depends(require_path_permission("profits_view")),
 ):
+    query.branch_id = scoped_branch(_actor, query.branch_id)
     content = await service.sales_history_csv(company_id, query)
     return Response(content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=sales-history.csv"})
 
@@ -77,6 +86,7 @@ async def inventory_valuation_v4(
     service: ReportsService = Depends(get_reports_service),
     _actor: AuthActor = Depends(require_path_permission("inventory_valuation")),
 ):
+    branch_id = scoped_branch(_actor, branch_id)
     return await service.inventory_valuation(company_id, branch_id=branch_id, category_id=category_id, product_id=product_id, limit=limit, offset=offset)
 
 
@@ -86,6 +96,7 @@ async def inventory_valuation_v4_csv(
     service: ReportsService = Depends(get_reports_service),
     _actor: AuthActor = Depends(require_path_permission("inventory_valuation")),
 ):
+    branch_id = scoped_branch(_actor, branch_id)
     content = await service.inventory_csv(company_id, branch_id=branch_id, category_id=category_id, product_id=product_id, limit=100, offset=0)
     return Response(content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=inventory-valuation.csv"})
 
@@ -111,6 +122,7 @@ async def sales_report(
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(require_path_permission("reports")),
 ):
+    branch_id = scoped_branch(_actor, branch_id)
     today = datetime.now(HARARE_TZ).date()
 
     start_date = date_from or today

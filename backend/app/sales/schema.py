@@ -40,6 +40,8 @@ class SaleCreate(BaseModel):
     exchange_rate_snapshot: Decimal | None = Field(default=None, gt=0, max_digits=20, decimal_places=10)
     currency_config_version: int | None = Field(default=None, ge=1)
     offline_shift_token: str | None = Field(default=None, max_length=4000)
+    discount_authorization_token: str | None = Field(default=None, max_length=200)
+    price_override_authorization_token: str | None = Field(default=None, max_length=200)
     items: list[SaleItemCreate]
 
 
@@ -146,4 +148,5 @@ class RefundCreate(BaseModel):
     refund_method: str | None = Field(default=None, max_length=40)
     shift_id: UUID | None = None
     payment_currency_code: str | None = Field(default=None, max_length=8)
+    manager_authorization_token: str | None = Field(default=None, max_length=200)
     items: list[RefundItemCreate] = Field(min_length=1)

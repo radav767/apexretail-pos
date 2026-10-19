@@ -53,7 +53,7 @@ async def update_company_settings(
     data: CompanySettingsUpdate,
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(
-        require_path_permission("settings")
+        require_path_permission("business_settings_manage")
     ),
     _entitlement: None = Depends(
         require_billable_path_company
@@ -70,7 +70,7 @@ async def get_company_profile(
     company_id: UUID,
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(
-        require_path_permission("settings")
+        require_path_permission("business_settings_manage")
     ),
     _entitlement: None = Depends(
         require_billable_path_company
@@ -90,7 +90,7 @@ async def update_company_profile(
     data: CompanyProfileUpdate,
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(
-        require_path_permission("settings")
+        require_path_permission("business_settings_manage")
     ),
     _entitlement: None = Depends(
         require_billable_path_company
@@ -110,7 +110,7 @@ async def list_shop_settings(
     company_id: UUID,
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(
-        require_path_permission("settings")
+        require_path_permission("business_settings_manage")
     ),
     _entitlement: None = Depends(
         require_billable_path_company
@@ -129,7 +129,7 @@ async def update_shop_settings(
     data: ShopSettingsUpdate,
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(
-        require_path_permission("settings")
+        require_path_permission("branches_manage")
     ),
 ):
     return await BusinessSettingsService(db).update_shop(
@@ -147,7 +147,7 @@ async def get_receipt_settings(
     company_id: UUID,
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(
-        require_path_permission("settings")
+        require_path_permission("business_settings_manage")
     ),
 ):
     return await BusinessSettingsService(db).get_receipt_settings(
@@ -164,7 +164,7 @@ async def update_receipt_settings(
     data: ReceiptSettingsUpdate,
     db: AsyncSession = Depends(get_db),
     _actor: AuthActor = Depends(
-        require_path_permission("settings")
+        require_path_permission("business_settings_manage")
     ),
 ):
     return await BusinessSettingsService(db).update_receipt_settings(

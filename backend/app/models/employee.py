@@ -55,6 +55,13 @@ class Employee(Base, BaseModel):
         nullable=False,
     )
 
+    role_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("employee_roles.id", ondelete="SET NULL"), nullable=True
+    )
+    role_overrides: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+
+    device_restricted: Mapped[bool] = mapped_column(default=False, nullable=False)
+
     permissions: Mapped[dict] = mapped_column(
         JSONB,
         default=dict,

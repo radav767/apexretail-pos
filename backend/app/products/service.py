@@ -130,7 +130,7 @@ class ProductService:
             "message": "Category deleted",
         }
 
-    async def create_product(self, data: ProductCreate):
+    async def create_product(self, data: ProductCreate, actor=None):
         values = data.model_dump()
         branch_id = values.pop("branch_id", None)
         opening_quantity = values.pop("stock_qty")
@@ -191,11 +191,20 @@ class ProductService:
 
         product = Product(
             **values,
+            id=uuid.uuid4(),
             create_request_key=create_request_key,
             stock_qty=0,
             active=True,
             deleted=False,
         )
+        if hasattr(self.repo, "db") and hasattr(self.repo.db, "add"):
+            self.repo.db.add(AuditEvent(
+                company_id=data.company_id,
+                actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+                actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+                action="product_created",
+                details={"product_id": str(product.id), "name": product.name, "sku": product.sku},
+            ))
 
         try:
             return await self.repo.create_product(
@@ -263,6 +272,7 @@ class ProductService:
         company_id: UUID,
         product_id: UUID,
         data: ProductUpdate,
+        actor=None,
     ):
         product = await self.repo.get_product(company_id, product_id)
 
@@ -318,6 +328,15 @@ class ProductService:
                 resulting_sku,
                 resulting_barcode,
             )
+
+        if hasattr(self.repo, "db") and hasattr(self.repo.db, "add"):
+            self.repo.db.add(AuditEvent(
+                company_id=company_id,
+                actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
+                actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
+                action="product_updated",
+                details={"product_id": str(product.id), "changed_fields": sorted(changes)},
+            ))
 
         try:
             return await self.repo.update_product(product, changes)
@@ -394,7 +413,8 @@ class ProductService:
             )
 
         before = {"active": bool(product.active), "deleted": bool(product.deleted), "archived_at": str(product.archived_at) if product.archived_at else None}
-        self.repo.db.add(AuditEvent(company_id=company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, action="product_archive", reason="Product archived", details={"record_id": str(product.id), "before": before, "after": {"active": False, "deleted": False}}))
+        if hasattr(self.repo, "db") and hasattr(self.repo.db, "add"):
+            self.repo.db.add(AuditEvent(company_id=company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, action="product_archive", reason="Product archived", details={"record_id": str(product.id), "before": before, "after": {"active": False, "deleted": False}}))
         await self.repo.delete_product(product)
 
         return {

@@ -244,10 +244,13 @@ class SalesRepository:
         self,
         company_id,
         limit: int = 100,
+        branch_id=None,
     ):
+        statement = select(Sale).where(Sale.company_id == company_id)
+        if branch_id is not None:
+            statement = statement.where(Sale.branch_id == branch_id)
         result = await self.db.execute(
-            select(Sale)
-            .where(Sale.company_id == company_id)
+            statement
             .order_by(Sale.created_at.desc())
             .limit(limit)
         )

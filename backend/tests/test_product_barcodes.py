@@ -179,6 +179,9 @@ class ProductBarcodePostgresTest(unittest.IsolatedAsyncioTestCase):
         )
         self.company_one = uuid4()
         self.company_two = uuid4()
+        async with self.engine.begin() as connection:
+            for company_id in (self.company_one, self.company_two):
+                await connection.execute(text("INSERT INTO companies (id,name,owner_email,business_type,active,deleted) VALUES (:id,'Barcode fixture',:email,'Retail',true,false)"), {"id": company_id, "email": f"{company_id}@example.test"})
 
     async def asyncTearDown(self):
         async with self.engine.begin() as connection:
@@ -186,6 +189,7 @@ class ProductBarcodePostgresTest(unittest.IsolatedAsyncioTestCase):
                 text("DELETE FROM products WHERE company_id IN (:one, :two)"),
                 {"one": self.company_one, "two": self.company_two},
             )
+            await connection.execute(text("DELETE FROM companies WHERE id IN (:one,:two)"), {"one": self.company_one, "two": self.company_two})
         await self.engine.dispose()
 
     async def insert(self, company_id, barcode):

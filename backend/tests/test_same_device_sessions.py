@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from app.auth.security import hash_session_token
 from app.employees.schema import PinLoginRequest
 from app.employees.service import EmployeeService
+from app.models import AuditEvent
 
 
 class Result:
@@ -107,7 +108,8 @@ class SameDeviceSessionTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["access_token"], "session-token")
         self.assertEqual(result["device_id"], device.id)
         self.assertGreater(active.expires_at, datetime.now(timezone.utc))
-        db.add.assert_not_called()
+        self.assertEqual(db.add.call_count, 1)
+        self.assertIsInstance(db.add.call_args.args[0], AuditEvent)
         db.commit.assert_awaited_once()
 
     async def test_expired_same_device_authentication_is_rotated_without_migration(self):
@@ -120,7 +122,8 @@ class SameDeviceSessionTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(result["access_token"], "expired-token")
         self.assertEqual(expired.token_hash, hash_session_token(result["access_token"]))
         self.assertGreater(expired.expires_at, datetime.now(timezone.utc))
-        db.add.assert_not_called()
+        self.assertEqual(db.add.call_count, 1)
+        self.assertIsInstance(db.add.call_args.args[0], AuditEvent)
 
     async def test_different_browser_identity_requires_existing_takeover_workflow(self):
         service, db, employee, selected_device, _active = self.fixture(existing_kind="other")
@@ -167,7 +170,8 @@ class SameDeviceSessionTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(str(source.device_key).startswith("released-"))
         self.assertIsNotNone(active.revoked_at)
         self.assertEqual(active.revoke_reason, "takeover")
-        self.assertEqual(db.add.call_count, 3)
+        self.assertEqual(db.add.call_count, 4)
+        self.assertIsInstance(db.add.call_args_list[-1].args[0], AuditEvent)
         db.flush.assert_awaited_once()
         db.commit.assert_awaited_once()
 

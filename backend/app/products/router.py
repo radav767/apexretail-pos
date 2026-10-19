@@ -39,6 +39,8 @@ from app.products.schema import (
 from app.products.service import ProductService
 from app.products.media import store,path_for
 from app.products.import_preview import preview
+from app.employees.permissions import has_permission
+from app.financial_access import enforce_actor_branch
 
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -48,7 +50,7 @@ def get_service(db: AsyncSession = Depends(get_db)):
     return ProductService(ProductRepository(db))
 
 @router.post("/images/{company_id}/{product_id}")
-async def upload_image(company_id:UUID,product_id:UUID,image:UploadFile=File(...),db:AsyncSession=Depends(get_db),_actor:AuthActor=Depends(require_path_permission("manage_products")),_entitlement:None=Depends(require_billable_path_company)):
+async def upload_image(company_id:UUID,product_id:UUID,image:UploadFile=File(...),db:AsyncSession=Depends(get_db),_actor:AuthActor=Depends(require_path_permission("products_edit")),_entitlement:None=Depends(require_billable_path_company)):
     return await store(ProductRepository(db),company_id,product_id,image)
 @router.get("/images/{company_id}/{media_id}")
 async def read_image(company_id:UUID,media_id:UUID,db:AsyncSession=Depends(get_db),actor:AuthActor=Depends(get_auth_actor)):
@@ -71,14 +73,16 @@ def ensure_catalog_access(actor: AuthActor, company_id: UUID) -> None:
 
 
 def can_view_product_cost(actor: AuthActor) -> bool:
-    if actor.actor_type == "user" or actor.role in {"owner", "manager", "administrator"}:
+    if actor.actor_type == "user" or actor.role in {"owner", "administrator"}:
         return True
     permissions = actor.permissions or {}
-    return bool(
-        permissions.get("manage_products")
-        or permissions.get("manage_inventory")
-        or permissions.get("inventory_valuation")
-    )
+    return has_permission(permissions, "product_costs_view")
+
+
+def product_response(product, actor):
+    if can_view_product_cost(actor):
+        return product
+    return ProductOut.model_validate(product).model_copy(update={"cost_price": None})
 
 
 @router.get(
@@ -113,7 +117,7 @@ async def create_category(
     data: CategoryCreate,
     service: ProductService = Depends(get_service),
     _actor: AuthActor = Depends(
-        require_body_permission("manage_products")
+        require_body_permission("categories_manage")
     ),
     _entitlement: None = Depends(
         require_billable_body_company
@@ -145,7 +149,7 @@ async def update_category(
     data: CategoryUpdate,
     service: ProductService = Depends(get_service),
     _actor: AuthActor = Depends(
-        require_path_permission("manage_products")
+        require_path_permission("categories_manage")
     ),
     _entitlement: None = Depends(
         require_billable_path_company
@@ -164,7 +168,7 @@ async def delete_category(
     category_id: UUID,
     service: ProductService = Depends(get_service),
     _actor: AuthActor = Depends(
-        require_path_permission("manage_products")
+        require_path_permission("categories_manage")
     ),
     _entitlement: None = Depends(
         require_billable_path_company
@@ -178,7 +182,7 @@ async def create_product(
     data: ProductCreate,
     service: ProductService = Depends(get_service),
     actor: AuthActor = Depends(
-        require_body_permission("manage_products")
+        require_body_permission("products_add")
     ),
     _entitlement: None = Depends(require_billable_body_company),
 ):
@@ -189,7 +193,11 @@ async def create_product(
         and actor.employee.branch_id != data.branch_id
     ):
         raise HTTPException(403, "Branch access denied")
-    return await service.create_product(data)
+    if isinstance(service, ProductService):
+        product = await service.create_product(data, actor=actor)
+    else:
+        product = await service.create_product(data)
+    return product_response(product, actor)
 
 
 @router.get("/components/{company_id}/{product_id}", response_model=list[ProductComponentOut])
@@ -200,7 +208,10 @@ async def list_product_components(
     actor: AuthActor = Depends(get_auth_actor),
 ):
     ensure_catalog_access(actor, company_id)
-    return await service.list_components(company_id, product_id)
+    rows = await service.list_components(company_id, product_id)
+    if not can_view_product_cost(actor):
+        rows = [{**row, "component_cost": None, "total_cost": None} for row in rows]
+    return rows
 
 
 @router.put("/components/{company_id}/{product_id}", response_model=list[ProductComponentOut])
@@ -209,10 +220,13 @@ async def replace_product_components(
     product_id: UUID,
     data: list[ProductComponentWrite],
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("composites_manage")),
     _entitlement: None = Depends(require_billable_path_company),
 ):
-    return await service.replace_components(company_id, product_id, data)
+    rows = await service.replace_components(company_id, product_id, data)
+    if not can_view_product_cost(_actor):
+        rows = [{**row, "component_cost": None, "total_cost": None} for row in rows]
+    return rows
 
 
 @router.get("/variants/{company_id}", response_model=list[ProductVariantOut])
@@ -224,7 +238,13 @@ async def list_product_variants(
     actor: AuthActor = Depends(get_auth_actor),
 ):
     ensure_catalog_access(actor, company_id)
-    return await service.list_variants(company_id, product_id, branch_id)
+    if actor.actor_type == "employee" and actor.role not in {"owner", "administrator"}:
+        branch_id = branch_id or actor.employee.branch_id
+        enforce_actor_branch(actor, branch_id)
+    rows = await service.list_variants(company_id, product_id, branch_id)
+    if not can_view_product_cost(actor):
+        rows = [{**row, "cost_price": None} for row in rows]
+    return rows
 
 
 @router.post("/variants/{company_id}/{product_id}", response_model=ProductVariantOut)
@@ -233,10 +253,16 @@ async def create_product_variant(
     product_id: UUID,
     data: ProductVariantCreate,
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("variants_manage")),
     _entitlement: None = Depends(require_billable_path_company),
 ):
-    return await service.create_variant(company_id, product_id, data)
+    if _actor.actor_type == "employee":
+        data.branch_id = data.branch_id or _actor.employee.branch_id
+        enforce_actor_branch(_actor, data.branch_id)
+    result = await service.create_variant(company_id, product_id, data)
+    if not can_view_product_cost(_actor):
+        result = {**result, "cost_price": None}
+    return result
 
 
 @router.patch("/variants/{company_id}/item/{variant_id}", response_model=ProductVariantOut)
@@ -245,10 +271,15 @@ async def update_product_variant(
     variant_id: UUID,
     data: ProductVariantUpdate,
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("variants_manage")),
     _entitlement: None = Depends(require_billable_path_company),
 ):
-    return await service.update_variant(company_id, variant_id, data)
+    if _actor.actor_type == "employee" and data.branch_id is not None:
+        enforce_actor_branch(_actor, data.branch_id)
+    result = await service.update_variant(company_id, variant_id, data)
+    if not can_view_product_cost(_actor):
+        result = {**result, "cost_price": None}
+    return result
 
 
 @router.delete("/variants/{company_id}/item/{variant_id}")
@@ -256,7 +287,7 @@ async def delete_product_variant(
     company_id: UUID,
     variant_id: UUID,
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("variants_manage")),
     _entitlement: None = Depends(require_billable_path_company),
 ):
     return await service.delete_variant(company_id, variant_id)
@@ -279,7 +310,7 @@ async def create_product_price_level(
     product_id: UUID,
     data: ProductPriceLevelCreate,
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("products_edit")),
     _entitlement: None = Depends(require_billable_path_company),
 ):
     return await service.create_price_level(company_id, product_id, data)
@@ -291,7 +322,7 @@ async def update_product_price_level(
     price_level_id: UUID,
     data: ProductPriceLevelUpdate,
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("products_edit")),
     _entitlement: None = Depends(require_billable_path_company),
 ):
     return await service.update_price_level(company_id, price_level_id, data)
@@ -302,7 +333,7 @@ async def delete_product_price_level(
     company_id: UUID,
     price_level_id: UUID,
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("products_edit")),
     _entitlement: None = Depends(require_billable_path_company),
 ):
     return await service.delete_price_level(company_id, price_level_id)
@@ -312,10 +343,17 @@ async def delete_product_price_level(
 async def import_products(
     data: ProductImportRequest,
     service: ProductService = Depends(get_service),
-    actor: AuthActor = Depends(require_body_permission("manage_products")),
+    actor: AuthActor = Depends(require_body_permission("products_add")),
     _entitlement: None = Depends(require_billable_body_company),
 ):
-    return await service.import_products(data, actor=actor)
+    if actor.actor_type == "employee":
+        data.branch_id = data.branch_id or actor.employee.branch_id
+        enforce_actor_branch(actor, data.branch_id)
+        if any(row.variant_name for row in data.rows) and not has_permission(actor.permissions, "variants_manage"):
+            raise HTTPException(403, "Variant management permission denied")
+        if any(row.category_name for row in data.rows) and not has_permission(actor.permissions, "categories_manage"):
+            raise HTTPException(403, "Category management permission denied")
+    return [product_response(product, actor) for product in await service.import_products(data, actor=actor)]
 
 @router.post("/import/preview/{company_id}")
 async def preview_import(company_id:UUID,file:UploadFile=File(...),_actor:AuthActor=Depends(require_path_permission("manage_products")),_entitlement:None=Depends(require_billable_path_company)):
@@ -326,7 +364,7 @@ async def preview_import(company_id:UUID,file:UploadFile=File(...),_actor:AuthAc
 async def export_products(
     company_id: UUID,
     service: ProductService = Depends(get_service),
-    _actor: AuthActor = Depends(require_path_permission("manage_products")),
+    _actor: AuthActor = Depends(require_path_permission("product_costs_view")),
 ):
     products = await service.list_products(company_id, include_cost=True)
     output = io.StringIO()
@@ -397,14 +435,16 @@ async def update_product(
     data: ProductUpdate,
     service: ProductService = Depends(get_service),
     _actor: AuthActor = Depends(
-        require_path_permission("manage_products")
+        require_path_permission("products_edit")
     ),
 ):
-    return await service.update_product(
+    product = await service.update_product(
         company_id,
         product_id,
         data,
+        actor=_actor,
     )
+    return product_response(product, _actor)
 
 
 @router.delete("/{company_id}/{product_id}")
@@ -413,11 +453,11 @@ async def delete_product(
     product_id: UUID,
     service: ProductService = Depends(get_service),
     _actor: AuthActor = Depends(
-        require_path_permission("manage_products")
+        require_path_permission("products_delete")
     ),
 ):
     return await service.delete_product(company_id, product_id, actor=_actor)
 
 @router.post("/{company_id}/{product_id}/archive", response_model=ProductOut)
-async def archive_product(company_id: UUID, product_id: UUID, service: ProductService = Depends(get_service), _actor: AuthActor = Depends(require_path_permission("manage_products"))):
+async def archive_product(company_id: UUID, product_id: UUID, service: ProductService = Depends(get_service), _actor: AuthActor = Depends(require_path_permission("products_delete"))):
     return await service.archive_product(company_id, product_id, actor=_actor)
