@@ -38,6 +38,7 @@ class PrintJob(Base):
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False, index=True)
     station_id = Column(UUID(as_uuid=True), ForeignKey("printer_stations.id"), nullable=False, index=True)
     sale_id = Column(UUID(as_uuid=True), ForeignKey("sales.id"), nullable=True)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("commerce_orders.id", ondelete="RESTRICT"), nullable=True)
     requested_employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=True)
     request_key = Column(String(160), nullable=False)
     kind = Column(String(16), nullable=False)

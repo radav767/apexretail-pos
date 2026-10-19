@@ -82,8 +82,8 @@ class EmployeeService:
             EmployeeRole.deleted == False,
         ))).scalar_one_or_none()
         if role is None:
-            return normalize_permissions("kitchen_staff", {})
-        return normalize_permissions("kitchen_staff", {
+            return normalize_permissions("denied", {})
+        return normalize_permissions("denied", {
             **role.permissions, **(employee.role_overrides or {}),
         })
 

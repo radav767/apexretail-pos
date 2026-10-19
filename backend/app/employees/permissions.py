@@ -4,6 +4,20 @@ from collections.abc import Mapping
 
 
 PERMISSION_GROUPS: dict[str, dict[str, str]] = {
+    "business_operations": {
+        "restaurant_manage": "Manage restaurant tables and bills",
+        "orders_manage": "Create and edit own open orders",
+        "orders_send": "Send kitchen and bar tickets",
+        "orders_settle": "Settle restaurant bills",
+        "kitchen_view": "View kitchen tickets",
+        "kitchen_update": "Update kitchen ticket status",
+        "bar_view": "View bar tickets",
+        "bar_update": "Update bar ticket status",
+        "hospitality_manage": "Manage rooms and guest accounts",
+        "batches_manage": "Manage product batches",
+        "batches_view": "View batch stock and expiry",
+        "quotations_manage": "Manage quotations",
+    },
     "sales": {
         "sales_process": "Process sales",
         "sales_discount": "Apply discounts",
@@ -108,6 +122,7 @@ ROLE_TEMPLATES: dict[str, dict[str, bool]] = {
     "cashier": _permissions(
         "sales_process", "sales_receipt_reprint", "sales_history_view",
         "shifts_open", "shifts_close", "cash_movements_manage", "z_reports_view",
+        "orders_settle",
     ),
     "inventory_clerk": _permissions(
         "inventory_receive", "inventory_adjust", "inventory_transfer",
@@ -120,8 +135,11 @@ ROLE_TEMPLATES: dict[str, dict[str, bool]] = {
         "expenses_manage", "z_reports_view", "inventory_valuation_view",
         "audit_logs_view",
     ),
-    "waiter": _permissions("sales_process", "sales_history_view"),
-    "kitchen_staff": _permissions(),
+    "waiter": _permissions("sales_process", "sales_history_view", "orders_manage", "orders_send"),
+    "kitchen_staff": _permissions("kitchen_view", "kitchen_update"),
+    "bartender": _permissions("orders_manage", "orders_send", "bar_view", "bar_update"),
+    "restaurant_manager": _permissions("restaurant_manage", "orders_manage", "orders_send", "orders_settle", "kitchen_view", "kitchen_update", "bar_view", "bar_update", "sales_process", "sales_history_view", "sales_receipt_reprint", "sales_discount", "sales_refund", "shifts_open", "shifts_close", "printers_manage", "approve_restricted_actions", "revenue_view"),
+    "hotel_staff": _permissions("hospitality_manage", "orders_manage", "orders_send", "customers_view"),
 }
 
 # Legacy role names continue to have their previous meaning.
@@ -129,7 +147,7 @@ ROLE_ALIASES = {"manager": "branch_manager"}
 
 
 def role_template(role: str) -> dict[str, bool]:
-    return dict(ROLE_TEMPLATES.get(ROLE_ALIASES.get(role, role), ROLE_TEMPLATES["kitchen_staff"]))
+    return dict(ROLE_TEMPLATES.get(ROLE_ALIASES.get(role, role), _permissions()))
 
 
 def normalize_permissions(role: str, supplied: Mapping[str, bool] | None) -> dict[str, bool]:
@@ -153,11 +171,11 @@ def normalize_permissions(role: str, supplied: Mapping[str, bool] | None) -> dic
         result["expenses_create"] = bool(supplied["expenses_manage"])
     # Existing non-Phase-7B domains retain established role defaults.
     elevated = ROLE_ALIASES.get(role, role) in {"owner", "administrator", "branch_manager"}
-    result.setdefault("customers_view", role != "kitchen_staff")
+    result.setdefault("customers_view", role not in {"kitchen_staff", "denied"})
     result.setdefault("customers_manage", elevated)
     result.setdefault("credit_sales", elevated)
     result.setdefault("credit_settlements", elevated)
-    result.setdefault("expenses_create", role != "kitchen_staff")
+    result.setdefault("expenses_create", role not in {"kitchen_staff", "denied"})
     result.setdefault("expense_reports", elevated)
     result.setdefault("currencies_manage", elevated)
     return result

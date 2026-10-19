@@ -16,6 +16,7 @@ import ManagerApprovalDialog, { type ManagerApprovalRequest } from "./components
 import { PosFeatureBack, PosFeatureHub, type PosFeatureItem } from "./components/PosFeatureHub";
 import ProductToolsPage, { type ProductToolFeature } from "./ProductToolsPage";
 import PrinterPanel from "./printing/PrinterPanel";
+import BusinessPanel from "./business/BusinessPanel";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -32,6 +33,7 @@ import type {
 import "./pos-modules.css";
 
 export type PosModuleName =
+  | "Business Operations"
   | "Sales"
   | "Sales Management"
   | "Products"
@@ -1428,6 +1430,8 @@ export default function PosModulePage({
         {notice && !error && (
           <div className="pos-module-notice">{notice}</div>
         )}
+
+        {!loading && activeModule === "Business Operations" && <BusinessPanel companyId={companyId} branchId={branchId} onPrintReceipt={onReprintSale} onProductsChanged={onProductsChanged} />}
 
         {!loading && activeModule === "Sales Management" && activeFeature === "home" && (
           <PosFeatureHub

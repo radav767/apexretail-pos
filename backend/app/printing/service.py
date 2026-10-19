@@ -144,6 +144,10 @@ class PrintingService:
                     raise HTTPException(403, "Original printing belongs to the sale cashier")
             if data.kind == "kot" and (station.purpose == "receipt" or sale.status != "completed" or sale.original_sale_id):
                 raise HTTPException(400, "Kitchen tickets require a completed original sale and kitchen/bar station")
+            if data.kind == "kot":
+                from app.models import CommerceOrder
+                if (await self.db.execute(select(CommerceOrder.id).where(CommerceOrder.sale_id == sale.id))).first():
+                    raise HTTPException(409, "Use the original open-order kitchen tickets; payment must not send preparation again")
             if data.kind == "receipt" and station.purpose != "receipt":
                 raise HTTPException(400, "Use a receipt station")
             items = (await self.db.execute(select(SaleItem).where(SaleItem.sale_id == sale.id).order_by(SaleItem.id))).scalars().all()
@@ -194,7 +198,8 @@ class PrintingService:
         manager = self.actor.actor_type != "employee" or has_permission(self.actor.permissions or {}, "printers_manage")
         await self.station(station_id, management=manager)
         if not manager:
-            permit(self.actor, "sales_process")
+            if not has_permission(self.actor.permissions or {}, "orders_send"):
+                permit(self.actor, "sales_process")
         q = select(PrintJob).where(PrintJob.station_id == station_id)
         if not manager:
             q = q.where(PrintJob.requested_employee_id == self.actor.employee.id)
@@ -208,7 +213,7 @@ class PrintingService:
         await self.station(job.station_id)
         if self.actor.employee and not has_permission(self.actor.permissions or {}, "printers_manage") and job.requested_employee_id != self.actor.employee.id:
             raise HTTPException(403, "Print job belongs to another employee")
-        permit(self.actor, "sales_process" if job.kind != "test" else "printers_manage")
+        permit(self.actor, "orders_send" if job.order_id else "sales_process" if job.kind != "test" else "printers_manage")
         if digest(job.payload) != job.payload_hash:
             raise HTTPException(409, "Print snapshot integrity failure")
         return job

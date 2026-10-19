@@ -24,8 +24,10 @@ export const safePrintText = (value: unknown) => Array.from(String(value ?? ""),
 }).join("");
 export function ticketLines(payload: Record<string, unknown>) {
   const items = (payload.items || []) as Array<Record<string, unknown>>;
+  const previous = payload.previous_location as { table?: string; waiter?: string } | undefined;
   return [payload.reprint ? "DUPLICATE" : "", payload.title,
     `Order ${payload.order_number || "TEST"}`, `Table ${payload.table || "—"}`,
+    previous ? `Previous: ${previous.table || "—"} / ${previous.waiter || "—"}` : "",
     `Waiter ${payload.waiter || "—"}`, payload.created_at,
     ...items.flatMap(i => [`${i.quantity} ${i.selling_unit || ""}  ${i.name}`, i.notes || ""]),
     payload.notes || "", "NOT A PAYMENT RECEIPT"].filter(Boolean).map(safePrintText);
@@ -128,6 +130,7 @@ export async function flushPrintIntents() {
         } catch (error: unknown) {
           const status = (error as { response?: { status?: number; data?: { detail?: string } } }).response;
           if (status?.status === 409 && status.data?.detail === "No items routed to this station") continue;
+          if (status?.status === 409 && status.data?.detail === "Use the original open-order kitchen tickets; payment must not send preparation again") continue;
           throw error;
         }
       }

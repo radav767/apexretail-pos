@@ -52,6 +52,8 @@ class TransferRepository:
             self.db.add_all(balances)
             self.db.add_all(movements)
 
+            from app.business_operations.batches import allocate_batch_movements
+            await allocate_batch_movements(self.db, movements)
             await self.db.commit()
 
             for movement in movements:

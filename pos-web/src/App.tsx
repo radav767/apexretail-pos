@@ -1,4 +1,5 @@
 import { applyDiscounts } from "./discounts";
+import { canProcessSales, canAccessOperations } from "./business/access";
 import { flushPrintIntents, scheduleSalePrint } from "./printing/queue";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
@@ -297,7 +298,7 @@ function roundMoneyValue(value: string | number): number {
 
 function initialPosModule(): PosModuleName {
   const requested = new URLSearchParams(window.location.search).get("module");
-  return (["Sales", "Sales Management", "Customers", "Credit Settlements", "Expenses", "Shift Management", "Products", "Inventory", "Reports", "Settings"] as PosModuleName[])
+  return (["Sales", "Sales Management", "Customers", "Credit Settlements", "Expenses", "Shift Management", "Products", "Inventory", "Reports", "Settings", "Business Operations"] as PosModuleName[])
     .includes(requested as PosModuleName) ? requested as PosModuleName : "Sales";
 }
 
@@ -420,6 +421,13 @@ const [loggedIn, setLoggedIn] = useState(
 
   const [cashier, setCashier] =
     useState<CashierSession | null>(null);
+  useEffect(() => {
+    if (cashier && !canProcessSales(cashier.permissions) && activePosModule === "Sales") {
+      setActivePosModule("Business Operations");
+      const url = new URL(location.href); url.searchParams.set("module", "Business Operations");
+      history.replaceState(null, "", url);
+    }
+  }, [cashier, activePosModule]);
   const [currentShift, setCurrentShift] = useState<(ShiftRecord & { offline_shift_token?: string | null }) | null>(null);
   const [shiftLoading, setShiftLoading] = useState(false);
   const [shiftPromptDismissed, setShiftPromptDismissed] = useState(false);
@@ -1983,7 +1991,7 @@ const [loggedIn, setLoggedIn] = useState(
           );
         }
 
-        if (result.permissions?.sales === false) {
+        if (!canProcessSales(result.permissions) && !canAccessOperations(result.permissions)) {
           setPinMessage(
             "This employee does not have permission to make sales",
           );
@@ -2460,6 +2468,8 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
+    if (!canProcessSales(cashier.permissions)) { setMessage("Sales permission is required"); return; }
+
     if (Number(discounted.discount_amount) > 0 && !cashier.permissions?.discounts && !cashier.permissions?.sales_discount && !discountAuthorizationToken) {
       approvalClientSaleIdRef.current ||= (paymentMethod === "credit" ? creditClientSaleIdRef.current : null) || createClientSaleId();
       setManagerApproval({
@@ -2905,6 +2915,7 @@ const [loggedIn, setLoggedIn] = useState(
     moduleName: PosModuleName,
     feature?: string,
   ) {
+    if (moduleName === "Sales" && cashier && !canProcessSales(cashier.permissions)) moduleName = "Business Operations";
     setActivePosModule(moduleName);
     const url = new URL(window.location.href);
     url.searchParams.set("module", moduleName);
@@ -3368,12 +3379,12 @@ const [loggedIn, setLoggedIn] = useState(
                       setBusinessType(event.target.value)
                     }
                   >
-                    <option value="Retail">Retail</option>
+                    <option value="Retail">Retail / Supermarket</option>
                     <option value="Restaurant">
-                      Restaurant
+                      Restaurant / Café
                     </option>
                     <option value="Wholesale">
-                      Wholesale
+                      Hardware / Wholesale
                     </option>
                     <option value="Pharmacy">
                       Pharmacy
@@ -3382,6 +3393,9 @@ const [loggedIn, setLoggedIn] = useState(
                       Services
                     </option>
                     <option value="Other">Other</option>
+                    <option value="Bar">Bar / Nightclub</option>
+                    <option value="Hospitality">Hotel / Hospitality</option>
+                    <option value="General Business">General Business</option>
                   </select>
                 </label>
 
@@ -3648,7 +3662,7 @@ const [loggedIn, setLoggedIn] = useState(
     );
   }
 
-  if (cashier && activePosModule === "Sales" && !shiftPromptDismissed && (shiftLoading || !currentShift)) {
+  if (cashier && activePosModule === "Sales" && canProcessSales(cashier.permissions) && !shiftPromptDismissed && (shiftLoading || !currentShift)) {
     if (shiftLoading) {
       return <main className="pos-shift-page"><section className="pos-shift-panel"><p>Checking the current cashier shift…</p></section></main>;
     }
@@ -3681,6 +3695,7 @@ const [loggedIn, setLoggedIn] = useState(
   return (
     <div style={appShell} className={`pos-sales-shell ${menuOpen ? "pos-navigation-open" : ""}`}>
       <PosNavigation
+        canSell={canProcessSales(cashier?.permissions)}
         open={menuOpen}
         activeModule={activePosModule}
         cashierName={cashier?.name || "Cashier"}

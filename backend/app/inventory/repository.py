@@ -59,6 +59,8 @@ class InventoryRepository:
             self.db.add(balance)
             self.db.add(movement)
 
+            from app.business_operations.batches import allocate_batch_movements
+            await allocate_batch_movements(self.db, [movement])
             await self.db.commit()
             await self.db.refresh(movement)
 
@@ -78,6 +80,8 @@ class InventoryRepository:
             self.db.add_all(balances)
             self.db.add_all(movements)
 
+            from app.business_operations.batches import allocate_batch_movements
+            await allocate_batch_movements(self.db, movements)
             await self.db.commit()
 
             for movement in movements:

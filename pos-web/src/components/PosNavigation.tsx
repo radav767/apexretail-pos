@@ -32,6 +32,7 @@ type NavigationGroup = {
 };
 
 type Props = {
+  canSell?: boolean;
   open: boolean;
   activeModule: PosModuleName;
   cashierName: string;
@@ -48,6 +49,7 @@ type Props = {
 };
 
 export default function PosNavigation({
+  canSell = true,
   open,
   activeModule,
   cashierName,
@@ -77,7 +79,8 @@ export default function PosNavigation({
   }, [activeModule]);
 
   const groups: NavigationGroup[] = [
-    { label: "Sales", icon: <ShoppingCartIcon />, module: "Sales" },
+    { label: "Sales", icon: <ShoppingCartIcon />, module: "Sales", visible: canSell },
+    { label: "Business Operations", icon: <BuildingStorefrontIcon />, module: "Business Operations" },
     {
       label: "Sales Management",
       icon: <ClipboardDocumentListIcon />,

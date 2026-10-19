@@ -21,8 +21,10 @@ import CreditSettlementsPage from "./pages/CreditSettlementsPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import ShiftReportsPage from "./pages/ShiftReportsPage";
 import { AppIcon } from "./components/AppIcon";
+import BusinessOperations from "../../pos-web/src/business/BusinessOperations";
 
 type BackofficePage =
+  | "business-operations"
   | "dashboard"
   | "sales"
   | "products"
@@ -38,7 +40,7 @@ type BackofficePage =
 
 function initialBackofficePage(): BackofficePage {
   const requested = new URLSearchParams(window.location.search).get("page");
-  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "shift-reports", "settings"] as BackofficePage[])
+  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "shift-reports", "settings", "business-operations"] as BackofficePage[])
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
@@ -574,6 +576,7 @@ function App() {
           >
             <AppIcon name="settings" /> <span>Settings</span>
           </button>
+          <button className={page === "business-operations" ? "active" : ""} onClick={() => navigateTo("business-operations")}><AppIcon name="dashboard"/><span>Business Operations</span></button>
           <button
             className="logout-nav-button"
             type="button"
@@ -720,6 +723,8 @@ function App() {
             onDataChanged={() => void loadBackofficeData(companyId)}
           />
         )}
+
+        {page === "business-operations" && <BusinessOperations companyId={companyId} api={api} />}
 
         {page === "devices" && (
           <ShopsDevicesPage companyId={companyId} />

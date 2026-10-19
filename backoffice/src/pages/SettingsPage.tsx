@@ -794,6 +794,7 @@ export default function SettingsPage({
               Business type
               <input
                 value={companyForm.business_type}
+                list="apexretail-business-profiles"
                 onChange={(event) =>
                   updateCompanyField(
                     "business_type",
@@ -801,6 +802,7 @@ export default function SettingsPage({
                   )
                 }
               />
+              <datalist id="apexretail-business-profiles">{["Retail / Supermarket", "Restaurant / Café", "Bar / Nightclub", "Hotel / Hospitality", "Pharmacy", "Hardware / Wholesale", "General Business"].map(value => <option key={value} value={value}/>)}</datalist>
             </label>
 
             <label>

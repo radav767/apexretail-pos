@@ -36,7 +36,7 @@ class EmployeeAdminService:
         } for name, permissions in ROLE_TEMPLATES.items()]
         custom = [{
             "id": row.id, "company_id": row.company_id, "name": row.name,
-            "description": row.description, "permissions": normalize_permissions("kitchen_staff", row.permissions),
+            "description": row.description, "permissions": normalize_permissions("denied", row.permissions),
             "active": row.active, "system": False,
         } for row in rows]
         return builtins + custom
@@ -56,7 +56,7 @@ class EmployeeAdminService:
         role = EmployeeRole(
             company_id=data.company_id, name=name,
             description=(data.description or "").strip() or None,
-            permissions=normalize_permissions("kitchen_staff", data.permissions),
+            permissions=normalize_permissions("denied", data.permissions),
         )
         self.db.add(role)
         await self.db.flush()
@@ -95,7 +95,7 @@ class EmployeeAdminService:
         if data.description is not None:
             role.description = data.description.strip() or None
         if data.permissions is not None:
-            role.permissions = normalize_permissions("kitchen_staff", data.permissions)
+            role.permissions = normalize_permissions("denied", data.permissions)
         if data.active is not None:
             role.active = data.active
         assigned = (await self.db.execute(select(Employee).where(
@@ -107,7 +107,7 @@ class EmployeeAdminService:
             employee.permissions = normalize_permissions(
                 "kitchen_staff",
                 {**role.permissions, **(employee.role_overrides or {})},
-            ) if role.active else normalize_permissions("kitchen_staff", {})
+            ) if role.active else normalize_permissions("denied", {})
         self.db.add(AuditEvent(
             company_id=company_id, action="role_updated",
             details={"role_id": str(role.id), "before": before, "after": {"name": role.name, "permissions": role.permissions, "active": role.active}},

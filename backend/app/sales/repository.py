@@ -21,8 +21,9 @@ from app.models.company_settings import CompanySetting
 
 
 class SalesRepository:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, commit_on_save: bool = True):
         self.db = db
+        self.commit_on_save = commit_on_save
         self.stock = BranchStockRepository(db)
 
     async def resolve_branch(
@@ -202,7 +203,12 @@ class SalesRepository:
             self.db.add_all(inventory_movements)
             self.db.add_all(sale_item_components or [])
 
-            await self.db.commit()
+            from app.business_operations.batches import allocate_batch_movements
+            await allocate_batch_movements(self.db, inventory_movements)
+            if self.commit_on_save:
+                await self.db.commit()
+            else:
+                await self.db.flush()
             await self.db.refresh(sale)
 
             return sale
@@ -233,7 +239,12 @@ class SalesRepository:
             await self.db.flush()
             self.db.add(receivable)
             self.db.add(audit_event)
-            await self.db.commit()
+            from app.business_operations.batches import allocate_batch_movements
+            await allocate_batch_movements(self.db, inventory_movements)
+            if self.commit_on_save:
+                await self.db.commit()
+            else:
+                await self.db.flush()
             await self.db.refresh(sale)
             return sale
         except Exception:
