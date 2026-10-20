@@ -41,3 +41,5 @@ from app.models.product_price_level import ProductPriceLevel
 from app.models.sale_item_component import SaleItemComponent
 from app.models.printing import PrinterStation, PrinterRoute, PrintJob
 from app.models.business_operations import BusinessProfile, DiningTable, HospitalityRoom, GuestAccount, CommerceOrder, CommerceOrderItem, KitchenTicket, ProductBatch, BatchAllocation
+from app.models.tips import TipSettings, TipEntry, TipEntitlement
+from app.models.batch_returns import BatchReturnHold, BatchReturnInspection, BatchInspectionDisposal

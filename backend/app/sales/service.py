@@ -346,6 +346,8 @@ class SalesService:
                 data.company_id,
                 item.product_id,
             )
+            if hasattr(self.repo, "validate_new_sale_product"):
+                await self.repo.validate_new_sale_product(data.company_id, product.id)
             variant=await self.repo.get_variant(data.company_id,product.id,item.variant_id) if item.variant_id and hasattr(self.repo,"get_variant") else None
             if item.variant_id and variant is None: raise HTTPException(400,"Variant is missing or inactive")
             if not item.variant_id and hasattr(self.repo, "has_active_variants") and await self.repo.has_active_variants(data.company_id, product.id):

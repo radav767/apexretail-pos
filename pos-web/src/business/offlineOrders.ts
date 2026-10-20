@@ -36,6 +36,7 @@ export class OfflineOrderOutbox {
       if (snapshot.status === "acknowledged") continue;
       try {
         const result = await send(snapshot.endpoint, snapshot.payload);
+        this.requireReceipt(result);
         this.update(snapshot.id, { status: "acknowledged", result, error: undefined });
       } catch (error) {
         const status = (error as { response?: { status?: number } }).response?.status;
@@ -45,9 +46,29 @@ export class OfflineOrderOutbox {
       }
     }
   }
+  async recover(check: (endpoint: string, payload: unknown) => Promise<unknown>): Promise<void> {
+    for (const entry of this.list()) {
+      if (entry.status === "acknowledged") continue;
+      try {
+        const result = await check(`${entry.endpoint}/recover`, entry.payload);
+        this.requireReceipt(result);
+        this.update(entry.id, { status: "acknowledged", result, error: undefined });
+      } catch (error) {
+        const status = (error as { response?: { status?: number } }).response?.status;
+        this.update(entry.id, { status: status === 404 || !status || status >= 500 ? "pending" : "review",
+          error: status === 404 ? "Not confirmed on server. Synchronize the unchanged original draft." : "Recovery not confirmed. Original command retained." });
+      }
+    }
+  }
   private update(id: string, values: Partial<OrderCommand>) {
     const entry = this.list().find(item => item.id === id);
     if (!entry || entry.status === "acknowledged") return;
     this.storage.setItem(`${this.key}:${id}`, JSON.stringify({ ...entry, ...values }));
+  }
+  private requireReceipt(result: unknown) {
+    const receipt = result as { order?: { id?: unknown }; already_synchronized?: unknown } | null;
+    if (typeof receipt?.order?.id !== "string" || typeof receipt.already_synchronized !== "boolean") {
+      throw new Error("No authoritative order acknowledgement returned");
+    }
   }
 }

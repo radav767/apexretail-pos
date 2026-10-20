@@ -1,5 +1,8 @@
 # Phase 7E integration review — 20 October 2026
 
+Historical first-pass report at `ff05b36`. The continuation and current tip,
+recovery and pharmacy-return findings are in `PHASE7E-TIPS-AND-RECOVERY.md`.
+
 Status: PARTIAL / NO-GO for production. This is an isolated development candidate,
 not completion of every Phase 7E objective. No deployment or APK build occurred.
 

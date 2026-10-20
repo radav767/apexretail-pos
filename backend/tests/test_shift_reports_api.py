@@ -241,6 +241,9 @@ class ShiftReportCashCalculationTest(unittest.IsolatedAsyncioTestCase):
         )
 
         class ReportRepo:
+            async def tip_summary(self, _shift_id):
+                return {"version": 1, "separate_from_product_revenue": True, "totals": []}
+
             async def snapshots(self, _shift_id):
                 return [usd, zar]
 
@@ -275,6 +278,8 @@ class ShiftReportCashCalculationTest(unittest.IsolatedAsyncioTestCase):
         )
 
         view = await service.view(shift)
+
+        self.assertEqual(view["tips"]["totals"], [])
 
         expected = {row["currency_code"]: row["expected_cash"] for row in view["currencies"]}
         self.assertEqual(expected, {"USD": Decimal("57.00"), "ZAR": Decimal("605.00")})

@@ -26,6 +26,7 @@ export default function OfflineDraftPanel({ company, employee, device, branch, p
       } }); setLines([]); setMessage("Draft saved on this device. Not sent to the kitchen."); reload(); } catch (e) { setMessage(String(e)); }
     }}>Save unpaid draft</button>
     <button disabled={!online || busy} onClick={() => { setBusy(true); void outbox().synchronize(send).then(reload).catch(e => setMessage(String(e))).finally(() => setBusy(false)); }}>Review & synchronize drafts</button>
+    <button disabled={!online || busy} onClick={() => { setBusy(true); void outbox().recover(send).then(reload).catch(e => setMessage(String(e))).finally(() => setBusy(false)); }}>Check server confirmation</button>
     {message && <p role="status">{message}</p>}{entries.map(entry => <article key={entry.id}><strong>{entry.status}</strong>{entry.error && <p role="alert">{entry.error}</p>}<details><summary>Original draft</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(entry.payload, null, 2)}</pre></details></article>)}
   </details>;
 }

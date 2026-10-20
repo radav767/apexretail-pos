@@ -49,6 +49,7 @@ class ShiftService:
         return session
 
     async def view(self, shift, *, detailed=False, identity=None, include_offline_token=False):
+        tips = getattr(shift, "tips_snapshot", None) if shift.status == "closed" else await self.repo.tip_summary(shift.id)
         snapshots = await self.repo.snapshots(shift.id)
         currencies = []
         for row in snapshots:
@@ -141,6 +142,7 @@ class ShiftService:
             "currencies": currencies,
             "cash_movements": movements,
             "summary": summary,
+            "tips": tips,
         }
 
     async def open(self, data, actor):
@@ -317,6 +319,7 @@ class ShiftService:
         for name in SUMMARY_FIELDS:
             value = base_summary[name]
             setattr(shift, name, value.quantize(Decimal("0.01")))
+        shift.tips_snapshot = await self.repo.tip_summary(shift.id)
         shift.status = "closed"
         shift.closed_at = datetime.now(timezone.utc)
         shift.closing_note = (data.closing_note or "").strip() or None
@@ -375,6 +378,7 @@ class ShiftService:
         for name in SUMMARY_FIELDS:
             setattr(shift, name, base_summary[name].quantize(Decimal("0.01")))
         now = datetime.now(timezone.utc)
+        shift.tips_snapshot = await self.repo.tip_summary(shift.id)
         shift.status, shift.closed_at, shift.report_generated_at = "closed", now, now
         shift.closing_note = (data.closing_note or "").strip() or None
         shift.close_idempotency_key = data.idempotency_key.strip()

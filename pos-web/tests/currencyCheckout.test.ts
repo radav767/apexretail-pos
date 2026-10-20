@@ -9,6 +9,24 @@ import {
 import type { PrinterConfig, ReceiptSnapshot } from "../src/printing/types.ts";
 import { buildEscPosPayload, buildReceiptHtml } from "../src/printing/receiptFormatter.ts";
 
+test("tip summary lines reach 58mm and 80mm HTML and ESC/POS without recalculating amounts", () => {
+  const receipt: ReceiptSnapshot = {
+    id: "shift-tip", receipt_number: "SHIFT-TIP", company_id: "synthetic-company", business_name: "Synthetic shop",
+    created_at: "2026-10-20T12:00:00Z", total_amount: "0", amount_received: "0", change_due: "0",
+    payment_method: "shift_summary", status: "informational", items: [], document_type: "shift_summary",
+    shift_summary_lines: [{ label: "Tip collect/cash", value: "5.00 USD (staff)" },
+      { label: "Tip collect", value: "99999999999999.9999 ABCDEFGH" }, { label: "collect/cash/business", value: "" }],
+  };
+  for (const paperWidth of ["58mm", "80mm"] as const) {
+    const config: PrinterConfig = { enabled: true, connectionType: "system", selectedPrinterId: "", selectedPrinterName: "",
+      paperWidth, copies: 1, autoPrint: false, cutPaper: false };
+    for (const output of [buildReceiptHtml(receipt, config), new TextDecoder().decode(buildEscPosPayload(receipt, config))]) {
+      assert.match(output, /Tip collect\/cash/); assert.match(output, /5\.00 USD/);
+      assert.match(output, /99999999999999\.9999 ABCDEFGH/); assert.match(output, /collect\/cash\/business/);
+    }
+  }
+});
+
 test("foreign conversion uses exact decimal arithmetic and configured precision", () => {
   assert.equal(convertBaseToForeign("10.00", 2, "18.5000000000", 2), "185.00");
   assert.equal(convertBaseToForeign("0.05", 2, "1.5", 2), "0.08");

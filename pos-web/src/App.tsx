@@ -1,5 +1,6 @@
 import { applyDiscounts } from "./discounts";
 import { checkoutPrice, accumulatedWeightedQuantity } from "./business/pricing";
+import TipPaymentPanel from "./business/TipPaymentPanel";
 import { canProcessSales, canAccessOperations } from "./business/access";
 import { flushPrintIntents, scheduleSalePrint } from "./printing/queue";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1368,6 +1369,10 @@ const [loggedIn, setLoggedIn] = useState(
       { label: "Opened", value: new Date(shift.opened_at).toLocaleString() },
       { label: "Closed", value: shift.closed_at ? new Date(shift.closed_at).toLocaleString() : "Still open" },
       ...(shift.summary.base_currency_code ? [{ label: `Sales (${shift.summary.base_currency_code})`, value: String(shift.summary.total_sales_base || "0.00") }] : []),
+      ...(shift.tips?.totals || []).flatMap(row => [
+        { label: `Tip ${row.kind}`, value: `${row.amount} ${row.currency}` },
+        { label: `${row.kind}/${row.method}/${row.policy}`, value: "" },
+      ]),
       ...shift.currencies.filter((currency) => currency.cash_accepted).flatMap((currency) => [
         { label: `${currency.currency_code} opening`, value: shiftMoney(currency.opening_float, currency) },
         { label: `${currency.currency_code} cash sales`, value: shiftMoney(currency.cash_sales, currency) },
@@ -4418,6 +4423,7 @@ const [loggedIn, setLoggedIn] = useState(
               )}
             </div>
 
+            {cashier?.permissions?.tips_collect && <TipPaymentPanel key={receipt.id} api={api} companyId={companyId} saleId={receipt.id}/>}
             <button style={primaryButton} onClick={printReceipt}>
               Print Receipt
             </button>

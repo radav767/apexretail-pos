@@ -15,6 +15,26 @@ from .service import BusinessService
 
 
 class OfflineOrderService(BusinessService):
+    async def recover(self, data, *, edit=False):
+        """Read-only confirmation probe; never recreates an unknown command."""
+        permit(self.actor, "orders_manage")
+        device_id = data.device_id if edit else data.order.device_id
+        employee = self.actor.employee
+        if (not employee or employee.id != data.employee_id or not employee.active or employee.deleted
+                or not self.actor.pos_session or self.actor.pos_session.device_id != device_id):
+            raise HTTPException(403, "Recover using the original employee/register")
+        device = await self.db.get(Device, device_id)
+        if not device or device.company_id != self.actor.company_id or not device.active or device.deleted or device.removed_at or device.deactivated_at:
+            raise HTTPException(403, "Original register is unavailable")
+        await self.branch(device.branch_id)
+        receipt = (await self.db.execute(select(OrderSyncReceipt).where(OrderSyncReceipt.company_id == self.actor.company_id,
+            OrderSyncReceipt.request_id == data.request_id))).scalar_one_or_none()
+        if not receipt: raise HTTPException(404, "No server acknowledgement. Original command is retained for synchronization")
+        fingerprint = digest({"action": "edit" if edit else "draft", "data": data.model_dump(mode="json")})
+        if receipt.employee_id != employee.id or receipt.device_id != device_id or receipt.payload_hash != fingerprint:
+            raise HTTPException(409, "Original command differs; retain it for review")
+        return {"order": receipt.result, "already_synchronized": True}
+
     async def commit_operation(self):
         # Persist the command receipt, order, lines and audit in ONE transaction.
         await self.db.flush()

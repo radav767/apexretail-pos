@@ -148,6 +148,7 @@ class ShiftOut(BaseModel):
     currencies: list[ShiftCurrencyOut]
     cash_movements: list[CashMovementOut] = Field(default_factory=list)
     summary: dict
+    tips: dict | None = None
 
 
 class ShiftPage(BaseModel):

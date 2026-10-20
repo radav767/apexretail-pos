@@ -10,6 +10,9 @@ from .profiles import PROFILES
 from .offline import OfflineOrderService
 from .batch_stock import BatchStockService
 from .schema import BatchStockInput
+from .tip_schema import TipConfigInput, TipInput
+from .tips import TipService
+from .returns import ReturnService, InspectionInput
 from .schema import OfflineDraftInput, OfflineEditInput
 from .schema import ProfileInput, TableInput, RoomInput, GuestInput, OrderInput, OrderItemInput, ItemUpdate, VersionInput, MoveInput, SplitInput, MergeInput, SettlementInput, BatchInput, KitchenStateInput
 
@@ -34,9 +37,54 @@ async def synchronize_edit(data: OfflineEditInput, db=Depends(get_db), actor=Dep
     return await OfflineOrderService(db, actor).synchronize(data, edit=True)
 
 
+@router.post("/offline/drafts/recover")
+async def recover_draft(data: OfflineDraftInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db, actor).recover(data)
+
+
+@router.post("/offline/edits/recover")
+async def recover_edit(data: OfflineEditInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db, actor).recover(data, edit=True)
+
+
 @router.post("/batches/stock", dependencies=[Depends(require_operational_writes)])
 async def batch_stock(data: BatchStockInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await BatchStockService(db, actor).execute(data)
+
+
+@router.get("/tips/config")
+async def tip_config(db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await TipService(db, actor).config()
+
+
+@router.get("/batches/returns")
+async def pending_returns(db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await ReturnService(db, actor).pending()
+
+
+@router.post("/batches/returns/inspect", dependencies=[Depends(require_operational_writes)])
+async def inspect_return(data: InspectionInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await ReturnService(db, actor).inspect(data)
+
+
+@router.put("/tips/config", dependencies=[Depends(require_operational_writes)])
+async def configure_tips(data: TipConfigInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await TipService(db, actor).configure(data)
+
+
+@router.get("/tips/options")
+async def tip_options(db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await TipService(db, actor).options()
+
+
+@router.post("/tips/entries", dependencies=[Depends(require_operational_writes)])
+async def tip_entry(data: TipInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await TipService(db, actor).record(data)
+
+
+@router.get("/tips/reports")
+async def tip_report(start: date, end: date, branch_id: UUID | None = None, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await TipService(db, actor).report(start, end, branch_id)
 
 
 @router.get("/profiles")

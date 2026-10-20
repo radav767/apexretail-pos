@@ -29,6 +29,10 @@ def report_lines(report: dict) -> list[str]:
         f'Cash out: {summary.get("cash_out_base") or 0} {base_code}',
         "-" * 32,
     ]
+    if report.get("tips"):
+        lines.append("TIPS (separate from sales)")
+        for row in report["tips"].get("totals", []):
+            lines.append(f'{row["kind"]} / {row["method"]} / {row["policy"]}: {row["amount"]} {row["currency"]}')
     for row in report["currencies"]:
         code, symbol = row["currency_code"], row["symbol"]
         lines.extend([

@@ -25,6 +25,8 @@ class BusinessService(PrintingService):
         company = await self.db.get(Company, self.actor.company_id)
         if not company: raise HTTPException(404, "Company not found")
         profile = await self.db.get(BusinessProfile, company.id)
+        from app.models import TipSettings
+        tips = await self.db.get(TipSettings, company.id)
         # Existing Settings/registration remain authoritative for the label.
         key = infer_profile(company.business_type)
         features = set(PROFILES[key]["features"])
@@ -40,6 +42,8 @@ class BusinessService(PrintingService):
         if "hospitality" in features: features.add("restaurant")
         return {"profile": key, "name": PROFILES[key]["name"], "features": sorted(features),
             "employee_id": self.actor.employee.id if self.actor.employee else None,
+            "tips_enabled": bool(tips and tips.enabled),
+            "separate_tips": tips is not None,
             "legacy_business_type": company.business_type, "tip_product_id": profile.tip_product_id if profile else None,
             "service_product_id": profile.service_product_id if profile else None,
             "permissions": self.actor.permissions or {}, "administrator": self.actor.actor_type == "user" or self.actor.role in {"owner", "administrator"}}
@@ -547,7 +551,9 @@ class BusinessService(PrintingService):
         branch = await self.branch(data.branch_id)
         balance = await stock.get_balance_for_update(self.actor.company_id, branch, product)
         allocated = (await self.db.execute(select(func.coalesce(func.sum(ProductBatch.quantity), 0)).where(ProductBatch.company_id == self.actor.company_id, ProductBatch.branch_id == branch.id, ProductBatch.product_id == product.id))).scalar_one()
-        if Decimal(allocated) + data.quantity > Decimal(balance.quantity): raise HTTPException(409, "Batch assignments cannot exceed existing physical stock; receive stock through the existing GRN workflow first")
+        from .batches import pending_return_quantity
+        held = await pending_return_quantity(self.db, self.actor.company_id, branch.id, product.id)
+        if Decimal(allocated) + data.quantity > Decimal(balance.quantity) - held: raise HTTPException(409, "Batch assignments cannot exceed inspected physical stock; receive stock or inspect pending customer returns first")
         if (await self.db.execute(select(ProductBatch.id).where(ProductBatch.company_id == self.actor.company_id, ProductBatch.branch_id == branch.id, ProductBatch.product_id == product.id, ProductBatch.code == data.code))).first():
             raise HTTPException(409, "Batch code already assigned; review the existing lot rather than replaying an assignment")
         batch = ProductBatch(company_id=self.actor.company_id, **data.model_dump()); self.db.add(batch); await self.db.flush()

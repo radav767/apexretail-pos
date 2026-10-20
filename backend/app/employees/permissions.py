@@ -44,6 +44,10 @@ PERMISSION_GROUPS: dict[str, dict[str, str]] = {
         "inventory_valuation_view": "View inventory valuation",
     },
     "financial": {
+        "tips_collect": "Record customer tips",
+        "tips_manage": "Configure tips and reverse tip payments",
+        "tips_payout": "Record employee tip payouts",
+        "tips_reports_view": "View tip entitlements and reports",
         "revenue_view": "View revenue",
         "profits_view": "View profits",
         "expenses_manage": "Manage expenses",
@@ -120,6 +124,7 @@ ROLE_TEMPLATES: dict[str, dict[str, bool]] = {
         "cash_movements_manage", "approve_restricted_actions",
     ),
     "cashier": _permissions(
+        "tips_collect",
         "sales_process", "sales_receipt_reprint", "sales_history_view",
         "shifts_open", "shifts_close", "cash_movements_manage", "z_reports_view",
         "orders_settle",
@@ -131,11 +136,12 @@ ROLE_TEMPLATES: dict[str, dict[str, bool]] = {
         "composites_manage",
     ),
     "accountant": _permissions(
+        "tips_reports_view",
         "sales_history_view", "revenue_view", "profits_view",
         "expenses_manage", "z_reports_view", "inventory_valuation_view",
         "audit_logs_view",
     ),
-    "waiter": _permissions("sales_process", "sales_history_view", "orders_manage", "orders_send"),
+    "waiter": _permissions("sales_process", "sales_history_view", "orders_manage", "orders_send", "tips_collect"),
     "kitchen_staff": _permissions("kitchen_view", "kitchen_update"),
     "bartender": _permissions("orders_manage", "orders_send", "bar_view", "bar_update"),
     "restaurant_manager": _permissions("restaurant_manage", "orders_manage", "orders_send", "orders_settle", "kitchen_view", "kitchen_update", "bar_view", "bar_update", "sales_process", "sales_history_view", "sales_receipt_reprint", "sales_discount", "sales_refund", "shifts_open", "shifts_close", "printers_manage", "approve_restricted_actions", "revenue_view"),

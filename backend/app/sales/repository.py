@@ -41,10 +41,19 @@ class SalesRepository:
         company_id,
         product_id,
     ):
-        return await self.stock.get_product_for_update(
+        product = await self.stock.get_product_for_update(
             company_id,
             product_id,
         )
+        return product
+
+    async def validate_new_sale_product(self, company_id, product_id):
+        from app.models import TipSettings, BusinessProfile
+        config = await self.db.get(TipSettings, company_id)
+        profile = await self.db.get(BusinessProfile, company_id) if config else None
+        if profile and profile.tip_product_id == product_id:
+            from fastapi import HTTPException
+            raise HTTPException(409, "Record tips through the separate tip workflow. Retain existing queued sales for review; do not silently reclassify them")
 
     async def get_category_name(self, company_id, category_id):
         result = await self.db.execute(

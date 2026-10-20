@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import ShopsDevicesPage from "./ShopsDevicesPage";
 import CurrencySettingsPanel from "./CurrencySettingsPanel";
 import PrinterManagement from "../../../pos-web/src/printing/PrinterManagement";
+import TipsSettingsPanel from "./TipsSettingsPanel";
 import "./settings.css";
 
 type SettingsSection =
@@ -14,7 +15,8 @@ type SettingsSection =
   | "receipts"
   | "subscription"
   | "devices"
-  | "printers";
+  | "printers"
+  | "tips";
 
 type AggregateSettings = {
   company_id: string;
@@ -259,6 +261,7 @@ export default function SettingsPage({
 
   const summaryCards = useMemo(
     () => [
+      { id: "tips" as const, title: "Tips & Service Charges", description: "Policies, entitlements, payouts and reports." },
       { id: "printers" as const, title: "Printers & kitchen", description: "Stations, product routing and print queue." },
       {
         id: "company" as const,
@@ -737,6 +740,7 @@ export default function SettingsPage({
       ) : null}
 
       {section === "printers" && <PrinterManagement companyId={companyId} api={api} canManage />}
+      {section === "tips" && <TipsSettingsPanel companyId={companyId} />}
 
       {section === "company" ? (
         <section className="settings-card">

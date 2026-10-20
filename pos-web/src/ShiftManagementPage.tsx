@@ -3,6 +3,7 @@ import { api, getApiErrorMessage } from "./api/client";
 import { isDeviceOnline } from "./offline/offlineAuth";
 import ManagerApprovalDialog, { type ManagerApprovalRequest } from "./components/ManagerApprovalDialog";
 import "./shift-management.css";
+import TipPaymentPanel from "./business/TipPaymentPanel";
 
 type Cashier = { id: string; name: string; role: string; permissions?: Record<string, boolean> };
 type CurrencyConfig = {
@@ -16,6 +17,7 @@ type ShiftCurrency = {
   cash_paid_out: string; expected_cash: string; counted_cash: string | null; variance: string | null;
 };
 export type ShiftRecord = {
+  tips?: { totals: { currency: string; method: string; kind: string; policy: string; amount: string }[] } | null;
   id: string; shift_number: string; company_id: string; shop_id: string; branch_id: string;
   device_id: string; employee_id: string; cashier_name?: string | null; shop_name?: string | null;
   branch_name?: string | null; register_name?: string | null; status: "open" | "closed";
@@ -331,6 +333,8 @@ export default function ShiftManagementPage({ companyId, cashier, onBackToSales,
       <section className="pos-shift-current" id="current-shift">
         <div className="pos-shift-current-heading"><div><span className="pos-shift-status">OPEN SHIFT</span><h2>{shift.shift_number}</h2><p>{shift.cashier_name || cashier?.name || "Cashier"} · {shift.shop_name || "Current shop"} · {shift.branch_name || "Assigned branch"} · {shift.register_name || "Current register"}</p></div><button type="button" onClick={() => void printSummary(shift)}>Print shift summary</button></div>
         <div className="pos-shift-facts"><span>Cashier<strong>{shift.cashier_name || cashier?.name || "Cashier"}</strong></span><span>Register<strong>{shift.register_name || "Current register"}</strong></span><span>Opened<strong>{new Date(shift.opened_at).toLocaleString()}</strong></span><span>Sales this shift<strong>{formatted(shift.summary.total_sales_base || 0, { currency_code: baseCurrency || "USD", symbol: "$", decimal_places: 2 })}</strong></span></div>
+        {!!shift.tips?.totals.length && <section><h3>Tips — separate from sales</h3>{shift.tips.totals.map((row, index) => <p key={index}>{row.kind} · {row.method} · {row.policy}: {row.currency} {row.amount}</p>)}</section>}
+        {(cashier?.permissions?.tips_manage || cashier?.permissions?.tips_payout) && <TipPaymentPanel api={api} companyId={companyId} management/>}
         <h3>Drawer balances by physical currency</h3>
         <div className="pos-shift-currency-grid">{shift.currencies.filter((row) => row.cash_accepted).map((row) => <article key={row.currency_code}><header><strong>{row.currency_name}</strong><span>{row.currency_code}</span></header><dl><div><dt>Opening</dt><dd>{amountLabel(row.opening_float, row)}</dd></div><div><dt>Cash sales</dt><dd>{amountLabel(row.cash_sales, row)}</dd></div><div><dt>Cash in</dt><dd>{amountLabel(row.cash_in, row)}</dd></div><div><dt>Cash out</dt><dd>{amountLabel(row.cash_out, row)}</dd></div><div><dt>Cash settlements</dt><dd>{amountLabel(row.cash_settlements, row)}</dd></div><div><dt>Refunds + expenses</dt><dd>{amountLabel(Number(row.cash_refunds) + Number(row.cash_expenses), row)}</dd></div><div className="expected"><dt>Current expected cash</dt><dd>{amountLabel(row.expected_cash, row)}</dd></div></dl></article>)}</div>
       <section className="pos-shift-panel" id="cash-movements"><h3>Cash In / Cash Out</h3><div className="pos-shift-form-grid"><label>Movement<select value={movementType} onChange={(event) => setMovementType(event.target.value as "cash_in" | "cash_out")}><option value="cash_in">Cash in</option><option value="cash_out">Cash out</option></select></label><label>Currency<select value={movementCurrency} onChange={(event) => setMovementCurrency(event.target.value)}>{cashCurrencies.map((row) => <option key={row.currency_code} value={row.currency_code}>{row.currency_code} — {row.currency_name}</option>)}</select></label><label>Amount<input inputMode="decimal" value={movementAmount} onChange={(event) => setMovementAmount(event.target.value)} placeholder="0.00" /></label><label>Reason<input value={movementReason} onChange={(event) => setMovementReason(event.target.value)} maxLength={500} placeholder="Required reason" /></label><button type="button" onClick={() => void postMovement()} disabled={busy || !online}>{busy ? "SAVING…" : movementType === "cash_in" ? "CASH IN" : "CASH OUT"}</button></div>

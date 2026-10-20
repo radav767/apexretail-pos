@@ -8,6 +8,10 @@ from app.models import (
 
 
 class ShiftRepository:
+    async def tip_summary(self, shift_id):
+        from app.business_operations.tips import shift_tip_summary
+        return await shift_tip_summary(self.db, shift_id)
+
     def __init__(self, db):
         self.db = db
 
