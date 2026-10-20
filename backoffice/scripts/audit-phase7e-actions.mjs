@@ -6,7 +6,7 @@ import ts from "typescript";
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve, relative } from "node:path";
 const root = resolve(import.meta.dirname, "../..");
-const output = resolve(root, "phase7e-evidence/stabilization/audit"); await mkdir(output,{recursive:true});
+const output = resolve(root, process.env.PHASE7E_ACTION_AUDIT_OUTPUT || "phase7e-evidence/stabilization/audit"); await mkdir(output,{recursive:true});
 async function files(dir, extension) {
   const all=[];
   for (const entry of await readdir(dir,{withFileTypes:true})) {

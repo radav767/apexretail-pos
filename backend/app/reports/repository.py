@@ -192,30 +192,45 @@ class ReportsRepository:
         return total, [dict(row) for row in rows_result.mappings().all()], dict(summary_result.mappings().one())
 
     async def valuation(self, company_id, *, branch_id=None, category_id=None, product_id=None, limit=50, offset=0, export=False):
-        clauses = ["ib.company_id=:company_id", "ib.active=true", "ib.deleted=false", "p.active=true", "p.deleted=false"]
+        from app.inventory.valuation import positions_sql
+        clauses = ["p.company_id=:company_id"]
         params = {"company_id": company_id, "branch_id": branch_id, "category_id": category_id, "product_id": product_id}
-        for key, column in (("branch_id","ib.branch_id"),("category_id","p.category_id"),("product_id","p.id")):
+        for key, column in (("branch_id","p.branch_id"),("category_id","p.category_id"),("product_id","p.product_id")):
             if params[key] is not None: clauses.append(f"{column}=:{key}")
         where = " AND ".join(clauses)
-        sql = f"""SELECT p.id product_id,p.name product_name,p.sku,p.selling_price,p.cost_price,
-          ib.quantity,b.id branch_id,b.name branch_name,sh.id shop_id,sh.name shop_name
-          FROM inventory_balances ib JOIN products p ON p.id=ib.product_id AND p.company_id=ib.company_id
-          JOIN branches b ON b.id=ib.branch_id AND b.company_id=ib.company_id
-          JOIN shops sh ON sh.id=ib.shop_id AND sh.company_id=ib.company_id WHERE {where}"""
+        sql = f"""SELECT p.product_id,p.variant_id,p.product_name,p.sku,p.selling_price,p.cost_price,
+          p.quantity,b.id branch_id,b.name branch_name,sh.id shop_id,sh.name shop_name
+          FROM ({positions_sql()}) p
+          JOIN branches b ON b.id=p.branch_id AND b.company_id=p.company_id
+          JOIN shops sh ON sh.id=p.shop_id AND sh.company_id=p.company_id WHERE {where}"""
         count = await self.db.execute(text(f"SELECT COUNT(*) FROM ({sql}) valuation_rows"), params)
         total = int(count.scalar_one() or 0)
-        result = await self.db.execute(text(sql + " ORDER BY p.name,b.name LIMIT :limit OFFSET :offset"), {**params,"limit":min(total,10000) if export else limit,"offset":0 if export else offset})
+        result = await self.db.execute(text(sql + " ORDER BY p.product_name,b.name,p.variant_id NULLS FIRST,p.product_id LIMIT :limit OFFSET :offset"), {**params,"limit":min(total,10000) if export else limit,"offset":0 if export else offset})
         summary_result = await self.db.execute(text(f"""SELECT COALESCE(SUM(quantity),0) quantity,
           COALESCE(SUM(quantity*selling_price),0) selling_value,
           COALESCE(SUM(quantity*cost_price),0) cost_value,
-          COALESCE(BOOL_AND(selling_price IS NOT NULL),true) selling_known,
-          COALESCE(BOOL_AND(cost_price IS NOT NULL),true) cost_known FROM ({sql}) valuation_rows"""), params)
+          COALESCE(BOOL_AND(selling_price IS NOT NULL OR quantity=0),true) selling_known,
+          COALESCE(BOOL_AND(cost_price IS NOT NULL OR quantity=0),true) cost_known FROM ({sql}) valuation_rows"""), params)
         return total, [dict(row) for row in result.mappings().all()], dict(summary_result.mappings().one())
 
     async def currency(self, company_id):
         result = await self.db.execute(text("SELECT currency_symbol,decimal_places FROM company_settings WHERE company_id=:company_id"), {"company_id": company_id})
         row = result.mappings().first()
         return (row["currency_symbol"], int(row["decimal_places"])) if row else ("$", 2)
+
+    async def batch_valuation(self, company_id, branch_id=None):
+        # Lot balances are attribution of stock positions; never add this total
+        # to the stock-position total. Expired/held stock is not silently written off.
+        result = await self.db.execute(text("""SELECT pb.id batch_id,pb.product_id,pb.variant_id,
+            p.name product_name,v.name variant_name,pb.branch_id,pb.code,pb.expires_on,pb.quantity,
+            coalesce(v.cost_price,p.cost_price) unit_cost,
+            pb.quantity*coalesce(v.cost_price,p.cost_price) cost_value
+            FROM product_batches pb JOIN products p ON p.id=pb.product_id AND p.company_id=pb.company_id
+            LEFT JOIN product_variants v ON v.id=pb.variant_id AND v.product_id=p.id AND v.company_id=pb.company_id
+            WHERE pb.company_id=:company_id AND (CAST(:branch_id AS uuid) IS NULL OR pb.branch_id=CAST(:branch_id AS uuid))
+            AND (pb.variant_id IS NULL OR v.id IS NOT NULL)
+            ORDER BY p.name,v.name,pb.expires_on,pb.id"""), {"company_id": company_id, "branch_id": branch_id})
+        return [dict(row) for row in result.mappings()]
 
     async def financial_summary(self, company_id, start_at, end_at, branch_id=None, shop_id=None):
         params = {"company_id": company_id, "start_at": start_at, "end_at": end_at, "branch_id": branch_id, "shop_id": shop_id}

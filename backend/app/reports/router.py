@@ -1,5 +1,5 @@
 from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -99,6 +99,19 @@ async def inventory_valuation_v4_csv(
     branch_id = scoped_branch(_actor, branch_id)
     content = await service.inventory_csv(company_id, branch_id=branch_id, category_id=category_id, product_id=product_id, limit=100, offset=0)
     return Response(content, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=inventory-valuation.csv"})
+
+
+@router.get("/batch-valuation/{company_id}")
+async def batch_valuation(company_id: UUID, branch_id: UUID | None = None,
+        service: ReportsService = Depends(get_reports_service),
+        actor: AuthActor = Depends(require_path_permission("inventory_valuation"))):
+    rows = await service.repo.batch_valuation(company_id, scoped_branch(actor, branch_id))
+    symbol, precision = await service.repo.currency(company_id)
+    for row in rows:
+        if row["cost_value"] is not None:
+            row["cost_value"] = format(row["cost_value"].quantize(Decimal(1).scaleb(-precision), rounding=ROUND_HALF_UP), f".{precision}f")
+    return {"basis": "Current variant/parent unit costs; lot attribution only, not additional stock or historical cost.",
+        "currency_symbol": symbol, "decimal_places": precision, "rows": rows}
 
 
 def money(value: Any) -> float:

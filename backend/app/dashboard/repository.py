@@ -98,7 +98,10 @@ class DashboardRepository:
                 WHERE b.company_id=:company AND b.branch_id=:branch
                   AND p.company_id=:company AND p.active=true AND p.deleted=false
             """), {"company": company_id, "branch": branch_id, "start_at": start_today, "end_at": end_today})
-            return dict(result.mappings().one())
+            row = dict(result.mappings().one())
+            from app.inventory.valuation import stock_summary
+            stock = await stock_summary(self.db, company_id, branch_id)
+            return {**row, **{key: stock[key] for key in ("total_products", "low_stock_products", "stock_value")}}
 
         sales_result = await self.db.execute(
             select(
@@ -122,29 +125,9 @@ class DashboardRepository:
         )
         total_products = products_result.scalar_one()
 
-        low_stock_result = await self.db.execute(
-            select(func.count(Product.id)).where(
-                Product.company_id == company_id,
-                Product.active == True,
-                Product.deleted == False,
-                Product.stock_qty <= Product.reorder_level,
-            )
-        )
-        low_stock_products = low_stock_result.scalar_one()
-
-        stock_value_result = await self.db.execute(
-            select(
-                func.coalesce(
-                    func.sum(Product.stock_qty * Product.cost_price),
-                    0,
-                )
-            ).where(
-                Product.company_id == company_id,
-                Product.active == True,
-                Product.deleted == False,
-            )
-        )
-        stock_value = stock_value_result.scalar_one()
+        from app.inventory.valuation import stock_summary
+        stock = await stock_summary(self.db, company_id)
+        low_stock_products, stock_value = stock["low_stock_products"], stock["stock_value"]
 
         return {
             "today_sales": today_sales,

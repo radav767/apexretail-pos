@@ -98,7 +98,7 @@ class ReportsService:
         rows = []
         for raw in raw_rows:
             metrics = inventory_metrics(raw["quantity"], raw["selling_price"], raw["cost_price"])
-            rows.append({**{k: raw[k] for k in ("product_id","product_name","sku","branch_id","branch_name","shop_id","shop_name","quantity")}, "selling_value": metrics[0], "cost_value": metrics[1], "projected_gross_profit": metrics[2], "margin_percentage": metrics[3]})
+            rows.append({**{k: raw[k] for k in ("product_id","product_name","sku","branch_id","branch_name","shop_id","shop_name","quantity")}, "variant_id": raw.get("variant_id"), "selling_value": metrics[0], "cost_value": metrics[1], "projected_gross_profit": metrics[2], "margin_percentage": metrics[3]})
         total_qty = Decimal(str(aggregate.get("quantity") or 0))
         summary_metrics = inventory_metrics(
             Decimal("1"),

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import case, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.inventory.stock_repository import BranchStockRepository
@@ -126,38 +126,6 @@ class InventoryRepository:
         return result.scalars().all()
 
     async def get_valuation(self, company_id: UUID):
-        result = await self.db.execute(
-            select(
-                func.count(Product.id),
-                func.coalesce(
-                    func.sum(Product.stock_qty),
-                    0,
-                ),
-                case(
-                    (
-                        func.count(Product.id).filter(Product.cost_price.is_(None)) > 0,
-                        None,
-                    ),
-                    else_=func.coalesce(func.sum(Product.stock_qty * Product.cost_price), 0),
-                ),
-                func.coalesce(
-                    func.sum(
-                        case(
-                            (
-                                Product.stock_qty
-                                <= Product.reorder_level,
-                                1,
-                            ),
-                            else_=0,
-                        )
-                    ),
-                    0,
-                ),
-            ).where(
-                Product.company_id == company_id,
-                Product.active == True,
-                Product.deleted == False,
-            )
-        )
-
-        return result.one()
+        from .valuation import stock_summary
+        summary = await stock_summary(self.db, company_id)
+        return (summary["total_products"], summary["total_quantity"], summary["stock_value"], summary["low_stock_products"])

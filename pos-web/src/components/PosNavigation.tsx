@@ -109,7 +109,7 @@ export default function PosNavigation({
       children: [
         { label: "Goods Received (GRN)", module: "Inventory", feature: "goods-received" },
         { label: "Stock Adjustments", module: "Inventory", feature: "stock-adjustments" },
-        { label: "Stock Transfers", module: "Inventory" },
+        { label: "Stock Transfers", module: "Inventory", feature: "stock-transfers" },
       ],
     },
     {
@@ -117,8 +117,8 @@ export default function PosNavigation({
       icon: <ChartBarIcon />,
       children: [
         { label: "Sales Summary", module: "Reports", feature: "sales-summary" },
-        { label: "Sales Reports", module: "Reports" },
-        { label: "Top Selling Products", module: "Reports" },
+        { label: "Sales Reports", module: "Reports", feature: "sales-reports" },
+        { label: "Top Selling Products", module: "Reports", feature: "top-products" },
       ],
     },
     { label: "Settings", icon: <Cog6ToothIcon />, module: "Settings" },

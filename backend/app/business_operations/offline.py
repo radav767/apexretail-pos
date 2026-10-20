@@ -44,7 +44,7 @@ class OfflineOrderService(BusinessService):
         device_id = data.device_id if edit else data.order.device_id
         employee = self.actor.employee
         if (self.actor.actor_type != "employee" or not employee or employee.id != data.employee_id
-                or not employee.active or not self.actor.pos_session
+                or not employee.active or employee.deleted or not self.actor.pos_session
                 or self.actor.pos_session.device_id != device_id):
             raise HTTPException(403, "Reconnect as the original employee on the original register; retain this offline order")
         captured = data.captured_at

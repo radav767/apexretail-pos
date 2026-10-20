@@ -17,6 +17,7 @@ import { PosFeatureBack, PosFeatureHub, type PosFeatureItem } from "./components
 import ProductToolsPage, { type ProductToolFeature } from "./ProductToolsPage";
 import PrinterPanel from "./printing/PrinterPanel";
 import BusinessPanel from "./business/BusinessPanel";
+import FocusedOperationsPage, { type FocusedFeature } from "./FocusedOperationsPage";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -263,12 +264,13 @@ type ModuleFeature =
   | "home" | "transaction-history" | "cancel-void-sales" | "credit-settlement"
   | "cashier-shifts" | "z-reports" | "goods-received" | "stock-adjustments"
   | "inventory-overview" | "inventory-activity" | "sales-summary" | "inventory-status"
+  | FocusedFeature
   | "all-products" | ProductToolFeature;
 
 const moduleFeatures: Record<string, ModuleFeature[]> = {
   "Sales Management": ["transaction-history", "cancel-void-sales", "credit-settlement", "cashier-shifts", "z-reports"],
-  Inventory: ["goods-received", "stock-adjustments", "inventory-overview", "inventory-activity"],
-  Reports: ["sales-summary", "inventory-status"],
+  Inventory: ["goods-received", "stock-adjustments", "inventory-overview", "inventory-activity", "stock-transfers"],
+  Reports: ["sales-summary", "inventory-status", "sales-reports", "top-products"],
   Products: ["all-products", "categories", "composite-products", "product-variants", "units", "price-levels", "barcode-labels", "import-export"],
 };
 
@@ -1406,6 +1408,7 @@ export default function PosModulePage({
             "credit-settlement": "Credit Settlement", "cashier-shifts": "Cashier Shifts", "z-reports": "Z Reports",
             "goods-received": "Goods Received", "stock-adjustments": "Stock Adjustments",
             "inventory-overview": "Inventory Overview", "inventory-activity": "Inventory Activity",
+            "stock-transfers": "Stock Transfers", "sales-reports": "Sales Reports", "top-products": "Top Selling Products",
             "sales-summary": "Sales Summary", "inventory-status": "Inventory Status",
             "all-products": "All Products", "categories": "Categories",
             "composite-products": "Composite Products", "product-variants": "Product Variants",
@@ -2141,6 +2144,7 @@ export default function PosModulePage({
             title="Inventory"
             features={[
               { id: "goods-received", title: "Goods Received (GRN)", detail: "Receive stock from suppliers", icon: "inventory", permitted: canManageInventory },
+              { id: "stock-transfers", title: "Stock Transfers", detail: "Move stock between branches", icon: "transfer", permitted: cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(cashier?.permissions?.inventory_transfer ?? cashier?.permissions?.manage_inventory) },
               { id: "stock-adjustments", title: "Stock Adjustments", detail: "Record corrections and physical counts", icon: "adjust" },
               { id: "inventory-overview", title: "Inventory Overview", detail: "Review current branch balances", icon: "chart" },
               { id: "inventory-activity", title: "Inventory Activity", detail: "Review auditable stock movements", icon: "clock" },
@@ -2149,7 +2153,8 @@ export default function PosModulePage({
           />
         )}
 
-        {!loading && activeModule === "Inventory" && activeFeature !== "home" && (
+        {!loading && ["stock-transfers", "sales-reports", "top-products"].includes(activeFeature) && <><PosFeatureBack label={activeModule} onClick={backToFeatureHub}/><FocusedOperationsPage key={`${companyId}:${cashier?.id}:${activeFeature}`} feature={activeFeature as FocusedFeature} companyId={companyId} branchId={branchId} identity={`${cashier?.id}:${localStorage.getItem("device_id") || ""}`} permitted={cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(activeFeature === "stock-transfers" ? (cashier?.permissions?.inventory_transfer ?? cashier?.permissions?.manage_inventory) : cashier?.permissions?.profits_view)}/></>}
+        {!loading && activeModule === "Inventory" && activeFeature !== "home" && activeFeature !== "stock-transfers" && (
           <><PosFeatureBack label="Inventory" onClick={backToFeatureHub} />
           <div className={`pos-inventory-feature pos-inventory-feature-${activeFeature}`}>
             <div className="pos-module-card">
@@ -2586,13 +2591,15 @@ export default function PosModulePage({
             title="Reports"
             features={[
               { id: "sales-summary", title: "Sales Summary", detail: "Today's sales and transaction count", icon: "report" },
+              { id: "sales-reports", title: "Sales Reports", detail: "Filtered transaction reports", icon: "report", permitted: cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(cashier?.permissions?.profits_view) },
+              { id: "top-products", title: "Top Selling Products", detail: "Product performance", icon: "chart", permitted: cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(cashier?.permissions?.profits_view) },
               { id: "inventory-status", title: "Inventory Status", detail: "Products and low-stock indicators", icon: "inventory" },
             ] as PosFeatureItem<ModuleFeature>[]}
             onSelect={openFeature}
           />
         )}
 
-        {!loading && activeModule === "Reports" && activeFeature !== "home" && (
+        {!loading && activeModule === "Reports" && activeFeature !== "home" && !["sales-reports", "top-products"].includes(activeFeature) && (
           <><PosFeatureBack label="Reports" onClick={backToFeatureHub} />
             <div className="pos-report-grid">
               {activeFeature === "sales-summary" && <><ReportCard

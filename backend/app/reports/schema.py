@@ -53,6 +53,7 @@ class SalesHistoryResponse(BaseModel):
 
 class InventoryValuationRow(BaseModel):
     product_id: UUID
+    variant_id: UUID | None = None
     product_name: str
     sku: str | None
     branch_id: UUID

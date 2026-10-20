@@ -34,7 +34,7 @@ test("navigation remains permission-aware and preserves existing module routing"
 });
 
 test("supported submenu actions open their dedicated page, not just the module hub", () => {
-  for (const [label, feature] of [["Transaction History", "transaction-history"], ["Goods Received (GRN)", "goods-received"], ["Stock Adjustments", "stock-adjustments"], ["Sales Summary", "sales-summary"]]) {
+  for (const [label, feature] of [["Transaction History", "transaction-history"], ["Goods Received (GRN)", "goods-received"], ["Stock Adjustments", "stock-adjustments"], ["Sales Summary", "sales-summary"], ["Stock Transfers", "stock-transfers"], ["Sales Reports", "sales-reports"], ["Top Selling Products", "top-products"]]) {
     assert.ok(navigation.includes(`label: "${label}", module: `));
     const entry = navigation.split(`label: "${label}"`)[1].split("}")[0];
     assert.ok(entry.includes(`feature: "${feature}"`), `${label} loses its feature route`);
