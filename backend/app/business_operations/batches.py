@@ -4,14 +4,16 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from sqlalchemy import select, func
-from app.models import ProductBatch, BatchAllocation, CompanySetting, Company, BatchReturnHold, BatchReturnInspection
+from app.models import ProductBatch, BatchAllocation, CompanySetting, Company, BatchReturnHold, BatchReturnInspection, InventoryMovement
 
 
-async def pending_return_quantity(db, company_id, branch_id, product_id):
-    return (await db.execute(select(func.coalesce(func.sum(BatchReturnHold.quantity),0)).outerjoin(
+async def pending_return_quantity(db, company_id, branch_id, product_id, variant_id=None):
+    return (await db.execute(select(func.coalesce(func.sum(BatchReturnHold.quantity),0)).join(
+        InventoryMovement, InventoryMovement.id == BatchReturnHold.movement_id).outerjoin(
         BatchReturnInspection, BatchReturnInspection.hold_id == BatchReturnHold.id).where(
         BatchReturnHold.company_id == company_id, BatchReturnHold.branch_id == branch_id,
-        BatchReturnHold.product_id == product_id, BatchReturnInspection.id.is_(None)))).scalar_one()
+        BatchReturnHold.product_id == product_id, InventoryMovement.variant_id == variant_id,
+        BatchReturnInspection.id.is_(None)))).scalar_one()
 
 
 async def business_today(db, company_id):
@@ -36,14 +38,19 @@ async def allocate_batch_movements(db, movements):
                             product_id=movement.product_id, movement_id=movement.id, quantity=delta))
                         await db.flush()
             continue  # GRNs remain on their existing receiving path.
-        held = await pending_return_quantity(db, movement.company_id, movement.branch_id, movement.product_id)
+        held = await pending_return_quantity(db, movement.company_id, movement.branch_id, movement.product_id, movement.variant_id)
         if Decimal(movement.after_qty) < held:
             raise HTTPException(409, "Returned stock is awaiting pharmacy/batch inspection; it cannot be sold or adjusted away")
         batches = (await db.execute(select(ProductBatch).where(ProductBatch.company_id == movement.company_id,
-            ProductBatch.branch_id == movement.branch_id, ProductBatch.product_id == movement.product_id).order_by(ProductBatch.expires_on, ProductBatch.id).with_for_update())).scalars().all()
-        if not batches: continue  # Existing businesses retain their stock behavior.
+            ProductBatch.branch_id == movement.branch_id, ProductBatch.product_id == movement.product_id,
+            ProductBatch.variant_id == movement.variant_id).order_by(ProductBatch.expires_on, ProductBatch.id).with_for_update())).scalars().all()
+        if not batches:
+            if movement.variant_id and (await db.execute(select(ProductBatch.id).where(
+                    ProductBatch.company_id == movement.company_id, ProductBatch.branch_id == movement.branch_id,
+                    ProductBatch.product_id == movement.product_id).limit(1))).first():
+                raise HTTPException(409, "Assign inspected stock to the original variant lot before selling; parent lots cannot be reassigned")
+            continue  # Products without lot tracking retain their existing stock behavior.
         if (await db.execute(select(BatchAllocation.id).where(BatchAllocation.movement_id == movement.id))).first(): continue
-        if movement.variant_id: raise HTTPException(409, "Variant batch allocation requires review")
         today = await business_today(db, movement.company_id)
         available = [batch for batch in batches if batch.expires_on >= today and batch.quantity > 0]
         remaining = -delta

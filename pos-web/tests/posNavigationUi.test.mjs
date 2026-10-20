@@ -33,6 +33,15 @@ test("navigation remains permission-aware and preserves existing module routing"
   assert.match(app, /onLogout=\{logout\}/);
 });
 
+test("supported submenu actions open their dedicated page, not just the module hub", () => {
+  for (const [label, feature] of [["Transaction History", "transaction-history"], ["Goods Received (GRN)", "goods-received"], ["Stock Adjustments", "stock-adjustments"], ["Sales Summary", "sales-summary"]]) {
+    assert.ok(navigation.includes(`label: "${label}", module: `));
+    const entry = navigation.split(`label: "${label}"`)[1].split("}")[0];
+    assert.ok(entry.includes(`feature: "${feature}"`), `${label} loses its feature route`);
+    assert.ok(modulePage.includes(`"${feature}"`));
+  }
+});
+
 test("header uses live session, location, shift and clock values", () => {
   assert.match(header, /cashierName/);
   assert.match(header, /shopName/);

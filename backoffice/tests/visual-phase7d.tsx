@@ -30,6 +30,7 @@ api.defaults.adapter = async config => {
   else if (url === "/operations/rooms") data = [{ id: "room-a", name: "Room 204", branch_id: "branch", active: true, guests: [{ id: "guest", customer_id: "customer" }] }, { id: "room-b", name: "Room 205", branch_id: "branch", active: true, guests: [] }];
   else if (url.endsWith("/folio")) data = { guest_name: "Alex Morgan", charges: [{ receipt_number: "SYN-0042", currency: "USD", amount: "31.00", outstanding: "31.00" }] };
   else if (url === "/operations/batches") data = [{ id: "batch-a", product_name: "Synthetic stocked item A", code: "LOT-2026-A", quantity: "124", expires_on: "2026-11-02", expired: false, expires_soon: true }, { id: "batch-b", product_name: "Synthetic stocked item B", code: "LOT-2026-B", quantity: "48", expires_on: "2027-04-30", expired: false, expires_soon: false }, { id: "batch-c", product_name: "Synthetic stocked item C", code: "LOT-2026-C", quantity: "8", expires_on: "2026-10-01", expired: true, expires_soon: false }];
+  else if (url === "/operations/batches/returns") data = [];
   else if (url.startsWith("/operations/reports")) data = { currency_totals: [{ currency: "USD", sales: "728.00", refunds: "12.00", discounts: "18.00", orders: 24 }] };
   else throw new Error(`Synthetic preview has no handler for ${config.method} ${url}`);
   return { data, status: 200, statusText: "OK", headers: {}, config };

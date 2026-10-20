@@ -17,8 +17,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 url = os.environ["DATABASE_URL"]
 database = make_url(url).database
-if database not in {"apexretail_phase7e_production_clone_20261020", "apexretail_phase7e_synthetic_rehearsal", "apexretail_phase7e_tips_clone_20261020"}:
+if database not in {"apexretail_phase7e_production_clone_20261020", "apexretail_phase7e_synthetic_rehearsal", "apexretail_phase7e_tips_clone_20261020", "apexretail_phase7e_stabilization_clone_20261020", "apexretail_phase7e_stabilization_empty_20261020"}:
     raise SystemExit("Refusing non-disposable migration target")
+parsed = make_url(url)
+if parsed.username != "postgres" or parsed.host or parsed.query.get("host") != "/var/run/postgresql":
+    raise SystemExit("Rehearsal requires the local disposable PostgreSQL socket")
 quote = lambda name: '"' + name.replace('"', '""') + '"'
 
 
@@ -45,7 +48,7 @@ async def snapshot(columns=None):
 async def main():
     before = await snapshot()
     if before["revision"] != "p5h_runtime_write_permissions": raise SystemExit("Expected unchanged deployed Phase 5 baseline")
-    revisions = ["p7a_product_composites", "p7b_variant_pricing_tax", "p7c_employee_roles_permissions", "p7d_printers_kitchen_jobs", "p7e_business_orders_batches", "p7f_offline_order_receipts", "p7g_batch_stock_operations", "p7h_tips_accounting", "p7i_pharmacy_return_holds"]
+    revisions = ["p7a_product_composites", "p7b_variant_pricing_tax", "p7c_employee_roles_permissions", "p7d_printers_kitchen_jobs", "p7e_business_orders_batches", "p7f_offline_order_receipts", "p7g_batch_stock_operations", "p7h_tips_accounting", "p7i_pharmacy_return_holds", "p7j_variant_batches"]
     stages = []
     async def run(direction, revision):
         subprocess.run([sys.executable, "-m", "alembic", direction, revision], check=True)
@@ -55,7 +58,7 @@ async def main():
         stages.append({"direction": direction, "revision": after["revision"], "historical_content_unchanged": True})
     for revision in revisions: await run("upgrade", revision)
     await run("downgrade", "p5h_runtime_write_permissions")
-    await run("upgrade", "p7i_pharmacy_return_holds")
+    await run("upgrade", "p7j_variant_batches")
     evidence = {"database": database, "baseline": before, "stages": stages,
         "live_production_connected": False, "scope": "restored backup" if "clone" in database else "synthetic"}
     Path(f"/tmp/{database}-rehearsal.json").write_text(json.dumps(evidence, indent=2))

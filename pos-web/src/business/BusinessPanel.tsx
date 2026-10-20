@@ -4,10 +4,10 @@ import ManagerApprovalDialog, { type ManagerApprovalRequest } from "../component
 import { deliverJob, scheduleSalePrint } from "../printing/queue";
 import BusinessOperations from "./BusinessOperations";
 
-export default function BusinessPanel({ companyId, branchId, onPrintReceipt, onProductsChanged }: { companyId: string; branchId: string; onPrintReceipt: (id: string) => Promise<void>; onProductsChanged?: () => void }) {
+export default function BusinessPanel({ companyId, branchId, employeeId, onPrintReceipt, onProductsChanged }: { companyId: string; branchId: string; employeeId?: string; onPrintReceipt: (id: string) => Promise<void>; onProductsChanged?: () => void }) {
   const [request, setRequest] = useState<ManagerApprovalRequest | null>(null);
   const callback = useRef<(token: string) => void>(() => {});
-  return <><BusinessOperations companyId={companyId} api={api} branchId={branchId} deviceId={localStorage.getItem("device_id") || ""} deliver={deliverJob} onPrintReceipt={onPrintReceipt}
+  return <><BusinessOperations companyId={companyId} api={api} branchId={branchId} recoveryEmployeeId={employeeId} deviceId={localStorage.getItem("device_id") || ""} deliver={deliverJob} onPrintReceipt={onPrintReceipt}
     onSaleCompleted={async id => { onProductsChanged?.(); await scheduleSalePrint(companyId, id); }} approve={(next, done) => { callback.current = done; setRequest(next); }}/>
     {request && <ManagerApprovalDialog companyId={companyId} request={request} onCancel={() => setRequest(null)} onApproved={token => { setRequest(null); callback.current(token); }}/>}</>;
 }

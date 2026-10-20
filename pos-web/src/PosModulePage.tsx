@@ -1431,7 +1431,7 @@ export default function PosModulePage({
           <div className="pos-module-notice">{notice}</div>
         )}
 
-        {!loading && activeModule === "Business Operations" && <BusinessPanel companyId={companyId} branchId={branchId} onPrintReceipt={onReprintSale} onProductsChanged={onProductsChanged} />}
+        {!loading && activeModule === "Business Operations" && <BusinessPanel companyId={companyId} branchId={branchId} employeeId={cashier?.id} onPrintReceipt={onReprintSale} onProductsChanged={onProductsChanged} />}
 
         {!loading && activeModule === "Sales Management" && activeFeature === "home" && (
           <PosFeatureHub

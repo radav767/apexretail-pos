@@ -535,26 +535,30 @@ class BusinessService(PrintingService):
         permit(self.actor, "batches_view")
         from .batches import business_today
         today = await business_today(self.db, self.actor.company_id)
-        q = select(ProductBatch, Product.name).join(Product, Product.id == ProductBatch.product_id).where(ProductBatch.company_id == self.actor.company_id)
+        q = select(ProductBatch, Product.name, ProductVariant.name).join(Product, Product.id == ProductBatch.product_id).outerjoin(ProductVariant, ProductVariant.id == ProductBatch.variant_id).where(ProductBatch.company_id == self.actor.company_id)
         if self.actor.employee and self.actor.role not in {"owner", "administrator"}: q = q.where(ProductBatch.branch_id == self.actor.employee.branch_id)
         rows = (await self.db.execute(q.order_by(ProductBatch.expires_on).limit(1000))).all()
-        return [{**row_dict(batch, ("id", "branch_id", "product_id", "code", "expires_on", "quantity")), "product_name": name,
-            "expired": batch.expires_on < today, "expires_soon": 0 <= (batch.expires_on - today).days <= 30} for batch, name in rows]
+        return [{**row_dict(batch, ("id", "branch_id", "product_id", "variant_id", "code", "expires_on", "quantity")), "product_name": name, "variant_name": variant_name,
+            "expired": batch.expires_on < today, "expires_soon": 0 <= (batch.expires_on - today).days <= 30} for batch, name, variant_name in rows]
 
     async def assign_batch(self, data):
         permit(self.actor, "batches_manage"); await self.feature("pharmacy"); await self.branch(data.branch_id)
         from app.inventory.stock_repository import BranchStockRepository
         stock = BranchStockRepository(self.db)
         product = await stock.get_product_for_update(self.actor.company_id, data.product_id)
-        if not product.track_inventory or product.product_type not in {"standard", "variable_weight"}: raise HTTPException(409, "Batch tracking currently requires a standard stock product without variants")
-        if (await self.db.execute(select(ProductVariant.id).where(ProductVariant.product_id == product.id, ProductVariant.active == True, ProductVariant.deleted == False))).first(): raise HTTPException(409, "Variant batch tracking is not enabled")
+        if not product.track_inventory or product.product_type not in {"standard", "variable_weight"}: raise HTTPException(409, "Batch tracking requires a standard stock product")
+        from .batch_stock import resolve_batch_variant
+        variant = await resolve_batch_variant(self.db, self.actor.company_id, product.id, data.variant_id)
         branch = await self.branch(data.branch_id)
-        balance = await stock.get_balance_for_update(self.actor.company_id, branch, product)
-        allocated = (await self.db.execute(select(func.coalesce(func.sum(ProductBatch.quantity), 0)).where(ProductBatch.company_id == self.actor.company_id, ProductBatch.branch_id == branch.id, ProductBatch.product_id == product.id))).scalar_one()
+        if variant:
+            from app.sales.repository import SalesRepository
+            balance = await SalesRepository(self.db).get_variant_balance(self.actor.company_id, branch, product.id, variant.id)
+        else: balance = await stock.get_balance_for_update(self.actor.company_id, branch, product)
+        allocated = (await self.db.execute(select(func.coalesce(func.sum(ProductBatch.quantity), 0)).where(ProductBatch.company_id == self.actor.company_id, ProductBatch.branch_id == branch.id, ProductBatch.product_id == product.id, ProductBatch.variant_id == data.variant_id))).scalar_one()
         from .batches import pending_return_quantity
-        held = await pending_return_quantity(self.db, self.actor.company_id, branch.id, product.id)
+        held = await pending_return_quantity(self.db, self.actor.company_id, branch.id, product.id, data.variant_id)
         if Decimal(allocated) + data.quantity > Decimal(balance.quantity) - held: raise HTTPException(409, "Batch assignments cannot exceed inspected physical stock; receive stock or inspect pending customer returns first")
-        if (await self.db.execute(select(ProductBatch.id).where(ProductBatch.company_id == self.actor.company_id, ProductBatch.branch_id == branch.id, ProductBatch.product_id == product.id, ProductBatch.code == data.code))).first():
+        if (await self.db.execute(select(ProductBatch.id).where(ProductBatch.company_id == self.actor.company_id, ProductBatch.branch_id == branch.id, ProductBatch.product_id == product.id, ProductBatch.variant_id == data.variant_id, ProductBatch.code == data.code))).first():
             raise HTTPException(409, "Batch code already assigned; review the existing lot rather than replaying an assignment")
         batch = ProductBatch(company_id=self.actor.company_id, **data.model_dump()); self.db.add(batch); await self.db.flush()
         self.audit("batch_stock_assigned", batch_id=batch.id, quantity=str(data.quantity), physical_stock_unchanged=True); await self.db.commit()

@@ -85,7 +85,7 @@ export default function PosNavigation({
       label: "Sales Management",
       icon: <ClipboardDocumentListIcon />,
       children: [
-        { label: "Transaction History", module: "Sales Management" },
+        { label: "Transaction History", module: "Sales Management", feature: "transaction-history" },
         { label: "Shift Management", module: "Shift Management" },
         ...(canManageCredit ? [{ label: "Credit Settlement", module: "Credit Settlements" as PosModuleName }] : []),
       ],
@@ -107,8 +107,8 @@ export default function PosNavigation({
       icon: <ArchiveBoxIcon />,
       visible: canManageInventory,
       children: [
-        { label: "Goods Received (GRN)", module: "Inventory" },
-        { label: "Stock Adjustments", module: "Inventory" },
+        { label: "Goods Received (GRN)", module: "Inventory", feature: "goods-received" },
+        { label: "Stock Adjustments", module: "Inventory", feature: "stock-adjustments" },
         { label: "Stock Transfers", module: "Inventory" },
       ],
     },
@@ -116,7 +116,7 @@ export default function PosNavigation({
       label: "Reports",
       icon: <ChartBarIcon />,
       children: [
-        { label: "Sales Summary", module: "Reports" },
+        { label: "Sales Summary", module: "Reports", feature: "sales-summary" },
         { label: "Sales Reports", module: "Reports" },
         { label: "Top Selling Products", module: "Reports" },
       ],

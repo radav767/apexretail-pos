@@ -533,6 +533,23 @@ class ProductService:
         branch_id = changes.pop("branch_id", None)
         stock_qty = changes.pop("stock_qty", None)
         reorder_level = changes.pop("reorder_level", None)
+        if branch_id is not None and stock_qty is not None:
+            # Lot stock must not bypass inspection/FEFO through the generic
+            # variant editor. Use the same product-first lock as sale/lot writes.
+            from sqlalchemy import select
+            from app.inventory.stock_repository import BranchStockRepository
+            from app.models import ProductBatch, BatchReturnHold
+            await BranchStockRepository(self.repo.db).get_product_for_update(company_id, variant.product_id)
+            branch = await self.repo.resolve_branch(company_id, branch_id)
+            balance = await self.repo.get_variant_balance(company_id, branch, variant.product_id, variant.id)
+            if Decimal(stock_qty) != Decimal(balance.quantity):
+                lots = (await self.repo.db.execute(select(ProductBatch.id).where(ProductBatch.company_id == company_id,
+                    ProductBatch.branch_id == branch_id, ProductBatch.product_id == variant.product_id).limit(1))).first()
+                holds = (await self.repo.db.execute(select(BatchReturnHold.id).join(InventoryMovement,
+                    InventoryMovement.id == BatchReturnHold.movement_id).where(BatchReturnHold.company_id == company_id,
+                    BatchReturnHold.branch_id == branch_id, InventoryMovement.variant_id == variant.id).limit(1))).first()
+                if lots or holds:
+                    raise HTTPException(409, "Use batch receiving, returns inspection or lot adjustments for this variant; generic stock editing cannot reconcile lots")
         values = changes
         for field, value in values.items():
             setattr(variant, field, value.strip() if isinstance(value, str) else value)

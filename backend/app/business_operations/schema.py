@@ -91,6 +91,7 @@ class SettlementInput(VersionInput):
 class BatchInput(BaseModel):
     branch_id: UUID
     product_id: UUID
+    variant_id: UUID | None = None
     code: str = Field(min_length=1, max_length=80)
     expires_on: date
     quantity: Decimal = Field(gt=0, max_digits=12, decimal_places=3)

@@ -101,11 +101,15 @@ class KitchenTicket(Base):
 
 class ProductBatch(Base):
     __tablename__ = "product_batches"
-    __table_args__ = (UniqueConstraint("company_id", "branch_id", "product_id", "code", name="uq_product_batch"),)
+    __table_args__ = (
+        Index("uq_product_batch_standard", "company_id", "branch_id", "product_id", "code", unique=True, postgresql_where=text("variant_id IS NULL")),
+        Index("uq_product_batch_variant", "company_id", "branch_id", "product_id", "variant_id", "code", unique=True, postgresql_where=text("variant_id IS NOT NULL")),
+    )
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     branch_id = Column(UUID(as_uuid=True), ForeignKey("branches.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    variant_id = Column(UUID(as_uuid=True), ForeignKey("product_variants.id"))
     code = Column(String(80), nullable=False)
     expires_on = Column(Date, nullable=False)
     quantity = Column(Numeric(12, 3), nullable=False)
