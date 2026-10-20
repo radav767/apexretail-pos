@@ -13,12 +13,17 @@ class TransferService:
     def __init__(self, repo: TransferRepository):
         self.repo = repo
 
-    async def transfer(self, data: TransferCreate):
+    async def transfer(self, data: TransferCreate, actor=None):
         if data.source_branch_id == data.destination_branch_id:
             raise HTTPException(
                 400,
                 "Source and destination branches must be different",
             )
+
+        if hasattr(self.repo, "prepare_request"):
+            replay = await self.repo.prepare_request(data, actor)
+            if replay is not None:
+                return replay
 
         source_branch = await self.repo.resolve_branch(
             data.company_id,
@@ -43,7 +48,9 @@ class TransferService:
         balances = []
         movements = []
 
-        for item in data.items:
+        # Stable product lock order prevents opposite multi-line requests from
+        # locking the same products in opposite order.
+        for item in sorted(data.items, key=lambda row: str(row.product_id)):
             if item.product_id in seen_products:
                 raise HTTPException(
                     400,

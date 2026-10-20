@@ -85,6 +85,17 @@ def product_response(product, actor):
     return ProductOut.model_validate(product).model_copy(update={"cost_price": None})
 
 
+def protect_restricted_cost(data, actor):
+    """A redacted null from an older client must not erase a stored cost."""
+    if can_view_product_cost(actor) or "cost_price" not in data.model_fields_set:
+        return data
+    if data.cost_price is not None:
+        raise HTTPException(403, "Product cost permission required")
+    result = data.model_copy()
+    result.model_fields_set.discard("cost_price")
+    return result
+
+
 @router.get(
     "/{company_id}/barcode-lookup",
     response_model=ProductBarcodeLookupOut,
@@ -276,7 +287,7 @@ async def update_product_variant(
 ):
     if _actor.actor_type == "employee" and data.branch_id is not None:
         enforce_actor_branch(_actor, data.branch_id)
-    result = await service.update_variant(company_id, variant_id, data)
+    result = await service.update_variant(company_id, variant_id, protect_restricted_cost(data, _actor))
     if not can_view_product_cost(_actor):
         result = {**result, "cost_price": None}
     return result
@@ -441,7 +452,7 @@ async def update_product(
     product = await service.update_product(
         company_id,
         product_id,
-        data,
+        protect_restricted_cost(data, _actor),
         actor=_actor,
     )
     return product_response(product, _actor)

@@ -15,6 +15,7 @@ import PosSessionHeader from "./components/PosSessionHeader";
 import ManagerApprovalDialog, { type ManagerApprovalRequest } from "./components/ManagerApprovalDialog";
 import { PosFeatureBack, PosFeatureHub, type PosFeatureItem } from "./components/PosFeatureHub";
 import ProductToolsPage, { type ProductToolFeature } from "./ProductToolsPage";
+import { canManageProductTool, catalogPermission } from "./catalogAccess";
 import PrinterPanel from "./printing/PrinterPanel";
 import BusinessPanel from "./business/BusinessPanel";
 import FocusedOperationsPage, { type FocusedFeature } from "./FocusedOperationsPage";
@@ -463,6 +464,10 @@ export default function PosModulePage({
   const canManageProducts =
     cashier?.role === "owner" ||
     Boolean(cashier?.permissions?.manage_products);
+  const canAddProducts = catalogPermission(cashier, "products_add");
+  const canEditProducts = catalogPermission(cashier, "products_edit");
+  const canDeleteProducts = catalogPermission(cashier, "products_delete");
+  const canViewProductCosts = catalogPermission(cashier, "product_costs_view");
   const canManageInventory =
     cashier?.role === "owner" ||
     Boolean(cashier?.permissions?.manage_inventory);
@@ -1165,12 +1170,25 @@ export default function PosModulePage({
     }
   }
 
+  async function archiveProduct(product: Product) {
+    if (!canDeleteProducts || saving || !(await ensureOnline())) return;
+    if (!window.confirm(`Archive ${product.name}? Existing stock and sales history will be preserved.`)) return;
+    setSaving(true); setError("");
+    try {
+      await api.delete(`/products/${companyId}/${product.id}`);
+      if (editingProductId === product.id) resetProductForm();
+      await refreshProductAndInventoryData();
+      setNotice("Product archived.");
+    } catch (requestError) { setError(getApiErrorMessage(requestError, "Unable to archive product")); }
+    finally { setSaving(false); }
+  }
+
   async function saveProduct() {
     if (!(await ensureOnline())) {
       return;
     }
 
-    if (!canManageProducts) {
+    if (!(editingProductId ? canEditProducts : canAddProducts)) {
       setError("You do not have permission to manage products.");
       return;
     }
@@ -1203,7 +1221,7 @@ export default function PosModulePage({
         track_inventory: productForm.track_inventory,
         tax_rate: productForm.tax_rate || null,
         tax_exempt: productForm.tax_exempt,
-        cost_price: productForm.cost_price || null,
+        ...(canViewProductCosts ? { cost_price: productForm.cost_price || null } : {}),
         selling_price: productForm.selling_price || null,
         reorder_level: productForm.reorder_level || "0",
       };
@@ -1779,7 +1797,7 @@ export default function PosModulePage({
                 </div>
               </div>
 
-              {canManageProducts ? (
+              {(editingProductId ? canEditProducts : canAddProducts) ? (
                 <div className="pos-module-form-grid">
                   <label>
                     Opening stock branch
@@ -1933,7 +1951,7 @@ export default function PosModulePage({
                     <input type="checkbox" checked={productForm.tax_exempt} onChange={(event) => setProductForm((current) => ({ ...current, tax_exempt: event.target.checked }))} /> Tax exempt
                   </label>
 
-                  <label>
+                  {canViewProductCosts && <label>
                     Cost price
                     <input
                       type="number"
@@ -1947,7 +1965,7 @@ export default function PosModulePage({
                         }))
                       }
                     />
-                  </label>
+                  </label>}
 
                   <label>
                     Selling price
@@ -2054,7 +2072,7 @@ export default function PosModulePage({
                       <th className="number">Selling Price</th>
                       <th className="number">Branch Stock</th>
                       <th>Status</th>
-                      {canManageProducts && <th>Actions</th>}
+                      {(canEditProducts || canDeleteProducts) && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -2093,9 +2111,9 @@ export default function PosModulePage({
                                 : "Active"}
                             </span>
                           </td>
-                          {canManageProducts && (
+                          {(canEditProducts || canDeleteProducts) && (
                             <td>
-                              <button
+                              {canEditProducts && <button
                                 type="button"
                                 className="pos-inline-button"
                                 onClick={() =>
@@ -2103,7 +2121,8 @@ export default function PosModulePage({
                                 }
                               >
                                 Edit
-                              </button>
+                              </button>}
+                              {canDeleteProducts && product.active !== false && <button type="button" className="pos-inline-button danger" disabled={saving} onClick={()=>void archiveProduct(product)}>Archive</button>}
                             </td>
                           )}
                         </tr>
@@ -2113,7 +2132,7 @@ export default function PosModulePage({
                     {!products.length && (
                       <tr>
                         <td
-                          colSpan={canManageProducts ? 7 : 6}
+                          colSpan={canEditProducts || canDeleteProducts ? 7 : 6}
                           className="empty"
                         >
                           No products are available.
@@ -2134,7 +2153,8 @@ export default function PosModulePage({
               feature={activeFeature as ProductToolFeature}
               companyId={companyId}
               branchId={selectedBranchId || branchId}
-              canManage={canManageProducts}
+              canManage={canManageProductTool(cashier, activeFeature)}
+              canViewCosts={catalogPermission(cashier, "product_costs_view")}
               onDataChanged={onProductsChanged}
             />
           </>

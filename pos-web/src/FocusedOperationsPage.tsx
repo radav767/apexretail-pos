@@ -6,7 +6,15 @@ export type FocusedFeature = "stock-transfers" | "sales-reports" | "top-products
 type Branch = { id: string; name: string; shop_name: string };
 type Product = { product_id: string; product_name?: string; name?: string; quantity: string };
 type Report = { currency_symbol: string; rows: { label: string; quantity: string; amount: string }[] };
-type Transfer = { payload: Record<string, unknown>; confirmed: boolean };
+type Transfer = { payload: Record<string, unknown>; confirmed: boolean; retryProtected?: boolean };
+function readTransfer(key: string): Transfer | null {
+  try {
+    const saved=JSON.parse(localStorage.getItem(key)||"null");
+    if(saved===null)return null;
+    if(!saved || typeof saved!=="object" || !saved.payload || typeof saved.payload!=="object" || typeof saved.confirmed!=="boolean")return {payload:{},confirmed:false};
+    return saved;
+  }catch{return {payload:{},confirmed:false};}
+}
 export default function FocusedOperationsPage({ feature, companyId, branchId, identity, permitted }: {
   feature: FocusedFeature; companyId: string; branchId: string; identity: string; permitted: boolean;
 }) {
@@ -15,7 +23,8 @@ export default function FocusedOperationsPage({ feature, companyId, branchId, id
   const [start,setStart]=useState(new Date().toISOString().slice(0,10));const [end,setEnd]=useState(new Date().toISOString().slice(0,10));
   const [report,setReport]=useState<Report|null>(null);const [message,setMessage]=useState("");const [busy,setBusy]=useState(false);const lock=useRef(false);
   const key=`apexretail_transfer_confirmation_v1:${companyId}:${identity}`;
-  const [pending,setPending]=useState<Transfer|null>(()=>{try{return JSON.parse(localStorage.getItem(key)||"null");}catch{return {payload:{},confirmed:false};}});
+  const [pending,setPending]=useState<Transfer|null>(()=>readTransfer(key));
+  useEffect(()=>{setPending(readTransfer(key));},[key]);
   useEffect(()=>{if(!permitted||feature!=="stock-transfers")return;let current=true;
     void api.get<Branch[]>(`/inventory/branches/${companyId}`).then(r=>{if(current)setBranches(r.data);}).catch(e=>{if(current)setMessage(getApiErrorMessage(e));});return()=>{current=false;};
   },[companyId,feature,permitted]);
@@ -27,12 +36,26 @@ export default function FocusedOperationsPage({ feature, companyId, branchId, id
   async function exportCsv(){setBusy(true);try{const r=await api.get(`/reports/sales-history/${companyId}/export.csv`,{params,responseType:"blob"});const url=URL.createObjectURL(r.data);const a=document.createElement("a");a.href=url;a.download=`${feature}.csv`;a.click();URL.revokeObjectURL(url);}catch(e){setMessage(getApiErrorMessage(e));}finally{setBusy(false);}}
   async function transfer(){if(lock.current||!permitted||!navigator.onLine)return;lock.current=true;setBusy(true);setMessage("");
     try{if(localStorage.getItem(key)&&localStorage.getItem(key)!=="null")throw new Error("Review the saved transfer before another submission.");
-      const command={payload:{company_id:companyId,source_branch_id:source,destination_branch_id:destination,reference:`POS-${crypto.randomUUID()}`,items:[{product_id:product,quantity}]},confirmed:false};
+      const requestId=crypto.randomUUID();
+      const retryProtected=await api.get("/inventory/transfers/capabilities", {timeout:10000}).then(r=>r.data?.idempotency==="audit-v1").catch(()=>false);
+      const command={payload:{company_id:companyId,request_id:requestId,source_branch_id:source,destination_branch_id:destination,reference:`POS-${requestId}`,items:[{product_id:product,quantity}]},confirmed:false,retryProtected};
       localStorage.setItem(key,JSON.stringify(command));setPending(command);
       const r=await api.post("/inventory/transfers",command.payload);
       if(!Array.isArray(r.data)||r.data.length!==2||!r.data.every(m=>m.id))throw new Error("Transfer acknowledgement unavailable");
       const ack={...command,confirmed:true};localStorage.setItem(key,JSON.stringify(ack));setPending(ack);setMessage("Stock transfer confirmed.");
     }catch(e){setMessage(getApiErrorMessage(e,"Transfer not confirmed. Do not submit it again; check the original reference."));}finally{lock.current=false;setBusy(false);}}
+  async function retryOriginal(){
+    if(lock.current||!permitted||!navigator.onLine||!pending?.retryProtected||!pending.payload.request_id||pending.payload.company_id!==companyId)return;
+    if(!window.confirm("Submit or recover the original transfer using its protected request identity? Do not create a replacement request."))return;
+    lock.current=true;setBusy(true);
+    try{
+      if((await api.get("/inventory/transfers/capabilities", {timeout:10000})).data?.idempotency!=="audit-v1")throw new Error("This server cannot safely retry the original transfer. Keep it for manager reconciliation.");
+      const response=await api.post("/inventory/transfers",pending.payload);
+      if(!Array.isArray(response.data)||response.data.length!==2||!response.data.every(m=>m.id))throw new Error("Transfer acknowledgement unavailable");
+      const ack={...pending,confirmed:true};localStorage.setItem(key,JSON.stringify(ack));setPending(ack);setMessage("Original transfer confirmed.");
+    }catch(e){setMessage(getApiErrorMessage(e,"Original transfer retained; request was not confirmed."));}
+    finally{lock.current=false;setBusy(false);}
+  }
   const check=useCallback(async()=>{if(!pending||!permitted)return;setBusy(true);try{
     if(!pending.payload.reference)throw new Error("Stored transfer requires authorized review; no data was cleared.");
     const r=await api.get(`/inventory/history/${companyId}`,{params:{branch_id:pending.payload.source_branch_id,limit:500}});
@@ -43,7 +66,7 @@ export default function FocusedOperationsPage({ feature, companyId, branchId, id
   }catch(e){setMessage(getApiErrorMessage(e));}finally{setBusy(false);}},[companyId,key,pending,permitted]);
   if(!permitted)return <p role="alert">Permission denied.</p>;
   return <section className="business-operations"><h2>{feature==="stock-transfers"?"Stock Transfers":feature==="top-products"?"Top Selling Products":"Sales Reports"}</h2>
-    {feature==="stock-transfers"?pending?<><p>{pending.confirmed?"Confirmed":"Awaiting confirmation — do not resubmit"}</p><p>Reference: {String(pending.payload.reference||"Needs review")}</p>{pending.confirmed?<button onClick={()=>{localStorage.setItem(`${key}:ack:${pending.payload.reference}`,JSON.stringify(pending));localStorage.setItem(key,"null");setPending(null);}}>New transfer</button>:<button disabled={busy} onClick={()=>void check()}>Check original transfer</button>}</>:<form className="business-form" onSubmit={e=>{e.preventDefault();if(confirm("Transfer the selected stock between branches?"))void transfer();}}>
+    {feature==="stock-transfers"?pending?<><p>{pending.confirmed?"Confirmed":"Awaiting confirmation — do not resubmit"}</p><p>Reference: {String(pending.payload.reference||"Needs review")}</p>{pending.confirmed?<button onClick={()=>{localStorage.setItem(`${key}:ack:${pending.payload.reference}`,JSON.stringify(pending));localStorage.setItem(key,"null");setPending(null);}}>New transfer</button>:<><button disabled={busy} onClick={()=>void check()}>Check original transfer</button>{Boolean(pending.payload.request_id)&&pending.retryProtected&&<button disabled={busy||!navigator.onLine} onClick={()=>void retryOriginal()}>Retry original transfer</button>}</>}</>:<form className="business-form" onSubmit={e=>{e.preventDefault();if(confirm("Transfer the selected stock between branches?"))void transfer();}}>
       <label>Source branch<select required value={source} onChange={e=>{setSource(e.target.value);setProduct("");}}><option value="">Select branch</option>{branches.map(b=><option key={b.id} value={b.id}>{b.shop_name} · {b.name}</option>)}</select></label>
       <label>Destination branch<select required value={destination} onChange={e=>setDestination(e.target.value)}><option value="">Select branch</option>{branches.filter(b=>b.id!==source).map(b=><option key={b.id} value={b.id}>{b.shop_name} · {b.name}</option>)}</select></label>
       <label>Product<select required value={product} onChange={e=>setProduct(e.target.value)}><option value="">Select product</option>{products.map(p=><option key={p.product_id} value={p.product_id}>{p.product_name||p.name}</option>)}</select></label>

@@ -11,6 +11,7 @@ class TransferItem(BaseModel):
 
 class TransferCreate(BaseModel):
     company_id: UUID
+    request_id: UUID | None = None
     source_branch_id: UUID
     destination_branch_id: UUID
 

@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from app.inventory.repository import InventoryRepository
 from app.inventory.service import InventoryService
-from app.inventory.schema import GRNCreate, StockAdjustmentCreate
+from app.inventory.schema import GRNCreate, StockAdjustmentCreate, StockTakeCreate
 from app.models import ProductVariant, ProductBatch, BatchAllocation
 from app.models.business_operations import BatchStockOperation
 from app.printing.service import permit, digest
@@ -63,11 +63,19 @@ class LotInventoryRepository(InventoryRepository):
         await self.db.flush()
         return await super().apply_movement(product, balance, movement)
 
+    async def apply_movements(self, products, balances, movements):
+        # A selected-lot count uses InventoryService's stock-take arithmetic and
+        # this same attribution hook, not a parallel balance/movement writer.
+        if len(movements) != 1:
+            raise HTTPException(400, "Count one selected batch at a time")
+        return [await self.apply_movement(products[0], balances[0], movements[0])]
+
 
 class BatchStockService(BusinessService):
     async def execute(self, data):
         permit(self.actor, "batches_manage")
-        permit(self.actor, "inventory_receive" if data.operation == "receive" else "inventory_adjust")
+        permit(self.actor, "inventory_receive" if data.operation == "receive" else
+            "inventory_count" if data.operation == "count" else "inventory_adjust")
         await self.feature("pharmacy")
         await self.branch(data.branch_id)
         # Same product-first lock order as sales, GRNs and FEFO allocation.
@@ -101,6 +109,17 @@ class BatchStockService(BusinessService):
                 reference=f"batch:{data.request_id}")
             if data.operation == "receive":
                 movement = await inventory.receive_stock(GRNCreate(**common, received_unit=data.received_unit))
+            elif data.operation == "count":
+                if data.received_unit:
+                    raise HTTPException(400, "Batch counts use base units")
+                branch = await repo.resolve_branch(self.actor.company_id, data.branch_id)
+                balance = await inventory.repo.get_balance_for_update(self.actor.company_id, branch, product)
+                physical_total = Decimal(balance.quantity) + data.quantity - Decimal(batch.quantity)
+                if physical_total < 0:
+                    raise HTTPException(409, "Batch count conflicts with physical inventory; reconcile before counting")
+                movement = (await inventory.stock_take(StockTakeCreate(company_id=self.actor.company_id,
+                    branch_id=data.branch_id, items=[{"product_id":product.id,"physical_qty":physical_total}],
+                    reference=common["reference"], notes=data.reason)))[0]
             else:
                 if data.received_unit: raise HTTPException(400, "Returns/disposal use base units")
                 movement = await inventory.adjust_stock(StockAdjustmentCreate(**common, adjustment_type="remove"), actor=self.actor)

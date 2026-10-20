@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CategoryCreate(BaseModel):
@@ -18,6 +18,13 @@ class CategoryUpdate(BaseModel):
     parent_id: UUID | None = None
     image_url: str | None = Field(default=None, max_length=500)
     active: bool | None = None
+
+    @field_validator("name", "active")
+    @classmethod
+    def reject_null_required_fields(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null; omit it to keep the current value")
+        return value
 
 
 class CategoryOut(BaseModel):
@@ -79,6 +86,14 @@ class ProductUpdate(BaseModel):
     stock_qty: Decimal | None = Field(default=None, ge=0)
     reorder_level: Decimal | None = Field(default=None, ge=0)
     active: bool | None = None
+
+    @field_validator("name", "product_type", "unit", "units_per_purchase", "track_inventory",
+        "tax_exempt", "stock_qty", "reorder_level", "active")
+    @classmethod
+    def reject_null_required_fields(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null; omit it to keep the current value")
+        return value
 
 
 class ProductOut(BaseModel):
@@ -153,6 +168,13 @@ class ProductVariantUpdate(BaseModel):
     stock_qty: Decimal | None = Field(default=None, ge=0)
     reorder_level: Decimal | None = Field(default=None, ge=0)
 
+    @field_validator("name", "attributes", "active", "stock_qty", "reorder_level")
+    @classmethod
+    def reject_null_required_fields(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null; omit it to keep the current value")
+        return value
+
 
 class ProductVariantOut(ProductVariantCreate):
     id: UUID
@@ -174,6 +196,13 @@ class ProductPriceLevelUpdate(BaseModel):
     price: Decimal | None = Field(default=None, ge=0)
     minimum_quantity: Decimal | None = Field(default=None, gt=0)
     active: bool | None = None
+
+    @field_validator("name", "price", "minimum_quantity", "active")
+    @classmethod
+    def reject_null_required_fields(cls, value):
+        if value is None:
+            raise ValueError("This field cannot be null; omit it to keep the current value")
+        return value
 
 
 class ProductPriceLevelOut(ProductPriceLevelCreate):

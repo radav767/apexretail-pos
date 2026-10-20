@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from app.sales.schema import SaleCreate
 
 
@@ -122,6 +122,13 @@ class OfflineEditInput(BaseModel):
 
 class BatchStockInput(BatchInput):
     request_id: UUID
-    operation: Literal["receive", "supplier_return", "dispose"]
+    operation: Literal["receive", "supplier_return", "dispose", "count"]
+    quantity: Decimal = Field(ge=0, max_digits=12, decimal_places=3)
     reason: str = Field(min_length=3, max_length=160)
     received_unit: str | None = Field(default=None, max_length=20)
+
+    @model_validator(mode="after")
+    def positive_movement_or_physical_count(self):
+        if self.operation != "count" and self.quantity <= 0:
+            raise ValueError("Stock movement quantity must be greater than zero")
+        return self

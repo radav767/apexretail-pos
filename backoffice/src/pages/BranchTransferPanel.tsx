@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 
 type Branch = {
@@ -19,6 +19,15 @@ type Balance = {
   product_id: string;
   quantity: string;
 };
+type PendingTransfer = { payload: Record<string, unknown>; confirmed: boolean; retryProtected?:boolean };
+function readTransfer(key:string):PendingTransfer|null {
+  try {
+    const saved=JSON.parse(localStorage.getItem(key)||"null");
+    if(saved===null)return null;
+    if(!saved || typeof saved!=="object" || !saved.payload || typeof saved.payload!=="object" || typeof saved.confirmed!=="boolean")return {payload:{},confirmed:false};
+    return saved;
+  }catch{return {payload:{},confirmed:false};}
+}
 
 export default function BranchTransferPanel({
   companyId,
@@ -42,6 +51,28 @@ export default function BranchTransferPanel({
 
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const transferLock = useRef(false);
+  const preparingTransfer = useRef(false);
+  const transferKey = `apexretail_backoffice_transfer_v1:${companyId}`;
+  const [pending, setPending] = useState<PendingTransfer | null>(()=>readTransfer(transferKey));
+  useEffect(()=>{setPending(readTransfer(transferKey));},[transferKey]);
+
+  async function submitOriginal(command: PendingTransfer, retry=false) {
+    if(transferLock.current || !navigator.onLine) return;
+    if(command.payload.company_id !== companyId || !command.payload.request_id) {
+      setMessage("Saved transfer requires authorized review. No data was cleared."); return;
+    }
+    transferLock.current=true;setLoading(true);
+    try {
+      if(retry && (!command.retryProtected || (await api.get("/inventory/transfers/capabilities", {timeout:10000})).data?.idempotency!=="audit-v1"))throw new Error("This server cannot safely retry the original transfer");
+      const response=await api.post("/inventory/transfers",command.payload);
+      if(!Array.isArray(response.data)||response.data.length!==2||!response.data.every(row=>row.id))throw new Error("Transfer acknowledgement unavailable");
+      const ack={...command,confirmed:true};localStorage.setItem(transferKey,JSON.stringify(ack));setPending(ack);
+      setQuantity("");setReference("");setNotes("");setMessage("Stock transferred successfully");
+      await loadBalances(String(command.payload.source_branch_id));await onDataChanged?.();
+    } catch(error: any) { setMessage(error.response?.data?.detail || "Transfer not confirmed. Original request retained; retry the original request only."); }
+    finally { transferLock.current=false;setLoading(false); }
+  }
 
   const availableStock = useMemo(() => {
     return Number(
@@ -140,6 +171,7 @@ export default function BranchTransferPanel({
   }
 
   async function transferStock() {
+    if(transferLock.current || preparingTransfer.current || pending || !navigator.onLine)return;
     const transferQuantity = Number(quantity);
 
     if (!sourceBranchId || !destinationBranchId) {
@@ -178,12 +210,15 @@ export default function BranchTransferPanel({
       return;
     }
 
+    preparingTransfer.current=true;
     try {
       setLoading(true);
       setMessage("");
 
-      await api.post("/inventory/transfers", {
+      const retryProtected=await api.get("/inventory/transfers/capabilities", {timeout:10000}).then(r=>r.data?.idempotency==="audit-v1").catch(()=>false);
+      const command: PendingTransfer = { confirmed:false,retryProtected, payload:{
         company_id: companyId,
+        request_id: crypto.randomUUID(),
         source_branch_id: sourceBranchId,
         destination_branch_id: destinationBranchId,
         reference: reference.trim() || null,
@@ -194,21 +229,16 @@ export default function BranchTransferPanel({
             quantity,
           },
         ],
-      });
-
-      setQuantity("");
-      setReference("");
-      setNotes("");
-      setMessage("Stock transferred successfully");
-
-      await loadBalances(sourceBranchId);
-      await onDataChanged?.();
+      }};
+      localStorage.setItem(transferKey,JSON.stringify(command));setPending(command);
+      await submitOriginal(command);
     } catch (error: any) {
       setMessage(
         error.response?.data?.detail ||
           "Failed to transfer stock",
       );
     } finally {
+      preparingTransfer.current=false;
       setLoading(false);
     }
   }
@@ -282,7 +312,14 @@ export default function BranchTransferPanel({
           </div>
         </div>
 
-        {branches.length < 2 ? (
+        {pending ? <div className="inventory-message"><p>{pending.confirmed ? "Transfer confirmed" : "Awaiting original transfer confirmation"}</p>
+          {pending.confirmed ? <button onClick={()=>{
+            localStorage.setItem(`${transferKey}:ack:${String(pending.payload.request_id)}`,JSON.stringify(pending));
+            localStorage.setItem(transferKey,"null");setPending(null);
+          }}>New transfer</button> : pending.retryProtected ? <button disabled={loading||!navigator.onLine} onClick={()=>{
+            if(window.confirm("Submit or recover the original transfer with its protected request identity?"))void submitOriginal(pending,true);
+          }}>Retry original transfer</button> : <p>Legacy transfer requires authorized history reconciliation. Do not resubmit.</p>}
+        </div> : branches.length < 2 ? (
           <div className="inventory-empty">
             Create at least two branches first.
           </div>

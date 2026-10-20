@@ -62,3 +62,61 @@ async def allocate_batch_movements(db, movements):
             db.add(BatchAllocation(batch_id=batch.id, movement_id=movement.id, quantity=-quantity))
             remaining -= quantity
             if remaining == 0: break
+    await transfer_batch_allocations(db, movements)
+
+
+async def transfer_batch_allocations(db, movements):
+    """Carry FEFO lot attribution with the existing paired transfer movements.
+
+    Branch balances are changed only by TransferService. This hook moves lot
+    attribution in the same transaction, never creates another stock movement,
+    and never infers lots for historical or previously unassigned stock.
+    """
+    await db.flush()
+    for outgoing in movements:
+        if outgoing.movement_type != "transfer_out":
+            continue
+        incoming = [m for m in movements if m.movement_type == "transfer_in"
+            and m.company_id == outgoing.company_id and m.product_id == outgoing.product_id
+            and m.variant_id == outgoing.variant_id and m.reference == outgoing.reference
+            and m.branch_id != outgoing.branch_id]
+        if len(incoming) != 1:
+            raise HTTPException(409, "Batch transfer requires one matching destination movement")
+        incoming = incoming[0]
+        quantity = Decimal(outgoing.before_qty) - Decimal(outgoing.after_qty)
+        if quantity <= 0 or Decimal(incoming.after_qty) - Decimal(incoming.before_qty) != quantity:
+            raise HTTPException(409, "Batch transfer quantities do not balance")
+        allocations = (await db.execute(select(BatchAllocation, ProductBatch).join(
+            ProductBatch, ProductBatch.id == BatchAllocation.batch_id).where(
+            BatchAllocation.movement_id == outgoing.id))).all()
+        if not allocations:
+            tracked_destination = (await db.execute(select(ProductBatch.id).where(
+                ProductBatch.company_id == incoming.company_id, ProductBatch.branch_id == incoming.branch_id,
+                ProductBatch.product_id == incoming.product_id, ProductBatch.variant_id == incoming.variant_id).limit(1))).first()
+            if tracked_destination:
+                raise HTTPException(409, "Source stock has no lot attribution; assign inspected source batches before transfer")
+            continue
+        if sum((-a.quantity for a, _ in allocations), Decimal("0")) != quantity:
+            raise HTTPException(409, "Source batch allocations do not balance with the transfer")
+        existing = (await db.execute(select(BatchAllocation).where(
+            BatchAllocation.movement_id == incoming.id))).scalars().all()
+        if existing:
+            if sum((a.quantity for a in existing), Decimal("0")) != quantity:
+                raise HTTPException(409, "Destination batch allocations require reconciliation")
+            continue
+        for allocation, source in allocations:
+            batch = (await db.execute(select(ProductBatch).where(
+                ProductBatch.company_id == incoming.company_id, ProductBatch.branch_id == incoming.branch_id,
+                ProductBatch.product_id == incoming.product_id, ProductBatch.variant_id == incoming.variant_id,
+                ProductBatch.code == source.code).with_for_update())).scalar_one_or_none()
+            if batch is not None and batch.expires_on != source.expires_on:
+                raise HTTPException(409, "Destination batch code has a different expiry; transfer was not applied")
+            if batch is None:
+                batch = ProductBatch(company_id=incoming.company_id, branch_id=incoming.branch_id,
+                    product_id=incoming.product_id, variant_id=incoming.variant_id, code=source.code,
+                    expires_on=source.expires_on, quantity=Decimal("0"))
+                db.add(batch)
+                await db.flush()
+            batch.quantity -= allocation.quantity
+            db.add(BatchAllocation(batch_id=batch.id, movement_id=incoming.id, quantity=-allocation.quantity))
+        await db.flush()

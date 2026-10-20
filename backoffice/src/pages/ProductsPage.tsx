@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import "./products.css";
 
@@ -177,6 +177,26 @@ export default function ProductsPage({
   const [priceName, setPriceName] = useState("");
   const [priceValue, setPriceValue] = useState("");
   const [priceMinimum, setPriceMinimum] = useState("1");
+  const [editingVariantId, setEditingVariantId] = useState("");
+  const [editingPriceId, setEditingPriceId] = useState("");
+  const advancedLock = useRef(false);
+  const [advancedBusy, setAdvancedBusy] = useState(false);
+
+  function resetAdvancedEditors() {
+    setEditingVariantId(""); setEditingPriceId("");
+    setVariantName(""); setVariantSku(""); setVariantBarcode("");
+    setVariantCost(""); setVariantPrice(""); setVariantStock("0"); setVariantReorder("0");
+    setPriceName(""); setPriceValue(""); setPriceMinimum("1");
+  }
+  useEffect(() => { resetAdvancedEditors(); }, [selectedAdvancedProductId, activeFeature, companyId, form.branch_id]);
+
+  async function advancedMutation(action: () => Promise<void>) {
+    if (advancedLock.current) return;
+    advancedLock.current = true; setAdvancedBusy(true);
+    try { await action(); }
+    catch (error: any) { setMessage(error.response?.data?.detail || "Unable to save product changes"); }
+    finally { advancedLock.current = false; setAdvancedBusy(false); }
+  }
   const [productImage, setProductImage] = useState<File | null>(null);
   const [productImagePreview, setProductImagePreview] = useState("");
   const [importPreview, setImportPreview] = useState<ImportPreviewRow[]>([]);
@@ -533,24 +553,27 @@ export default function ProductsPage({
   useEffect(() => {
     if (!selectedAdvancedProductId) {
       setComponents([]);
+      setVariants([]); setPriceLevels([]);
       return;
     }
+    let current = true;
     if (activeFeature === "composites") {
       void api.get(`/products/components/${companyId}/${selectedAdvancedProductId}`)
-        .then((response) => setComponents(response.data))
-        .catch((error: any) => setMessage(error.response?.data?.detail || "Failed to load components"));
+        .then((response) => { if (current) setComponents(response.data); })
+        .catch((error: any) => { if (current) setMessage(error.response?.data?.detail || "Failed to load components"); });
     }
     if (activeFeature === "variants") {
-      void api.get(`/products/variants/${companyId}`, { params: { product_id: selectedAdvancedProductId } })
-        .then((response) => setVariants(response.data))
-        .catch((error: any) => setMessage(error.response?.data?.detail || "Failed to load variants"));
+      void api.get(`/products/variants/${companyId}`, { params: { product_id: selectedAdvancedProductId, branch_id: form.branch_id || undefined } })
+        .then((response) => { if (current) setVariants(response.data); })
+        .catch((error: any) => { if (current) setMessage(error.response?.data?.detail || "Failed to load variants"); });
     }
     if (activeFeature === "price-levels") {
       void api.get(`/products/price-levels/${companyId}`, { params: { product_id: selectedAdvancedProductId } })
-        .then((response) => setPriceLevels(response.data))
-        .catch((error: any) => setMessage(error.response?.data?.detail || "Failed to load price levels"));
+        .then((response) => { if (current) setPriceLevels(response.data); })
+        .catch((error: any) => { if (current) setMessage(error.response?.data?.detail || "Failed to load price levels"); });
     }
-  }, [activeFeature, companyId, selectedAdvancedProductId]);
+    return () => { current = false; };
+  }, [activeFeature, companyId, selectedAdvancedProductId, form.branch_id]);
 
   function addComponentDraft() {
     const product = products.find((item) => item.id === componentProductId);
@@ -590,32 +613,48 @@ export default function ProductsPage({
   async function createVariant() {
     if (!selectedAdvancedProductId || !variantName.trim()) return;
     try {
-      await api.post(`/products/variants/${companyId}/${selectedAdvancedProductId}`, {
+      const metadata = {
         name: variantName.trim(), sku: variantSku.trim() || null,
-        barcode: variantBarcode.trim() || null, attributes: {},
+        barcode: variantBarcode.trim() || null,
         cost_price: variantCost || null,
         selling_price: variantPrice || null,
         branch_id: form.branch_id || branches[0]?.id || null,
-        stock_qty: variantStock || "0",
         reorder_level: variantReorder || "0",
-      });
-      setVariantName(""); setVariantSku(""); setVariantBarcode("");
-      setVariantCost(""); setVariantPrice(""); setVariantStock("0"); setVariantReorder("0");
+      };
+      if (editingVariantId) await api.patch(`/products/variants/${companyId}/item/${editingVariantId}`, metadata);
+      else await api.post(`/products/variants/${companyId}/${selectedAdvancedProductId}`, { ...metadata, attributes: {}, stock_qty: variantStock || "0" });
+      resetAdvancedEditors();
       const response = await api.get(`/products/variants/${companyId}`, { params: { product_id: selectedAdvancedProductId, branch_id: form.branch_id || branches[0]?.id || undefined } });
-      setVariants(response.data); setMessage("Variant created");
+      setVariants(response.data); setMessage(editingVariantId ? "Variant updated" : "Variant created"); onDataChanged?.();
     } catch (error: any) { setMessage(error.response?.data?.detail || "Failed to create variant"); }
   }
 
   async function createPriceLevel() {
     if (!selectedAdvancedProductId || !priceName.trim() || priceValue === "") return;
     try {
-      await api.post(`/products/price-levels/${companyId}/${selectedAdvancedProductId}`, {
+      const payload = {
         name: priceName.trim(), price: priceValue, minimum_quantity: priceMinimum || "1",
-      });
-      setPriceName(""); setPriceValue(""); setPriceMinimum("1");
+      };
+      if (editingPriceId) await api.patch(`/products/price-levels/${companyId}/item/${editingPriceId}`, payload);
+      else await api.post(`/products/price-levels/${companyId}/${selectedAdvancedProductId}`, payload);
+      resetAdvancedEditors();
       const response = await api.get(`/products/price-levels/${companyId}`, { params: { product_id: selectedAdvancedProductId } });
-      setPriceLevels(response.data); setMessage("Price level created");
+      setPriceLevels(response.data); setMessage(editingPriceId ? "Price level updated" : "Price level created"); onDataChanged?.();
     } catch (error: any) { setMessage(error.response?.data?.detail || "Failed to create price level"); }
+  }
+
+  async function archiveVariant(item: VariantRow) {
+    if (!window.confirm(`${item.active ? "Archive" : "Restore"} ${item.name}?`)) return;
+    await api.patch(`/products/variants/${companyId}/item/${item.id}`, { active: !item.active });
+    setVariants(current=>current.map(row=>row.id===item.id ? { ...row, active: !item.active } : row));
+    resetAdvancedEditors(); onDataChanged?.();
+  }
+
+  async function deletePriceLevel(item: PriceLevelRow) {
+    if (!window.confirm(`Delete price level ${item.name}?`)) return;
+    await api.delete(`/products/price-levels/${companyId}/item/${item.id}`);
+    setPriceLevels(current=>current.filter(row=>row.id!==item.id));
+    resetAdvancedEditors(); onDataChanged?.();
   }
 
   async function exportProducts() {
@@ -1159,15 +1198,15 @@ export default function ProductsPage({
           </>}
 
           {activeFeature === "variants" && selectedAdvancedProductId && <>
-            <div className="advanced-inline-form variant-entry"><input placeholder="Variant name" value={variantName} onChange={(event) => setVariantName(event.target.value)} /><input placeholder="SKU" value={variantSku} onChange={(event) => setVariantSku(event.target.value)} /><input placeholder="Barcode" value={variantBarcode} onChange={(event) => setVariantBarcode(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Cost price" value={variantCost} onChange={(event) => setVariantCost(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Selling price" value={variantPrice} onChange={(event) => setVariantPrice(event.target.value)} /><input type="number" min="0" step="0.001" placeholder="Opening stock" value={variantStock} onChange={(event) => setVariantStock(event.target.value)} /><input type="number" min="0" step="0.001" placeholder="Reorder level" value={variantReorder} onChange={(event) => setVariantReorder(event.target.value)} /><button onClick={() => void createVariant()}>Add variant</button></div>
-            <div className="products-table-wrapper"><table><thead><tr><th>Variant</th><th>SKU</th><th>Barcode</th><th>Cost</th><th>Selling</th><th>Stock</th><th>Reorder</th><th>Status</th></tr></thead><tbody>{variants.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.sku || "—"}</td><td>{item.barcode || "—"}</td><td>{Number(item.cost_price || 0).toFixed(2)}</td><td>{Number(item.selling_price || 0).toFixed(2)}</td><td>{Number(item.stock_qty || 0)}</td><td>{Number(item.reorder_level || 0)}</td><td>{item.active ? "Active" : "Inactive"}</td></tr>)}</tbody></table></div>
+            <div className="advanced-inline-form variant-entry"><input placeholder="Variant name" value={variantName} onChange={(event) => setVariantName(event.target.value)} /><input placeholder="SKU" value={variantSku} onChange={(event) => setVariantSku(event.target.value)} /><input placeholder="Barcode" value={variantBarcode} onChange={(event) => setVariantBarcode(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Cost price" value={variantCost} onChange={(event) => setVariantCost(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Selling price" value={variantPrice} onChange={(event) => setVariantPrice(event.target.value)} />{!editingVariantId && <input type="number" min="0" step="0.001" placeholder="Opening stock" value={variantStock} onChange={(event) => setVariantStock(event.target.value)} />}<input type="number" min="0" step="0.001" placeholder="Reorder level" value={variantReorder} onChange={(event) => setVariantReorder(event.target.value)} /><button disabled={advancedBusy} onClick={() => void advancedMutation(createVariant)}>{editingVariantId ? "Update variant" : "Add variant"}</button>{editingVariantId && <button disabled={advancedBusy} onClick={resetAdvancedEditors}>Cancel edit</button>}</div>
+            <div className="products-table-wrapper"><table><thead><tr><th>Variant</th><th>SKU</th><th>Barcode</th><th>Cost</th><th>Selling</th><th>Stock</th><th>Reorder</th><th>Status</th><th>Actions</th></tr></thead><tbody>{variants.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.sku || "—"}</td><td>{item.barcode || "—"}</td><td>{item.cost_price == null ? "Inherited" : Number(item.cost_price).toFixed(2)}</td><td>{item.selling_price == null ? "Inherited" : Number(item.selling_price).toFixed(2)}</td><td>{Number(item.stock_qty || 0)}</td><td>{Number(item.reorder_level || 0)}</td><td>{item.active ? "Active" : "Inactive"}</td><td><button disabled={advancedBusy} onClick={()=>{setEditingVariantId(item.id);setVariantName(item.name);setVariantSku(item.sku || "");setVariantBarcode(item.barcode || "");setVariantCost(item.cost_price ?? "");setVariantPrice(item.selling_price ?? "");setVariantReorder(item.reorder_level || "0");}}>Edit</button> <button disabled={advancedBusy} onClick={()=>void advancedMutation(()=>archiveVariant(item))}>{item.active ? "Archive" : "Restore"}</button></td></tr>)}</tbody></table></div>
           </>}
 
           {activeFeature === "units" && selectedAdvancedProductId && (() => { const product = products.find((item) => item.id === selectedAdvancedProductId); return product ? <div className="unit-conversion-card"><strong>1 {product.purchase_unit || product.unit}</strong><span>=</span><strong>{product.units_per_purchase} {product.unit}</strong><button onClick={() => { startEditingProduct(product); openFeature("all-products"); }}>Edit conversion</button></div> : null; })()}
 
           {activeFeature === "price-levels" && selectedAdvancedProductId && <>
-            <div className="advanced-inline-form"><input placeholder="Level name" value={priceName} onChange={(event) => setPriceName(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Price" value={priceValue} onChange={(event) => setPriceValue(event.target.value)} /><input type="number" min="0.001" step="0.001" placeholder="Minimum quantity" value={priceMinimum} onChange={(event) => setPriceMinimum(event.target.value)} /><button onClick={() => void createPriceLevel()}>Add price</button></div>
-            <div className="products-table-wrapper"><table><thead><tr><th>Level</th><th>Price</th><th>Minimum quantity</th><th>Status</th></tr></thead><tbody>{priceLevels.map((item) => <tr key={item.id}><td>{item.name}</td><td>{Number(item.price).toFixed(2)}</td><td>{item.minimum_quantity}</td><td>{item.active ? "Active" : "Inactive"}</td></tr>)}</tbody></table></div>
+            <div className="advanced-inline-form"><input placeholder="Level name" value={priceName} onChange={(event) => setPriceName(event.target.value)} /><input type="number" min="0" step="0.01" placeholder="Price" value={priceValue} onChange={(event) => setPriceValue(event.target.value)} /><input type="number" min="0.001" step="0.001" placeholder="Minimum quantity" value={priceMinimum} onChange={(event) => setPriceMinimum(event.target.value)} /><button disabled={advancedBusy} onClick={() => void advancedMutation(createPriceLevel)}>{editingPriceId ? "Update price level" : "Add price"}</button>{editingPriceId && <button disabled={advancedBusy} onClick={resetAdvancedEditors}>Cancel edit</button>}</div>
+            <div className="products-table-wrapper"><table><thead><tr><th>Level</th><th>Price</th><th>Minimum quantity</th><th>Status</th><th>Actions</th></tr></thead><tbody>{priceLevels.map((item) => <tr key={item.id}><td>{item.name}</td><td>{Number(item.price).toFixed(2)}</td><td>{item.minimum_quantity}</td><td>{item.active ? "Active" : "Inactive"}</td><td><button disabled={advancedBusy} onClick={()=>{setEditingPriceId(item.id);setPriceName(item.name);setPriceValue(item.price);setPriceMinimum(item.minimum_quantity);}}>Edit</button> <button disabled={advancedBusy} onClick={()=>void advancedMutation(()=>deletePriceLevel(item))}>Delete</button></td></tr>)}</tbody></table></div>
           </>}
 
           {activeFeature === "barcode-labels" && <div className="barcode-label-grid">{products.filter((item) => !selectedAdvancedProductId || item.id === selectedAdvancedProductId).map((item) => <article key={item.id}><strong>{item.name}</strong><span>{item.barcode || item.sku}</span><small>{item.selling_price == null ? "" : `$${Number(item.selling_price).toFixed(2)}`}</small></article>)}<button className="save-product-button" onClick={() => window.print()}>Print Labels</button></div>}
