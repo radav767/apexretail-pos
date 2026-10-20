@@ -378,19 +378,35 @@ class SubscriptionService:
         snapshot_expires_at = issued_at + timedelta(
             hours=min(self.policy.offline_grace_hours, 12)
         )
+        terms=getattr(subscription,'commercial_terms',None)
+        signed_status=subscription.status
+        if terms is not None:
+            hours=min(self.policy.offline_grace_hours,int(terms['offline_grace_hours']))
+            offline_grace_expires_at=issued_at+timedelta(hours=hours)
+            if subscription.grace_ends_at:
+                boundary=subscription.grace_ends_at.replace(microsecond=0)
+                if boundary<=issued_at:
+                    # NumericDate cannot represent the last fractional second.
+                    # Sign a non-writable result instead of extending a license
+                    # or raising an authentication-time 500.
+                    signed_status='expired'
+                    offline_grace_expires_at=issued_at+timedelta(seconds=1)
+                else:offline_grace_expires_at=min(offline_grace_expires_at,boundary)
+            snapshot_expires_at=min(snapshot_expires_at,offline_grace_expires_at)
         token = create_entitlement_snapshot_token(
             company_id=str(subscription.company_id),
-            status=subscription.status,
+            status=signed_status,
             plan=subscription.plan,
             offline_grace_expires_at=offline_grace_expires_at,
             snapshot_expires_at=snapshot_expires_at,
             issued_at=issued_at,
+            **({'features':terms.get('features',{}),'limits':{kind:terms.get(kind+'_limit') for kind in ('branch','device','employee')}} if terms is not None else {}),
         )
-        writes_allowed = subscription.status in WRITE_ALLOWED_STATUSES
+        writes_allowed = signed_status in WRITE_ALLOWED_STATUSES
         return {
-            "status": subscription.status,
-            "display_status": self.display_status(subscription),
-            "display_status_label": self.display_status_label(subscription),
+            "status": signed_status,
+            "display_status": self.display_status(subscription) if signed_status==subscription.status else 'expired',
+            "display_status_label": self.display_status_label(subscription) if signed_status==subscription.status else 'Expired',
             "plan": subscription.plan,
             "effective_until": self.effective_until(subscription),
             "offline_grace_expires_at": offline_grace_expires_at,
@@ -593,18 +609,21 @@ class SubscriptionService:
         company_id: UUID,
     ) -> dict:
         subscription = await self.ensure_current(company_id)
+        commercial=getattr(subscription,'commercial_terms',None)
         billing_preview = await self.build_billing_summary(
             company_id,
-            subscription.plan or "monthly",
+            subscription.plan if subscription.plan in PLAN_PRICING else "monthly",
             allow_zero=True,
         )
         active_terminals = billing_preview["terminal_count"]
         latest_session = await self.get_latest_checkout_session(
             company_id
         )
-        latest_session = await self.maybe_refresh_latest_paynow_session(
-            latest_session
-        )
+        if not commercial:
+            latest_session = await self.maybe_refresh_latest_paynow_session(latest_session)
+        else:
+            billing_preview={**billing_preview,'billing_period':'commercial','currency':commercial['currency'],
+                'unit_price':Decimal(commercial['price']),'total_amount':Decimal(commercial['price'])}
         history_result = await self.db.execute(
             select(CompanySubscriptionHistory)
             .where(
@@ -618,13 +637,14 @@ class SubscriptionService:
         return {
             "current": {
                 "company_id": company_id,
+                "commercial_terms": commercial,
                 "plan": subscription.plan,
                 "status": subscription.status,
                 "display_status": self.display_status(subscription),
                 "display_status_label": self.display_status_label(
                     subscription
                 ),
-                "plan_label": self.plan_label(subscription.plan),
+                "plan_label": commercial['plan_name'] if commercial else self.plan_label(subscription.plan),
                 "trial_started_at": subscription.trial_started_at,
                 "trial_ends_at": subscription.trial_ends_at,
                 "trial_days_remaining": self.trial_days_remaining(
@@ -649,13 +669,13 @@ class SubscriptionService:
                 active_terminals,
             ),
             "billing_preview": billing_preview,
-            "billing_options": await self.billing_options(company_id),
+            "billing_options": [] if commercial else await self.billing_options(company_id),
             "latest_checkout": self.serialize_checkout_session(
                 latest_session
             ),
             "history": history_result.scalars().all(),
-            "activation_available": self.policy.activation_available,
-            "activation_message": self.payment_configuration_message(),
+            "activation_available": False if commercial else self.policy.activation_available,
+            "activation_message": 'Renew through your commercial subscription invoice.' if commercial else self.payment_configuration_message(),
             "provider_name": self.provider_name(),
             "checkout_configured": self.policy.activation_available,
             "webhook_configured": self.provider_name() == "paynow"
@@ -664,7 +684,7 @@ class SubscriptionService:
                 and self.policy.paynow_credentials.result_url
             ),
             "payment_configuration_required": self.payment_configuration_required(),
-            "available_plans": ["monthly", "yearly"],
+            "available_plans": [] if commercial else ["monthly", "yearly"],
         }
 
     async def enforce_writes_allowed(
@@ -688,7 +708,9 @@ class SubscriptionService:
             return
         subscription = await self.ensure_current(company_id)
         if subscription.status == "trial":
-            return
+            if getattr(subscription,'commercial_terms',None) is None:return
+        from app.subscriptions.commercial import enforce_capacity
+        await enforce_capacity(self.db,company_id,'device',exclude_device_id)
         allowance = subscription.licensed_terminal_count
         if allowance is None:
             return
@@ -792,6 +814,9 @@ class SubscriptionService:
         company_id: UUID,
         plan: str,
     ) -> dict:
+        current=await self.get_current(company_id)
+        if current is not None and getattr(current,'commercial_terms',None) is not None:
+            raise HTTPException(409,'This business uses commercial invoices; renew through platform billing')
         normalized_plan = str(plan or "").strip().lower()
         if normalized_plan not in PLAN_DURATIONS:
             raise HTTPException(
@@ -1010,6 +1035,15 @@ class SubscriptionService:
         status_reason: str,
     ) -> CompanySubscription:
         subscription = await self.ensure_current(company_id)
+        if getattr(subscription,'commercial_terms',None) is not None:
+            # A late, verified legacy callback is money received, not permission
+            # to overwrite the commercial contract. Retain it for reconciliation.
+            self.record_history(subscription,action='legacy_payment_needs_review',plan=plan,status=subscription.status,
+                provider=provider,provider_reference=provider_reference,payload={'payment':payload,'billing_snapshot':{k:str(v) if isinstance(v,Decimal) else v for k,v in billing_snapshot.items()}},note='Verified legacy payment retained; commercial license unchanged')
+            from app.models.commercial import PlatformAudit
+            self.db.add(PlatformAudit(company_id=company_id,action='legacy_payment_needs_review',details={'provider':provider,'provider_reference':provider_reference}))
+            await self.db.commit()
+            return subscription
         now = datetime.now(UTC)
         duration = PLAN_DURATIONS[plan]
         period_start = now

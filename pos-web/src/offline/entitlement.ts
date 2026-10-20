@@ -25,6 +25,8 @@ export type EntitlementClaims = {
   company_id: string;
   status: string;
   plan?: string | null;
+  features?: Record<string,boolean>;
+  limits?: Record<string,number|null>;
   offline_grace_expires_at: string;
   token_type: string;
   iat?: number;

@@ -2,6 +2,7 @@ import { applyDiscounts } from "./discounts";
 import { hasActiveCashierShift, saleShiftError } from "./shiftPolicy";
 import { checkoutPrice, accumulatedWeightedQuantity } from "./business/pricing";
 import TipPaymentPanel from "./business/TipPaymentPanel";
+import {offlineCartLicenseError} from './offline/licensedCart';
 import { canProcessSales, canAccessOperations } from "./business/access";
 import { flushPrintIntents, scheduleSalePrint } from "./printing/queue";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -113,6 +114,7 @@ import "./sales-responsive.css";
 type Product = {
   id: string;
   name: string;
+  product_type?:string;
   sku?: string;
   barcode?: string;
   selling_price: string;
@@ -2667,6 +2669,10 @@ const [loggedIn, setLoggedIn] = useState(
 
       // New queues retain the signed original shift identity. Installations
       // with older queued rows remain compatible and are never rewritten.
+      const verifiedLicense=await verifyEntitlementSnapshotDetailed(loadEntitlementSnapshot(companyId));
+      if(!verifiedLicense.ok)throw new Error('Reconnect to verify the original subscription authorization.');
+      const licenseError=offlineCartLicenseError(verifiedLicense.claims.features,cart);
+      if(licenseError)throw new Error(licenseError);
       const queuedPayload = {
         ...payload,
         offline_shift_token: currentShift?.offline_shift_token || null,

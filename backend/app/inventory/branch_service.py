@@ -20,6 +20,9 @@ class BranchInventoryService:
         return await self.repo.list_branches(company_id)
 
     async def create_branch(self, data: BranchCreate, actor=None):
+        if hasattr(self.repo,'db'):
+            from app.subscriptions.commercial import enforce_capacity
+            await enforce_capacity(self.repo.db,data.company_id,'branch')
         name = data.name.strip()
 
         if not name:

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import PlanFeatureGate from '../components/PlanFeatureGate';
 import "./products.css";
 
 type Category = {
@@ -1175,6 +1176,7 @@ export default function ProductsPage({
       </section>}
 
       {["composites", "variants", "units", "price-levels", "barcode-labels"].includes(activeFeature) && (
+        <PlanFeatureGate companyId={companyId} feature={['composites','variants'].includes(activeFeature)?activeFeature:''} client={api}>
         <section className="product-management-card product-advanced-page">
           <div className="management-card-header"><div><h2>{
             activeFeature === "composites" ? "Composite Products" : activeFeature === "variants" ? "Product Variants" :
@@ -1211,6 +1213,7 @@ export default function ProductsPage({
 
           {activeFeature === "barcode-labels" && <div className="barcode-label-grid">{products.filter((item) => !selectedAdvancedProductId || item.id === selectedAdvancedProductId).map((item) => <article key={item.id}><strong>{item.name}</strong><span>{item.barcode || item.sku}</span><small>{item.selling_price == null ? "" : `$${Number(item.selling_price).toFixed(2)}`}</small></article>)}<button className="save-product-button" onClick={() => window.print()}>Print Labels</button></div>}
         </section>
+        </PlanFeatureGate>
       )}
 
       {activeFeature === "import-export" && <section className="product-management-card import-export-page">

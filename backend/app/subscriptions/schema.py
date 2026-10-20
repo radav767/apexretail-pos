@@ -23,6 +23,7 @@ class SubscriptionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     company_id: UUID
+    commercial_terms: dict[str, Any] | None = None
     plan: str | None
     status: str
     display_status: str

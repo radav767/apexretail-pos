@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, Text, JSON, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.base import Base
@@ -37,6 +37,7 @@ class CompanySubscription(Base):
     unit_price = Column(Numeric(12, 2), nullable=True)
     total_amount = Column(Numeric(12, 2), nullable=True)
     status_reason = Column(Text, nullable=True)
+    commercial_terms = Column(JSON, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,

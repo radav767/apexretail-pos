@@ -40,6 +40,9 @@ class BusinessService(PrintingService):
         if self.actor.employee: batch_query = batch_query.where(ProductBatch.branch_id == self.actor.employee.branch_id)
         if (await self.db.execute(batch_query.limit(1))).first(): features.add("pharmacy")
         if "hospitality" in features: features.add("restaurant")
+        from app.subscriptions.commercial import terms_for
+        licensed=await terms_for(self.db,self.actor.company_id)
+        if licensed is not None:features={f for f in features if licensed.get('features',{}).get(f,False)}
         return {"profile": key, "name": PROFILES[key]["name"], "features": sorted(features),
             "employee_id": self.actor.employee.id if self.actor.employee else None,
             "tips_enabled": bool(tips and tips.enabled),
@@ -49,6 +52,8 @@ class BusinessService(PrintingService):
             "permissions": self.actor.permissions or {}, "administrator": self.actor.actor_type == "user" or self.actor.role in {"owner", "administrator"}}
 
     async def feature(self, name):
+        from app.subscriptions.commercial import enforce_feature
+        await enforce_feature(self.db,self.actor.company_id,name)
         if name not in (await self.profile())["features"]:
             raise HTTPException(409, "Enable the appropriate business profile in Settings first")
 
@@ -260,6 +265,8 @@ class BusinessService(PrintingService):
         return await self.order_out(row)
 
     async def send_kitchen(self, order_id, version):
+        from app.subscriptions.commercial import enforce_feature
+        await enforce_feature(self.db,self.actor.company_id,'kitchen_printing')
         row = await self.order(order_id, version=version, edit=True)
         permit(self.actor, "orders_send")
         if row.kind == "quotation": raise HTTPException(400, "Quotations cannot be sent to kitchens")

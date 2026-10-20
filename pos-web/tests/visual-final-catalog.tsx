@@ -32,7 +32,8 @@ const adapter: typeof api.defaults.adapter = async config => {
   const payload = typeof config.data === "string" ? JSON.parse(config.data) : config.data || {};
   requests.push({method,url,payload});
   let data: unknown = [];
-  if(url==="/inventory/transfers/capabilities") {
+  if(url.includes('/subscriptions/access/'))data={managed:false,features:{variants:true,composites:true}};
+  else if(url==="/inventory/transfers/capabilities") {
     if(query.get("legacy")==="true")throw new AxiosError("Not found","ERR_BAD_REQUEST",config,undefined,{data:{detail:"Not found"},status:404,statusText:"Not found",headers:{},config});
     data={idempotency:"audit-v1",variant_transfers:true};
   } else if(url==="/inventory/transfers") {

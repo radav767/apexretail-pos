@@ -71,3 +71,13 @@ for(const kind of ["kitchen","kds"]){
 }
 assert.throws(()=>queue.enqueue({id:"payment",endpoint:"/sales",payload:{}}));
 console.log("KOT/KDS outbox: matching receipt required, conflict retained, explicit resolution survives restart, offline payments rejected");
+const licensedSource=await readFile(new URL('../src/offline/licensedCart.ts',import.meta.url),'utf8');
+const licensedJs=ts.transpileModule(licensedSource,{compilerOptions:{module:ts.ModuleKind.ES2022}}).outputText;
+const {offlineCartLicenseError}=await import(`data:text/javascript;base64,${Buffer.from(licensedJs).toString('base64')}`);
+assert.equal(offlineCartLicenseError(undefined,[{}]),null);
+assert.equal(offlineCartLicenseError({variants:false,composites:false},[{product_type:'standard'}]),null);
+assert.ok(offlineCartLicenseError({variants:false,composites:true},[{variant_id:'restricted'}]));
+assert.ok(offlineCartLicenseError({composites:false},[{product_type:'composite'}]));
+assert.ok(offlineCartLicenseError({composites:false},[{}]));
+assert.equal(offlineCartLicenseError({variants:true,composites:true},[{variant_id:'permitted',product_type:'standard'}]),null);
+console.log('Signed-feature cart policy: legacy compatibility, permitted standard items, variant/composite rejection and unknown-cache fail-closed checks passed');

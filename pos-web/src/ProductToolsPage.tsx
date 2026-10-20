@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, getApiErrorMessage } from "./api/client";
+import PlanFeatureGate from '../../backoffice/src/components/PlanFeatureGate';
 
 export type ProductToolFeature =
   | "categories" | "composite-products" | "product-variants" | "units"
@@ -20,7 +21,11 @@ type VariantRow = { id: string; name: string; sku?: string | null; barcode?: str
 type PriceRow = { id: string; name: string; price: string; minimum_quantity: string; active: boolean };
 type ImportPreviewRow = { row_number: number; values: Record<string, string | null>; errors: string[] };
 
-export default function ProductToolsPage({
+export default function ProductToolsPage(props:Parameters<typeof ProductToolsContent>[0]){
+ const feature=props.feature==='product-variants'?'variants':props.feature==='composite-products'?'composites':'';
+ return feature?<PlanFeatureGate companyId={props.companyId} feature={feature} client={api}><ProductToolsContent {...props}/></PlanFeatureGate>:<ProductToolsContent {...props}/>;
+}
+function ProductToolsContent({
   feature, companyId, branchId, canManage, canViewCosts = false, onDataChanged,
 }: {
   feature: ProductToolFeature;

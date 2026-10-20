@@ -32,6 +32,7 @@ class AuthActor:
 
 
 async def get_auth_actor(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(
         bearer_scheme
     ),
@@ -48,6 +49,8 @@ async def get_auth_actor(
     if actor is None:
         raise HTTPException(401, "Invalid access token")
 
+    from app.subscriptions.feature_guard import enforce_request_features
+    await enforce_request_features(db, actor, request)
     return actor
 
 

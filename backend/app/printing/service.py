@@ -77,6 +77,9 @@ class PrintingService:
 
     async def save_station(self, data, station_id=None):
         permit(self.actor, "printers_manage")
+        if data.purpose in {'kitchen','bar'}:
+            from app.subscriptions.commercial import enforce_feature
+            await enforce_feature(self.db,self.actor.company_id,'kitchen_printing')
         enforce_actor_branch(self.actor, data.branch_id)
         branch = await self.db.get(Branch, data.branch_id)
         device = await self.db.get(Device, data.device_id)
@@ -110,6 +113,9 @@ class PrintingService:
 
     async def enqueue(self, station_id, data):
         station = await self.station(station_id, lock=True)
+        if station.purpose in {'kitchen','bar'}:
+            from app.subscriptions.commercial import enforce_feature
+            await enforce_feature(self.db,self.actor.company_id,'kitchen_printing')
         if not station.active:
             raise HTTPException(409, "Printer station is inactive")
         # Permission revocation applies to retries too, not just new inserts.

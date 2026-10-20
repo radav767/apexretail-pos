@@ -5,6 +5,7 @@ import ShopsDevicesPage from "./ShopsDevicesPage";
 import CurrencySettingsPanel from "./CurrencySettingsPanel";
 import PrinterManagement from "../../../pos-web/src/printing/PrinterManagement";
 import TipsSettingsPanel from "./TipsSettingsPanel";
+import CommercialBillingPanel from './CommercialBillingPanel';
 import "./settings.css";
 
 type SettingsSection =
@@ -110,6 +111,7 @@ type SubscriptionHistoryRow = {
 type SubscriptionPageData = {
   current: {
     company_id: string;
+    commercial_terms?: Record<string,unknown>|null;
     plan: string | null;
     status: string;
     display_status: string;
@@ -1170,7 +1172,8 @@ export default function SettingsPage({
         />
       ) : null}
 
-      {section === "subscription" && subscription ? (
+      {section === "subscription" && <CommercialBillingPanel companyId={companyId}/>}
+      {section === "subscription" && subscription && !subscription.current.commercial_terms ? (
         <section className="settings-card subscription-panel">
           <div className="subscription-panel-heading">
             <div>

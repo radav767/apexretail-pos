@@ -194,6 +194,9 @@ class EmployeeService:
         data: EmployeeCreate,
         actor=None,
     ):
+        if hasattr(self.repo,'db'):
+            from app.subscriptions.commercial import enforce_capacity
+            await enforce_capacity(self.repo.db,data.company_id,'employee')
         self.ensure_branch_access(actor, data.branch_id)
         await self.validate_location(
             data.company_id,
@@ -298,6 +301,10 @@ class EmployeeService:
                 404,
                 "Employee not found",
             )
+
+        if data.active is True and not employee.active and hasattr(self.repo,'db'):
+            from app.subscriptions.commercial import enforce_capacity
+            await enforce_capacity(self.repo.db,company_id,'employee',employee.id)
 
         before = {
             "name": employee.name,

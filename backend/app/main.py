@@ -13,6 +13,7 @@ from app.employees import router as employees
 from app.reports import router as reports
 from app.business_settings import router as business_settings
 from app.subscriptions import router as subscriptions
+from app.subscriptions.platform_router import platform, business as commercial_billing
 from app.customers import router as customers
 from app.credit import router as credit
 from app.expenses import router as expenses
@@ -92,6 +93,8 @@ app.include_router(employees.router, prefix="/api")
 app.include_router(reports, prefix="/api")
 app.include_router(business_settings.router, prefix="/api")
 app.include_router(subscriptions.router, prefix="/api")
+app.include_router(platform, prefix="/api")
+app.include_router(commercial_billing, prefix="/api")
 app.include_router(customers, prefix="/api")
 app.include_router(credit, prefix="/api")
 app.include_router(expenses, prefix="/api")
