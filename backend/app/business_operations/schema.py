@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
@@ -66,8 +66,15 @@ class MoveInput(VersionInput):
     waiter_id: UUID | None = None
 
 
+class SplitQuantity(BaseModel):
+    item_id: UUID
+    quantity: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
+
+
 class SplitInput(VersionInput):
-    item_ids: list[UUID] = Field(min_length=1, max_length=200)
+    # Keep the existing whole-line client contract.
+    item_ids: list[UUID] = Field(default_factory=list, max_length=200)
+    quantities: list[SplitQuantity] = Field(default_factory=list, max_length=200)
     request_id: UUID
 
 
@@ -91,3 +98,29 @@ class BatchInput(BaseModel):
 
 class KitchenStateInput(BaseModel):
     status: Literal["preparing", "ready", "served", "acknowledged"]
+
+
+class OfflineDraftInput(BaseModel):
+    """Unpaid drafts only. No offline payment or kitchen acknowledgement."""
+    request_id: UUID
+    employee_id: UUID
+    captured_at: datetime
+    order: OrderInput
+    items: list[OrderItemInput] = Field(min_length=1, max_length=200)
+
+
+class OfflineEditInput(BaseModel):
+    request_id: UUID
+    employee_id: UUID
+    device_id: UUID
+    captured_at: datetime
+    order_id: UUID
+    item_id: UUID
+    change: ItemUpdate
+
+
+class BatchStockInput(BatchInput):
+    request_id: UUID
+    operation: Literal["receive", "supplier_return", "dispose"]
+    reason: str = Field(min_length=3, max_length=160)
+    received_unit: str | None = Field(default=None, max_length=20)

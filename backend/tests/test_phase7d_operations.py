@@ -45,7 +45,7 @@ class Phase7DOperationsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         url = os.getenv("APEX_PHASE7D_TEST_DATABASE_URL")
         if not url: self.skipTest("APEX_PHASE7D_TEST_DATABASE_URL is not configured")
-        if make_url(url).database != "apexretail_phase7c_test_phase7d": self.fail("Refusing a non-disposable Phase 7D database")
+        if make_url(url).database not in {"apexretail_phase7c_test_phase7d", "apexretail_phase7c_test_phase7e"}: self.fail("Refusing a non-disposable Phase 7D/7E database")
         with patch.dict(os.environ, {"APEX_PHASE7C_TEST_DATABASE_URL": url}):
             await fixtures.PrintingPostgresTests.asyncSetUp(self)
         self.company.business_type = "Restaurant"

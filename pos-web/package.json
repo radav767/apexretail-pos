@@ -20,7 +20,8 @@
     "test:offline-quarantine": "node scripts/test-offline-quarantine.mjs",
     "test:shift-management": "node --test tests/shiftManagementUi.test.mjs",
     "test:navigation": "node --test tests/posNavigationUi.test.mjs",
-    "test:printer-android": "node scripts/test-printer-android.mjs"
+    "test:printer-android": "node scripts/test-printer-android.mjs",
+    "test:offline-orders": "node scripts/test-offline-orders.mjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^7.0.3",

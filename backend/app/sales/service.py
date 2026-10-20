@@ -348,6 +348,8 @@ class SalesService:
             )
             variant=await self.repo.get_variant(data.company_id,product.id,item.variant_id) if item.variant_id and hasattr(self.repo,"get_variant") else None
             if item.variant_id and variant is None: raise HTTPException(400,"Variant is missing or inactive")
+            if not item.variant_id and hasattr(self.repo, "has_active_variants") and await self.repo.has_active_variants(data.company_id, product.id):
+                raise HTTPException(409, "Select the product variant before completing this sale. Retain previously queued sales for authorized review; never assign a variant silently")
 
             selling_unit = (
                 str(

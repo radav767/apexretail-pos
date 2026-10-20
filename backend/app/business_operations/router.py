@@ -7,6 +7,10 @@ from app.core.config import get_settings
 from app.subscriptions.service import SubscriptionService
 from .service import BusinessService
 from .profiles import PROFILES
+from .offline import OfflineOrderService
+from .batch_stock import BatchStockService
+from .schema import BatchStockInput
+from .schema import OfflineDraftInput, OfflineEditInput
 from .schema import ProfileInput, TableInput, RoomInput, GuestInput, OrderInput, OrderItemInput, ItemUpdate, VersionInput, MoveInput, SplitInput, MergeInput, SettlementInput, BatchInput, KitchenStateInput
 
 router = APIRouter(prefix="/operations", tags=["business operations"])
@@ -18,6 +22,21 @@ def service(db=Depends(get_db), actor=Depends(get_auth_actor)): return BusinessS
 async def require_operational_writes(db=Depends(get_db), actor=Depends(get_auth_actor)):
     settings = get_settings()
     await SubscriptionService(db, offline_grace_hours=settings.subscription_offline_grace_hours, provider_name=settings.subscription_provider_name).enforce_writes_allowed(actor.company_id)
+
+
+@router.post("/offline/drafts", dependencies=[Depends(require_operational_writes)])
+async def synchronize_draft(data: OfflineDraftInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db, actor).synchronize(data)
+
+
+@router.post("/offline/edits", dependencies=[Depends(require_operational_writes)])
+async def synchronize_edit(data: OfflineEditInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db, actor).synchronize(data, edit=True)
+
+
+@router.post("/batches/stock", dependencies=[Depends(require_operational_writes)])
+async def batch_stock(data: BatchStockInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
+    return await BatchStockService(db, actor).execute(data)
 
 
 @router.get("/profiles")

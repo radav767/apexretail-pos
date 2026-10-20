@@ -118,3 +118,31 @@ class BatchAllocation(Base):
     batch_id = Column(UUID(as_uuid=True), ForeignKey("product_batches.id"), nullable=False)
     movement_id = Column(UUID(as_uuid=True), ForeignKey("inventory_movements.id"), nullable=False)
     quantity = Column(Numeric(12, 3), nullable=False)
+
+
+class OrderSyncReceipt(Base):
+    """Append-only acknowledgement of an atomic unpaid offline command."""
+    __tablename__ = "order_sync_receipts"
+    __table_args__ = (UniqueConstraint("company_id", "request_id", name="uq_order_sync_request"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id"), nullable=False)
+    device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id"), nullable=False)
+    request_id = Column(UUID(as_uuid=True), nullable=False)
+    payload_hash = Column(String(64), nullable=False)
+    result = Column(JSONB, nullable=False)
+    captured_at = Column(DateTime(timezone=True), nullable=False)
+    synchronized_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class BatchStockOperation(Base):
+    __tablename__ = "batch_stock_operations"
+    __table_args__ = (UniqueConstraint("company_id", "request_id", name="uq_batch_stock_request"),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
+    request_id = Column(UUID(as_uuid=True), nullable=False)
+    payload_hash = Column(String(64), nullable=False)
+    batch_id = Column(UUID(as_uuid=True), ForeignKey("product_batches.id"), nullable=False)
+    movement_id = Column(UUID(as_uuid=True), ForeignKey("inventory_movements.id"), nullable=False, unique=True)
+    operation = Column(String(24), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

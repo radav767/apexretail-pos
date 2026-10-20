@@ -18,13 +18,28 @@ def row_dict(row, fields):
 
 
 class BusinessService(PrintingService):
+    async def commit_operation(self):
+        await self.db.commit()
+
     async def profile(self):
         company = await self.db.get(Company, self.actor.company_id)
         if not company: raise HTTPException(404, "Company not found")
         profile = await self.db.get(BusinessProfile, company.id)
         # Existing Settings/registration remain authoritative for the label.
         key = infer_profile(company.business_type)
-        return {"profile": key, "name": PROFILES[key]["name"], "features": PROFILES[key]["features"],
+        features = set(PROFILES[key]["features"])
+        # A profile change must not strand existing work. Permissions and all
+        # branch checks still apply on every read/write route.
+        for kind, feature in (("restaurant", "restaurant"), ("room_service", "hospitality"), ("quotation", "wholesale")):
+            query = select(CommerceOrder.id).where(CommerceOrder.company_id == company.id, CommerceOrder.kind == kind)
+            if self.actor.employee: query = query.where(CommerceOrder.branch_id == self.actor.employee.branch_id)
+            if (await self.db.execute(query.limit(1))).first(): features.add(feature)
+        batch_query = select(ProductBatch.id).where(ProductBatch.company_id == company.id)
+        if self.actor.employee: batch_query = batch_query.where(ProductBatch.branch_id == self.actor.employee.branch_id)
+        if (await self.db.execute(batch_query.limit(1))).first(): features.add("pharmacy")
+        if "hospitality" in features: features.add("restaurant")
+        return {"profile": key, "name": PROFILES[key]["name"], "features": sorted(features),
+            "employee_id": self.actor.employee.id if self.actor.employee else None,
             "legacy_business_type": company.business_type, "tip_product_id": profile.tip_product_id if profile else None,
             "service_product_id": profile.service_product_id if profile else None,
             "permissions": self.actor.permissions or {}, "administrator": self.actor.actor_type == "user" or self.actor.role in {"owner", "administrator"}}
@@ -146,7 +161,7 @@ class BusinessService(PrintingService):
             table_id=data.table_id, guest_id=data.guest_id, customer_id=data.customer_id, kind=data.kind, request_id=data.request_id,
             number=f"O-{uuid.uuid4().hex[:16].upper()}", status="open", version=1, notes=data.notes)
         self.db.add(row); await self.db.flush()
-        self.audit("commerce_order_opened", order_id=row.id, kind=row.kind); await self.db.commit()
+        self.audit("commerce_order_opened", order_id=row.id, kind=row.kind); await self.commit_operation()
         return await self.order_out(row)
 
     async def order(self, order_id, *, version=None, edit=False, settle=False):
@@ -220,7 +235,7 @@ class BusinessService(PrintingService):
             price=price, unit=product.unit, notes=data.notes))
         row.version += 1
         await self.db.flush(); await self.refresh_price_estimates(row)
-        self.audit("order_item_added", order_id=row.id, product_id=product.id, quantity=str(data.quantity)); await self.db.commit()
+        self.audit("order_item_added", order_id=row.id, product_id=product.id, quantity=str(data.quantity)); await self.commit_operation()
         return await self.order_out(row)
 
     async def edit_item(self, order_id, item_id, data):
@@ -237,7 +252,7 @@ class BusinessService(PrintingService):
         if profile and item.product_id in {profile.tip_product_id, profile.service_product_id}: item.sent_quantity = item.quantity
         row.version += 1
         await self.db.flush(); await self.refresh_price_estimates(row)
-        self.audit("order_item_changed", order_id=row.id, item_id=item.id, quantity=str(data.quantity)); await self.db.commit()
+        self.audit("order_item_changed", order_id=row.id, item_id=item.id, quantity=str(data.quantity)); await self.commit_operation()
         return await self.order_out(row)
 
     async def send_kitchen(self, order_id, version):
@@ -317,17 +332,43 @@ class BusinessService(PrintingService):
         row = await self.order(order_id, version=data.version, edit=True)
         permit(self.actor, "restaurant_manage")
         items = [i for i in await self.order_items(row) if i.quantity > 0]
-        selected = [i for i in items if i.id in set(data.item_ids)]
-        if len(selected) != len(set(data.item_ids)) or len(selected) == len(items): raise HTTPException(400, "Select some, not all, active lines")
+        if data.item_ids and data.quantities:
+            raise HTTPException(400, "Choose whole lines or quantities, not both")
+        quantities = {entry.item_id: entry.quantity for entry in data.quantities}
+        if len(quantities) != len(data.quantities) or len(set(data.item_ids)) != len(data.item_ids):
+            raise HTTPException(400, "Duplicate split lines")
+        if data.item_ids: quantities = {i.id: i.quantity for i in items if i.id in data.item_ids}
+        selected = [i for i in items if i.id in quantities]
+        if not selected or len(selected) != len(quantities) or (data.item_ids and len(selected) != len(data.item_ids)):
+            raise HTTPException(400, "Select active lines")
+        if any(quantities[i.id] > i.quantity for i in selected):
+            raise HTTPException(400, "Split quantity exceeds the bill quantity")
+        if sum(quantities.values()) >= sum(i.quantity for i in items):
+            raise HTTPException(400, "Leave at least one item on the original bill")
+        # Splitting unacknowledged kitchen changes makes preparation lineage
+        # ambiguous. Dispatch amendments first; never send split food twice.
+        if row.last_dispatch_context and any(i.quantity != i.sent_quantity for i in items):
+            raise HTTPException(409, "Dispatch pending changes before splitting")
         child = CommerceOrder(company_id=row.company_id, branch_id=row.branch_id, device_id=row.device_id, waiter_id=row.waiter_id,
             table_id=row.table_id, customer_id=row.customer_id, guest_id=row.guest_id, parent_id=row.id, kind=row.kind,
             request_id=data.request_id, number=f"O-{uuid.uuid4().hex[:16].upper()}", status="open", version=1, notes=row.notes,
             last_dispatch_context=row.last_dispatch_context)
         self.db.add(child); await self.db.flush()
-        for item in selected: item.order_id = child.id
+        for item in selected:
+            amount = quantities[item.id]
+            if amount == item.quantity:
+                item.order_id = child.id
+            else:
+                sent = min(item.sent_quantity, amount)
+                self.db.add(CommerceOrderItem(order_id=child.id, product_id=item.product_id,
+                    variant_id=item.variant_id, category_id=item.category_id, name=item.name,
+                    quantity=amount, sent_quantity=sent, price=item.price, unit=item.unit, notes=item.notes))
+                item.quantity -= amount
+                item.sent_quantity -= sent
         row.version += 1
         await self.db.flush(); await self.refresh_price_estimates(row); await self.refresh_price_estimates(child)
-        self.audit("order_bill_split", source_id=row.id, target_id=child.id); await self.db.commit()
+        self.audit("order_bill_split", source_id=row.id, target_id=child.id,
+            quantities={str(key): str(value) for key, value in quantities.items()}); await self.db.commit()
         return {"source": await self.order_out(row), "target": await self.order_out(child)}
 
     async def merge(self, order_id, data):

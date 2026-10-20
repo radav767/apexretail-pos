@@ -9,8 +9,9 @@ from app.models.product import Product
 
 
 class InventoryRepository:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, *, commit_on_save: bool = True):
         self.db = db
+        self.commit_on_save = commit_on_save
         self.stock = BranchStockRepository(db)
 
     async def resolve_branch(
@@ -61,7 +62,8 @@ class InventoryRepository:
 
             from app.business_operations.batches import allocate_batch_movements
             await allocate_batch_movements(self.db, [movement])
-            await self.db.commit()
+            if self.commit_on_save: await self.db.commit()
+            else: await self.db.flush()
             await self.db.refresh(movement)
 
             return movement
@@ -82,7 +84,8 @@ class InventoryRepository:
 
             from app.business_operations.batches import allocate_batch_movements
             await allocate_batch_movements(self.db, movements)
-            await self.db.commit()
+            if self.commit_on_save: await self.db.commit()
+            else: await self.db.flush()
 
             for movement in movements:
                 await self.db.refresh(movement)

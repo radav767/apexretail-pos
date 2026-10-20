@@ -43,7 +43,7 @@ try {
     await page.goto(`http://127.0.0.1:${port}/tests/visual-phase7d.html`);
     await page.getByRole("button", { name: /Tables & floors Open/ }).click(); await page.waitForURL("**business_view=tables"); await page.goBack();
     await page.getByRole("button", { name: /Business profile Open/ }).waitFor();
-    await page.context().setOffline(true); await page.getByText("Operations are online-only.", { exact: false }).waitFor();
+    await page.context().setOffline(true); await page.getByText("Live orders and payment require a connection.", { exact: false }).waitFor();
     assert.ok(await page.getByRole("button", { name: "Refresh", exact: true }).isDisabled());
     await page.context().setOffline(false);
     await page.goto(`http://127.0.0.1:${port}/tests/visual-phase7d.html?role=kitchen`);

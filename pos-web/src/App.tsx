@@ -1,4 +1,5 @@
 import { applyDiscounts } from "./discounts";
+import { checkoutPrice, accumulatedWeightedQuantity } from "./business/pricing";
 import { canProcessSales, canAccessOperations } from "./business/access";
 import { flushPrintIntents, scheduleSalePrint } from "./printing/queue";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2137,8 +2138,8 @@ const [loggedIn, setLoggedIn] = useState(
 
 
 
-  function levelPrice(product:Product,quantity:string,base:string){const name=pricingCustomer?.price_level_name?.toLowerCase();return (product.price_levels||[]).filter(p=>p.name.toLowerCase()===name&&Number(p.minimum_quantity)<=Number(quantity)).sort((a,b)=>Number(b.minimum_quantity)-Number(a.minimum_quantity))[0]?.price||base;}
-  function choosePricingCustomer(id:string){const customer=creditCustomers.find(c=>c.id===id)||null;setPricingCustomer(customer);setCart(current=>current.map(item=>{const name=customer?.price_level_name?.toLowerCase();const price=(item.price_levels||[]).filter(p=>p.name.toLowerCase()===name&&Number(p.minimum_quantity)<=Number(item.quantity)).sort((a,b)=>Number(b.minimum_quantity)-Number(a.minimum_quantity))[0]?.price||item.base_selling_price;return {...item,selling_price:price,line_total:multiplyPriceByQuantity(price,item.quantity)}}));}
+  function levelPrice(product:Product,quantity:string,base:string){return checkoutPrice(product.price_levels,pricingCustomer?.price_level_name,quantity,base);}
+  function choosePricingCustomer(id:string){const customer=creditCustomers.find(c=>c.id===id)||null;setPricingCustomer(customer);setCart(current=>current.map(item=>{const price=checkoutPrice(item.price_levels,customer?.price_level_name,item.quantity,item.base_selling_price);return {...item,selling_price:price,line_total:multiplyPriceByQuantity(price,item.quantity)}}));}
   function addToCart(product: Product) {
     if(product.variants?.length){setVariantProduct(product);return;}
     const availableStock = parseQuantityToMillis(
@@ -2186,8 +2187,9 @@ const [loggedIn, setLoggedIn] = useState(
             ? {
                 ...item,
                 quantity: formatMillis(nextQuantity, false),
+                selling_price: levelPrice(item, formatMillis(nextQuantity, false), item.base_selling_price),
                 line_total: multiplyPriceByQuantity(
-                  item.selling_price,
+                  levelPrice(item, formatMillis(nextQuantity, false), item.base_selling_price),
                   formatMillis(nextQuantity, false),
                 ),
               }
@@ -2215,7 +2217,7 @@ const [loggedIn, setLoggedIn] = useState(
   function addVariant(product:Product,variant:NonNullable<Product["variants"]>[number]){
     if(Number(variant.stock_qty)<=0){setMessage(`${product.name} — ${variant.name} is out of stock`);return;}
     const key=`${product.id}:${variant.id}`,base=String(variant.selling_price??product.selling_price),price=levelPrice(product,"1.000",base);
-    setCart(current=>{const existing=current.find(i=>i.cart_key===key);if(existing){const q=Number(existing.quantity)+1;if(q>Number(variant.stock_qty))return current;return current.map(i=>i.cart_key===key?{...i,quantity:q.toFixed(3),line_total:multiplyPriceByQuantity(price,q.toFixed(3))}:i)}return [...current,{...product,cart_key:key,base_selling_price:price,variant_id:variant.id,variant_name:variant.name,stock_qty:variant.stock_qty,selling_price:price,quantity:"1.000",selling_unit:product.unit||"each",line_total:multiplyPriceByQuantity(price,"1.000")}];});setVariantProduct(null);
+    setCart(current=>{const existing=current.find(i=>i.cart_key===key);if(existing){const q=Number(existing.quantity)+1;if(q>Number(variant.stock_qty))return current;const nextPrice=levelPrice(product,q.toFixed(3),base);return current.map(i=>i.cart_key===key?{...i,quantity:q.toFixed(3),selling_price:nextPrice,line_total:multiplyPriceByQuantity(nextPrice,q.toFixed(3))}:i)}return [...current,{...product,cart_key:key,base_selling_price:base,variant_id:variant.id,variant_name:variant.name,stock_qty:variant.stock_qty,selling_price:price,quantity:"1.000",selling_unit:product.unit||"each",line_total:multiplyPriceByQuantity(price,"1.000")}];});setVariantProduct(null);
   }
 
   function handleSalesBarcode(rawBarcode: string) {
@@ -2271,8 +2273,9 @@ const [loggedIn, setLoggedIn] = useState(
         return {
           ...item,
           quantity: formatMillis(clamped, false),
+          selling_price: levelPrice(item, formatMillis(clamped, false), item.base_selling_price),
           line_total: multiplyPriceByQuantity(
-            item.selling_price,
+            levelPrice(item, formatMillis(clamped, false), item.base_selling_price),
             formatMillis(clamped, false),
           ),
         };
@@ -2303,23 +2306,25 @@ const [loggedIn, setLoggedIn] = useState(
       );
       return;
     }
-    const lineTotal = multiplyPriceByQuantity(
-      weightedProduct.selling_price,
-      weightedQuantity,
-    );
-    setCart((currentCart) => [
-      ...currentCart,
-      {
+    setMessage("");
+    setCart((currentCart) => {
+      const existing = currentCart.find(item => item.cart_key === weightedProduct.id);
+      let nextQuantity: string;
+      try { nextQuantity = accumulatedWeightedQuantity(existing?.quantity || "0", weightedQuantity, weightedProduct.stock_qty); }
+      catch { setMessage(`Only ${formatQuantity(weightedProduct.stock_qty, weightedProduct.unit)} available in total`); return currentCart; }
+      const price = levelPrice(weightedProduct, nextQuantity, weightedProduct.selling_price);
+      const line = {
         ...weightedProduct,
         cart_key:weightedProduct.id,
         base_selling_price:weightedProduct.selling_price,
-        quantity: formatMillis(quantityMillis, false),
+        selling_price:price,
+        quantity: nextQuantity,
         selling_unit: weightedProduct.unit || "kg",
-        line_total: lineTotal,
-      },
-    ]);
+        line_total: multiplyPriceByQuantity(price, nextQuantity),
+      };
+      return existing ? currentCart.map(item => item.cart_key === weightedProduct.id ? line : item) : [...currentCart, line];
+    });
     setWeightedProduct(null);
-    setMessage("");
   }
 
   function removeFromCart(id: string) {

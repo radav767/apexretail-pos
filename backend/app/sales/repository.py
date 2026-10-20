@@ -68,6 +68,11 @@ class SalesRepository:
         )
     async def get_variant(self,company_id,product_id,variant_id):
         return (await self.db.execute(select(ProductVariant).where(ProductVariant.company_id==company_id,ProductVariant.product_id==product_id,ProductVariant.id==variant_id,ProductVariant.active==True,ProductVariant.deleted==False).with_for_update())).scalar_one_or_none()
+
+    async def has_active_variants(self, company_id, product_id):
+        return (await self.db.execute(select(ProductVariant.id).where(ProductVariant.company_id == company_id,
+            ProductVariant.product_id == product_id, ProductVariant.active == True,
+            ProductVariant.deleted == False).limit(1))).first() is not None
     async def get_variant_balance(self,company_id,branch,product_id,variant_id):
         row=(await self.db.execute(select(VariantInventoryBalance).where(VariantInventoryBalance.company_id==company_id,VariantInventoryBalance.branch_id==branch.id,VariantInventoryBalance.variant_id==variant_id,VariantInventoryBalance.deleted==False).with_for_update())).scalar_one_or_none()
         if row is None:
