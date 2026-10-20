@@ -39,7 +39,7 @@ for(const project of ["pos-web","backoffice"]){
   const bundle=(await Promise.all(js.map(f=>readFile(resolve(dist,f),"utf8")))).join("\n");
   assert.ok(bundle.includes("https://api.apexpos.cloud/api"));
   assert.ok(!bundle.includes("__stabilizationCalls")&&!bundle.includes("__tipCalls"),"Synthetic test adapter leaked into production build");
-  if(project==="pos-web")assert.ok(bundle.includes("prod2026-10-13-r1"),"Approved public entitlement key missing");
+  if(project==="pos-web")assert.ok(bundle.includes("prod-2026-10-13-r1"),"Approved public entitlement key missing");
   for(const file of files)buildHashes.push(`${createHash("sha256").update(await readFile(resolve(dist,file))).digest("hex")}  builds/${project}/${file}`);
   await cp(dist,resolve(output,"builds",project),{recursive:true});
 }
