@@ -17,6 +17,13 @@ android {
         }
     }
     buildTypes {
+        acceptance {
+            initWith release
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-phase7f-acceptance"
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
         release {
             // Phase 4 must remain upgrade-compatible with the existing ApexPOS signer.
             signingConfig signingConfigs.debug

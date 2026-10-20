@@ -2945,7 +2945,7 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     window.open(
-      "https://backoffice.apexpos.cloud",
+      import.meta.env.VITE_BACKOFFICE_URL || "https://backoffice.apexpos.cloud",
       "_blank",
       "noopener,noreferrer",
     );

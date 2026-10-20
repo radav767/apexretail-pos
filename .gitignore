@@ -13,3 +13,5 @@ backups/
 /phase7c-evidence/
 /phase7d-evidence/
 /phase7e-evidence/
+pos-web/android/app/src/acceptance/res/raw/phase7f_local_ca.pem
+phase7f-evidence/
