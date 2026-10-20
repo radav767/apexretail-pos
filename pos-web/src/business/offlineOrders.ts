@@ -1,6 +1,6 @@
 /** Separate unpaid-order outbox. Never touches the financial sales queue. */
 export type OrderIdentity = { company: string; employee: string; device: string };
-export type OrderCommand = { id: string; endpoint: "/operations/offline/drafts" | "/operations/offline/edits"; payload: unknown; status: "pending" | "review" | "acknowledged"; error?: string; result?: unknown };
+export type OrderCommand = { id: string; endpoint: "/operations/offline/drafts" | "/operations/offline/edits" | "/operations/offline/kitchen" | "/operations/offline/kds"; payload: unknown; status: "pending" | "review" | "acknowledged"; error?: string; result?: unknown };
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "key" | "length">;
 export class OfflineOrderOutbox {
   private key: string;
@@ -17,7 +17,7 @@ export class OfflineOrderOutbox {
       if (!key?.startsWith(`${this.key}:`)) continue;
       const value = JSON.parse(this.storage.getItem(key) || "null") as OrderCommand | null;
       if (!value || typeof value.id !== "string" || !["pending", "review", "acknowledged"].includes(value.status)
-          || !["/operations/offline/drafts", "/operations/offline/edits"].includes(value.endpoint)) {
+          || !["/operations/offline/drafts", "/operations/offline/edits", "/operations/offline/kitchen", "/operations/offline/kds"].includes(value.endpoint)) {
       throw new Error("Offline order storage needs review; no records were cleared");
       }
       values.push(value);
@@ -25,6 +25,9 @@ export class OfflineOrderOutbox {
     return values;
   }
   enqueue(command: Omit<OrderCommand, "status">): void {
+    if(!["/operations/offline/drafts","/operations/offline/edits","/operations/offline/kitchen","/operations/offline/kds"].includes(command.endpoint)){
+      throw new Error("Only supported unpaid restaurant commands can be queued");
+    }
     const entries = this.list();
     if (entries.some(v => v.id === command.id)) throw new Error("Order command already exists");
     // Write before reporting success. A quota failure must not pretend to save.
@@ -36,7 +39,7 @@ export class OfflineOrderOutbox {
       if (snapshot.status === "acknowledged") continue;
       try {
         const result = await send(snapshot.endpoint, snapshot.payload);
-        this.requireReceipt(result);
+        this.requireReceipt(result,snapshot);
         this.update(snapshot.id, { status: "acknowledged", result, error: undefined });
       } catch (error) {
         const status = (error as { response?: { status?: number } }).response?.status;
@@ -51,7 +54,7 @@ export class OfflineOrderOutbox {
       if (entry.status === "acknowledged") continue;
       try {
         const result = await check(`${entry.endpoint}/recover`, entry.payload);
-        this.requireReceipt(result);
+        this.requireReceipt(result,entry);
         this.update(entry.id, { status: "acknowledged", result, error: undefined });
       } catch (error) {
         const status = (error as { response?: { status?: number } }).response?.status;
@@ -65,10 +68,18 @@ export class OfflineOrderOutbox {
     if (!entry || entry.status === "acknowledged") return;
     this.storage.setItem(`${this.key}:${id}`, JSON.stringify({ ...entry, ...values }));
   }
-  private requireReceipt(result: unknown) {
-    const receipt = result as { order?: { id?: unknown }; already_synchronized?: unknown } | null;
+  acknowledge(id:string,result:unknown){
+    const entry=this.list().find(item=>item.id===id);
+    if(!entry)throw new Error("Original command not found");
+    this.requireReceipt(result,entry);this.update(id,{status:"acknowledged",result,error:undefined});
+  }
+  private requireReceipt(result: unknown, entry:OrderCommand) {
+    const receipt = result as { order?: { id?: unknown }; already_synchronized?: unknown; request_id?:unknown } | null;
     if (typeof receipt?.order?.id !== "string" || typeof receipt.already_synchronized !== "boolean") {
       throw new Error("No authoritative order acknowledgement returned");
+    }
+    if(["/operations/offline/kitchen","/operations/offline/kds"].includes(entry.endpoint)&&receipt.request_id!==entry.id){
+      throw new Error("Kitchen acknowledgement does not match the original request");
     }
   }
 }

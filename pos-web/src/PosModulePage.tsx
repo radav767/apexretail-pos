@@ -19,6 +19,8 @@ import { canManageProductTool, catalogPermission } from "./catalogAccess";
 import PrinterPanel from "./printing/PrinterPanel";
 import BusinessPanel from "./business/BusinessPanel";
 import FocusedOperationsPage, { type FocusedFeature } from "./FocusedOperationsPage";
+import StockTakePanel from "../../backoffice/src/pages/StockTakePanel";
+import "../../backoffice/src/pages/inventory.css";
 import {
   canRefundSale,
   canViewSaleReceipt,
@@ -264,13 +266,13 @@ type SettingsPageKey =
 type ModuleFeature =
   | "home" | "transaction-history" | "cancel-void-sales" | "credit-settlement"
   | "cashier-shifts" | "z-reports" | "goods-received" | "stock-adjustments"
-  | "inventory-overview" | "inventory-activity" | "sales-summary" | "inventory-status"
+  | "inventory-overview" | "inventory-activity" | "sales-summary" | "inventory-status" | "stock-counts"
   | FocusedFeature
   | "all-products" | ProductToolFeature;
 
 const moduleFeatures: Record<string, ModuleFeature[]> = {
   "Sales Management": ["transaction-history", "cancel-void-sales", "credit-settlement", "cashier-shifts", "z-reports"],
-  Inventory: ["goods-received", "stock-adjustments", "inventory-overview", "inventory-activity", "stock-transfers"],
+  Inventory: ["goods-received", "stock-adjustments", "inventory-overview", "inventory-activity", "stock-transfers", "stock-counts"],
   Reports: ["sales-summary", "inventory-status", "sales-reports", "top-products"],
   Products: ["all-products", "categories", "composite-products", "product-variants", "units", "price-levels", "barcode-labels", "import-export"],
 };
@@ -2166,6 +2168,7 @@ export default function PosModulePage({
             features={[
               { id: "goods-received", title: "Goods Received (GRN)", detail: "Receive stock from suppliers", icon: "inventory", permitted: canManageInventory },
               { id: "stock-transfers", title: "Stock Transfers", detail: "Move stock between branches", icon: "transfer", permitted: cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(cashier?.permissions?.inventory_transfer ?? cashier?.permissions?.manage_inventory) },
+              { id: "stock-counts", title: "Stock Counts", detail: "Count products, variants and batches", icon: "adjust", permitted: cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(cashier?.permissions?.inventory_count ?? cashier?.permissions?.manage_inventory) },
               { id: "stock-adjustments", title: "Stock Adjustments", detail: "Record corrections and physical counts", icon: "adjust" },
               { id: "inventory-overview", title: "Inventory Overview", detail: "Review current branch balances", icon: "chart" },
               { id: "inventory-activity", title: "Inventory Activity", detail: "Review auditable stock movements", icon: "clock" },
@@ -2175,7 +2178,8 @@ export default function PosModulePage({
         )}
 
         {!loading && ["stock-transfers", "sales-reports", "top-products"].includes(activeFeature) && <><PosFeatureBack label={activeModule} onClick={backToFeatureHub}/><FocusedOperationsPage key={`${companyId}:${cashier?.id}:${activeFeature}`} feature={activeFeature as FocusedFeature} companyId={companyId} branchId={branchId} identity={`${cashier?.id}:${localStorage.getItem("device_id") || ""}`} permitted={cashier?.role === "owner" || cashier?.role === "administrator" || Boolean(activeFeature === "stock-transfers" ? (cashier?.permissions?.inventory_transfer ?? cashier?.permissions?.manage_inventory) : cashier?.permissions?.profits_view)}/></>}
-        {!loading && activeModule === "Inventory" && activeFeature !== "home" && activeFeature !== "stock-transfers" && (
+        {!loading && activeModule === "Inventory" && activeFeature === "stock-counts" && <><PosFeatureBack label="Inventory" onClick={backToFeatureHub}/><StockTakePanel key={`${companyId}:${branchId}:${cashier?.id}`} companyId={companyId} branchId={branchId} identity={`${cashier?.id}:${localStorage.getItem("device_id")||""}`} client={api} permitted={cashier?.role==="owner"||cashier?.role==="administrator"||Boolean(cashier?.permissions?.inventory_count??cashier?.permissions?.manage_inventory)} onDataChanged={onProductsChanged}/></>}
+        {!loading && activeModule === "Inventory" && activeFeature !== "home" && activeFeature !== "stock-transfers" && activeFeature !== "stock-counts" && (
           <><PosFeatureBack label="Inventory" onClick={backToFeatureHub} />
           <div className={`pos-inventory-feature pos-inventory-feature-${activeFeature}`}>
             <div className="pos-module-card">

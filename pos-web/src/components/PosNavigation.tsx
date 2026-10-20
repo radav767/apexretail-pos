@@ -110,6 +110,7 @@ export default function PosNavigation({
         { label: "Goods Received (GRN)", module: "Inventory", feature: "goods-received" },
         { label: "Stock Adjustments", module: "Inventory", feature: "stock-adjustments" },
         { label: "Stock Transfers", module: "Inventory", feature: "stock-transfers" },
+        { label: "Stock Counts", module: "Inventory", feature: "stock-counts" },
       ],
     },
     {

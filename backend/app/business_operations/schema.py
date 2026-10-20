@@ -120,12 +120,39 @@ class OfflineEditInput(BaseModel):
     change: ItemUpdate
 
 
+class OfflineKitchenInput(BaseModel):
+    request_id: UUID
+    employee_id: UUID
+    device_id: UUID
+    captured_at: datetime
+    order_id: UUID
+    version: int = Field(ge=1)
+
+
+class OfflineKDSInput(BaseModel):
+    request_id: UUID
+    employee_id: UUID
+    device_id: UUID
+    captured_at: datetime
+    ticket_id: UUID
+    expected_status: Literal["queued", "preparing", "ready", "needs_review"]
+    status: Literal["preparing", "ready", "served", "acknowledged"]
+
+
+class OfflineResolutionInput(BaseModel):
+    command: dict
+    observed_version: int | None = Field(default=None,ge=1)
+    observed_status: str | None = None
+    reason: str = Field(min_length=3,max_length=500)
+
+
 class BatchStockInput(BatchInput):
     request_id: UUID
     operation: Literal["receive", "supplier_return", "dispose", "count"]
     quantity: Decimal = Field(ge=0, max_digits=12, decimal_places=3)
     reason: str = Field(min_length=3, max_length=160)
     received_unit: str | None = Field(default=None, max_length=20)
+    expected_qty: Decimal | None = Field(default=None,ge=0,max_digits=12,decimal_places=3)
 
     @model_validator(mode="after")
     def positive_movement_or_physical_count(self):

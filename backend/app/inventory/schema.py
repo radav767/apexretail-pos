@@ -37,11 +37,14 @@ class StockAdjustmentCreate(BaseModel):
 
 class StockTakeItem(BaseModel):
     product_id: UUID
+    variant_id: UUID | None = None
+    expected_qty: Decimal | None = Field(default=None, ge=0)
     physical_qty: Decimal = Field(ge=0)
 
 
 class StockTakeCreate(BaseModel):
     company_id: UUID
+    request_id: UUID | None = None
     branch_id: UUID | None = None
     items: list[StockTakeItem] = Field(min_length=1)
     reference: str | None = Field(default=None, max_length=80)

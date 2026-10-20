@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import (
@@ -7,6 +8,7 @@ from app.auth.dependencies import (
     require_body_permission,
     get_auth_actor,
     require_permission,
+    ensure_company_access,
 )
 from app.db.session import get_db
 from app.inventory.schema import InventoryMovementOut
@@ -32,7 +34,16 @@ def get_service(
 @router.get("/transfers/capabilities")
 async def transfer_capabilities(actor: AuthActor = Depends(get_auth_actor)):
     await require_permission("inventory_transfer")(actor)
-    return {"idempotency":"audit-v1"}
+    return {"idempotency":"audit-v1", "variant_transfers":True}
+
+
+@router.get("/transfer-destinations/{company_id}")
+async def transfer_destinations(company_id: UUID, actor: AuthActor = Depends(get_auth_actor),
+    db: AsyncSession = Depends(get_db)):
+    from app.inventory.branch_repository import BranchInventoryRepository
+    ensure_company_access(actor, company_id)
+    await require_permission("inventory_transfer")(actor)
+    return await BranchInventoryRepository(db).list_branches(company_id)
 
 
 @router.post(

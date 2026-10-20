@@ -35,6 +35,19 @@ try{
  for(const name of ['Edit','Archive','Create Product'])assert.equal(await page.getByRole('button',{name,exact:true}).count(),0);
  pass('POS product explicit add/edit/delete denials hide mutation actions');
  for(const app of ['pos','backoffice']){
+  await page.goto(`http://127.0.0.1:18931/tests/visual-final-catalog.html?app=${app}&feature=stock-count`);
+  await page.getByLabel('Physical count Synthetic stock item — Small',{exact:true}).fill('6');
+  await page.getByRole('button',{name:'Complete Stock Take (1)',exact:true}).click();
+  await page.getByRole('button',{name:'Retry original count',exact:true}).waitFor();
+  const command=await page.evaluate(()=>window.catalogRequests.find(r=>r.url==='/inventory/stock-take').payload);
+  assert.equal(command.items[0].variant_id,'variant');assert.equal(command.items[0].expected_qty,'8');
+  await page.reload();await page.getByRole('button',{name:'Retry original count',exact:true}).click();
+  await page.waitForFunction(()=>window.catalogRequests.some(r=>r.url==='/inventory/stock-take'));
+  assert.deepEqual(await page.evaluate(()=>window.catalogRequests.find(r=>r.url==='/inventory/stock-take').payload),command);
+  await page.getByRole('button',{name:'Retry original count',exact:true}).click();
+  await page.getByRole('button',{name:'New stock count',exact:true}).waitFor();pass(`${app}: variant count keeps snapshot and original identity through timeout/restart`);
+ }
+ for(const app of ['pos','backoffice']){
   await page.goto(`http://127.0.0.1:18931/tests/visual-final-catalog.html?app=${app}&feature=transfers`);
   const selects=page.locator(app==='pos'?'.business-form select':'.inventory-form-grid select');
   await selects.nth(1).selectOption('destination');await selects.nth(2).selectOption('product');

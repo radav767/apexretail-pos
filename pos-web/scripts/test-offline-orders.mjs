@@ -55,3 +55,19 @@ await queue.recover(async () => ({ order: { id: "confirmed-original-order" }, al
 assert.equal(queue.list().find(row => row.id === "recovery").status, "acknowledged");
 assert.equal(map.size, 3);
 console.log("Read-only recovery: unknown requests retained, malformed 200 responses rejected, original acknowledgement restored");
+for(const kind of ["kitchen","kds"]){
+ const id=`original-${kind}`;
+ const payload={request_id:id,captured_at:"2026-10-19T12:00:00Z",employee_id:"waiter-a",device_id:"register-a",version:4};
+ queue.enqueue({id,endpoint:`/operations/offline/${kind}`,payload});
+ await queue.synchronize(async()=>({order:{id:"order-a"},already_synchronized:false,request_id:"wrong-command"}));
+ assert.equal(queue.list().find(row=>row.id===id).status,"pending");
+ await queue.synchronize(async()=>{throw {response:{status:409,data:{detail:"Changed on server"}}};});
+ assert.equal(queue.list().find(row=>row.id===id).status,"review");
+ const receipt={request_id:id,already_synchronized:false,order:{id:"order-a"},resolution:{decision:"accepted_server_state",reason:"Reviewed with kitchen"}};
+ queue.acknowledge(id,receipt);
+ const restored=new OfflineOrderOutbox(storage,identity).list().find(row=>row.id===id);
+ assert.deepEqual(restored.payload,payload);assert.equal(restored.status,"acknowledged");
+ assert.deepEqual(restored.result.resolution,receipt.resolution);
+}
+assert.throws(()=>queue.enqueue({id:"payment",endpoint:"/sales",payload:{}}));
+console.log("KOT/KDS outbox: matching receipt required, conflict retained, explicit resolution survives restart, offline payments rejected");

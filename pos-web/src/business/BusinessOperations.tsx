@@ -4,6 +4,7 @@ import "./business.css";
 import "./business-mobile.css";
 import TableLayoutEditor from "./TableLayoutEditor";
 import OfflineDraftPanel from "./OfflineDraftPanel";
+import { OfflineOrderOutbox } from "./offlineOrders";
 import BatchStockPanel from "./BatchStockPanel";
 import TipPaymentPanel from "./TipPaymentPanel";
 import ReturnInspectionPanel from "./ReturnInspectionPanel";
@@ -64,6 +65,24 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
     catch { setRecoveryReady(false); setError("Local order recovery storage is unavailable. Existing records and queues have not been cleared."); }
   }, [requestStorageKey]);
   const allowed = useCallback((permission: string) => Boolean(profile?.administrator || profile?.permissions[permission]), [profile]);
+  const kitchenCacheKey=`apexretail_kds_cache_v1:${companyId}:${profile?.employee_id||recoveryEmployeeId}:${deviceId}`;
+  useEffect(()=>{
+    if(online||!deviceId||!profile?.employee_id||!(allowed("kitchen_view")||allowed("bar_view")))return;
+    try{const saved=JSON.parse(localStorage.getItem(kitchenCacheKey)||"null");if(Array.isArray(saved?.tickets))setTickets(saved.tickets);}
+    catch{setError("Cached kitchen data needs review. No commands were deleted.");}
+  },[online,profile,deviceId,kitchenCacheKey,allowed]);
+  function queueOperation(kind:"kitchen"|"kds",payload:Record<string,unknown>){
+    try{
+      if(!profile?.employee_id||!deviceId)throw new Error("Use the authenticated employee/register");
+      const outbox=new OfflineOrderOutbox(localStorage,{company:companyId,employee:profile.employee_id,device:deviceId});
+      const endpoint=kind==="kitchen"?"/operations/offline/kitchen":"/operations/offline/kds";
+      if(outbox.list().some(entry=>entry.status!=="acknowledged"&&entry.endpoint===endpoint&&
+        (kind==="kitchen"?(entry.payload as any).order_id===payload.order_id:(entry.payload as any).ticket_id===payload.ticket_id)))throw new Error("An original request is already saved. Review its confirmation before another action.");
+      const id=crypto.randomUUID();outbox.enqueue({id,endpoint,payload:{...payload,request_id:id,
+        employee_id:profile.employee_id,device_id:deviceId,captured_at:new Date().toISOString()}});
+      setNotice("Request saved. Not sent or confirmed until synchronization.");
+    }catch(error){setError(errorMessage(error));}
+  }
   function navigate(next: View) { setView(next); setSelectedOrder(null); setError(""); const url = new URL(location.href); url.searchParams.set("business_view", next); history.pushState({}, "", url); }
   useEffect(() => {
     const restore = () => { const requested = new URL(location.href).searchParams.get("business_view") as View; setView(views.includes(requested) ? requested : "home"); setSelectedOrder(null); };
@@ -83,15 +102,20 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
     if (!online || !profile) return;
     if (view === "tables") setTables((await api.get<Table[]>("/operations/tables")).data);
     if (view === "orders" || view === "quotations") {
-      setOrders((await api.get<Order[]>(`/operations/orders${view === "quotations" ? "?kind=quotation" : ""}`)).data);
+      const currentOrders=(await api.get<Order[]>(`/operations/orders${view === "quotations" ? "?kind=quotation" : ""}`)).data;
+      setOrders(currentOrders);setSelectedOrder(previous=>previous?currentOrders.find(row=>row.id===previous.id)||previous:null);
       if (profile.features.includes("restaurant") && (allowed("orders_manage") || allowed("restaurant_manage"))) setTables((await api.get<Table[]>("/operations/tables")).data);
       if (profile.features.includes("hospitality") && allowed("hospitality_manage")) setRooms((await api.get<Room[]>("/operations/rooms")).data);
     }
-    if (view === "kitchen" || view === "bar") setTickets((await api.get<Ticket[]>("/operations/kitchen")).data);
+    if (view === "kitchen" || view === "bar") {
+      const received=(await api.get<Ticket[]>("/operations/kitchen")).data;setTickets(received);
+      if(deviceId&&profile.employee_id){try{localStorage.setItem(kitchenCacheKey,JSON.stringify({tickets:received,captured_at:new Date().toISOString()}));}
+        catch{setNotice("Kitchen display is online; local cache is unavailable.");}}
+    }
     if (view === "rooms") setRooms((await api.get<Room[]>("/operations/rooms")).data);
     if (view === "batches") setBatches((await api.get<Batch[]>("/operations/batches")).data);
     setError("");
-  }, [api, view, profile, allowed, online]);
+  }, [api, view, profile, allowed, online, deviceId, kitchenCacheKey]);
   useEffect(() => { void load().catch(e => setError(errorMessage(e))); }, [load]);
   useEffect(() => { if (view !== "kitchen" && view !== "bar") return; const timer = setInterval(() => { if (navigator.onLine) void load().catch(e => setError(errorMessage(e))); }, 10000); return () => clearInterval(timer); }, [load, view]);
   async function run(action: () => Promise<unknown>) {
@@ -144,7 +168,9 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
   return <section className="business-operations"><header><div><span className="business-eyebrow">{profile?.name || "ApexRetail"}</span><h2><FeatureIcon/>{titles[view]}</h2></div><div className="business-actions">{view !== "home" && <button onClick={() => navigate("home")}>← Back</button>}<button disabled={disabled} onClick={() => void run(load)}>Refresh</button></div></header>
     {!online && <p className="business-warning" role="status">Live orders and payment require a connection. Unpaid drafts and existing offline sales are retained separately.</p>}{error && <p className="business-error" role="alert">{error}</p>}{notice && <p className="business-success" role="status">{notice}</p>}
     {!profile && recoveryEmployeeId && deviceId && <OfflineDraftPanel key={`recovery:${companyId}:${recoveryEmployeeId}:${deviceId}`} company={companyId} employee={recoveryEmployeeId} device={deviceId} branch={branch} products={[]} variants={[]} online={online} recoveryOnly send={async (endpoint, payload) => (await api.post(endpoint, payload)).data} />}
-    {view === "orders" && profile?.employee_id && deviceId && allowed("orders_manage") && <OfflineDraftPanel key={`${companyId}:${profile.employee_id}:${deviceId}`} company={companyId} employee={profile.employee_id} device={deviceId} branch={branch} products={list("products")} variants={list("variants")} online={online} send={async (endpoint, payload) => (await api.post(endpoint, payload)).data} />}
+    {view === "orders" && profile?.employee_id && deviceId && allowed("orders_manage") && <OfflineDraftPanel key={`${companyId}:${profile.employee_id}:${deviceId}`} company={companyId} employee={profile.employee_id} device={deviceId} branch={branch} products={list("products")} variants={list("variants")} online={online} onChanged={load} send={async (endpoint, payload) => (await api.post(endpoint, payload)).data} />}
+    {(view==="kitchen"||view==="bar")&&profile?.employee_id&&deviceId&&<OfflineDraftPanel company={companyId} employee={profile.employee_id} device={deviceId} branch={branch} products={[]} variants={[]} online={online} queueOnly onChanged={load} send={async(endpoint,payload)=>(await api.post(endpoint,payload)).data}/>}
+    {!online&&(view==="kitchen"||view==="bar")&&<p role="status">Cached kitchen state. Queued changes are not confirmed until synchronization.</p>}
     {view === "home" && <><div className="business-feature-grid">{features.filter(f => allowed(f.permission) || (f.view === "orders" && allowed("orders_settle")) || (f.view === "tables" && allowed("restaurant_manage"))).filter(f => !f.feature || profile?.features.includes(f.feature)).map(f => <button key={f.view} onClick={() => navigate(f.view)}><FeatureIcon/><strong>{titles[f.view]}</strong><span>Open →</span></button>)}</div><p className="business-hint">Retail checkout, stock, receipts and existing reports remain available in the main menu.</p></>}
     {view === "batches" && <p className="business-warning">Batch reports cover assigned lots. Stock without batch data is not expiry-verified.</p>}
     {view === "batches" && allowed("batches_manage") && <ReturnInspectionPanel key={`${companyId}:${profile?.employee_id || "backoffice"}`} api={api} identity={`${companyId}:${profile?.employee_id || "backoffice"}:${deviceId}`} allowDispose={allowed("inventory_adjust")} online={online} changed={load}/>}
@@ -167,6 +193,7 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
         {selectedOrder.status === "open" && <>
           {(allowed("orders_manage") || allowed("quotations_manage")) && <form className="business-form" onSubmit={e => { e.preventDefault(); void run(async () => { const { data } = await api.post<Order>(`/operations/orders/${selectedOrder.id}/items`, { version: selectedOrder.version, product_id: product, variant_id: variant || null, quantity, notes }); setSelectedOrder(data); setNotes(""); }); }}>{selector("Product", product, value => { setProduct(value); setVariant(""); }, list("products"), true)}{selector("Variant", variant, setVariant, list("variants").filter(v => v.product_id === product))}<label>Quantity<input required type="number" step="0.001" min="0.001" value={quantity} onChange={e => setQuantity(e.target.value)}/></label><label>Preparation notes<input value={notes} maxLength={500} onChange={e => setNotes(e.target.value)}/></label><button disabled={disabled} className="business-primary">Add item</button></form>}
           {selectedOrder.kind !== "quotation" && allowed("orders_send") && <button className="business-primary" disabled={disabled} onClick={() => void run(async () => { const { data } = await api.post<{ order: Order; jobs: PrintJob[] }>(`/operations/orders/${selectedOrder.id}/send`, { version: selectedOrder.version }); setSelectedOrder(data.order); setNotice(`${data.jobs.length} kitchen/bar tickets queued`); if (deliver) { for (const job of data.jobs) { try { await deliver(job); } catch { setNotice("Order sent to KDS. Printer delivery needs review in the print queue."); } } } })}>Send to kitchen / bar</button>}
+          {!online&&selectedOrder.kind!=="quotation"&&allowed("orders_send")&&profile?.employee_id&&deviceId&&<button className="business-primary" disabled={busy} onClick={()=>queueOperation("kitchen",{order_id:selectedOrder.id,version:selectedOrder.version})}>Save kitchen request</button>}
           {(profile?.tip_product_id || profile?.service_product_id) && <div className="business-actions">{[["Add tip", profile.separate_tips ? null : profile.tip_product_id], ["Add service charge", profile.service_product_id]].filter(([, id]) => id).map(([label, id]) => <button key={id} disabled={disabled} onClick={() => { setProduct(id!); setVariant(""); setQuantity("1"); }}>{label}</button>)}</div>}
           {allowed("restaurant_manage") && <details className="business-details"><summary>Manage bill</summary><div className="business-form">
             {selector("Transfer to table", table, setTable, tables.filter(t => t.branch_id === selectedOrder.branch_id))}{selector("Assign waiter", waiter, setWaiter, list("staff").filter(s => s.branch_id === selectedOrder.branch_id))}
@@ -194,6 +221,7 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
       {ticket.status === "needs_review" && <p className="business-warning">Order changed. Review the latest amendment; do not prepare from these old quantities.</p>}
       {ticket.payload.items.map((item, index) => <p key={index}><b>{item.quantity} × {item.name}</b><br/><small>{item.notes}</small></p>)}<small>Printer: {ticket.print_status}</small>
       {allowed(view === "bar" ? "bar_update" : "kitchen_update") && <button className="business-primary" disabled={disabled} onClick={() => void run(() => api.put(`/operations/kitchen/${ticket.id}`, { status: kitchenAction(ticket).status }))}>{kitchenAction(ticket).label}</button>}
+      {!online&&allowed(view==="bar"?"bar_update":"kitchen_update")&&profile?.employee_id&&deviceId&&<button className="business-primary" disabled={busy} onClick={()=>queueOperation("kds",{ticket_id:ticket.id,expected_status:ticket.status,status:kitchenAction(ticket).status})}>Save {kitchenAction(ticket).label.toLowerCase()} request</button>}
     </article>)}{!tickets.length && <p>No kitchen tickets</p>}</div>}
     {view === "rooms" && allowed("hospitality_manage") && <><form className="business-form" onSubmit={e => { e.preventDefault(); void run(() => api.post("/operations/rooms", { branch_id: branch, name })); }}>{selector("Branch", branch, setBranch, list("branches"), true)}<label>Room number / name<input required value={name} maxLength={60} onChange={e => setName(e.target.value)}/></label><button disabled={disabled} className="business-primary">Add room</button></form><div className="business-records">{rooms.map(room => <article key={room.id}><FeatureIcon/><h3>{room.name}</h3>{room.guests.map(g => <div key={g.id}><p>{list("customers").find(c => c.id === g.customer_id)?.name || "Guest account"}</p><button disabled={disabled} onClick={() => void run(async () => setFolio((await api.get(`/operations/guests/${g.id}/folio`)).data))}>View guest bill</button></div>)}{!room.guests.length && <><p>Available account</p>{selector("Guest / customer", customer, setCustomer, list("customers"))}<button disabled={disabled || !customer} onClick={() => void run(() => api.post("/operations/guests", { room_id: room.id, customer_id: customer }))}>Open guest account</button></>}</article>)}</div>{folio && <section className="business-details"><h3>{folio.guest_name}</h3>{folio.charges.map(charge => <p key={charge.receipt_number}>{charge.receipt_number} · {charge.currency} {charge.amount} · Outstanding {charge.outstanding}</p>)}{!folio.charges.length && <p>No posted charges</p>}<small>Settle receivables in existing Credit Settlement.</small></section>}</>}
     {view === "batches" && <>{allowed("batches_manage") && <form className="business-form" onSubmit={e => { e.preventDefault(); void run(() => api.post("/operations/batches", { branch_id: branch, product_id: product, variant_id: variant || null, code: batchCode, expires_on: expiry, quantity })); }}>{selector("Branch", branch, setBranch, list("branches"), true)}{selector("Product", product, value => { setProduct(value); setVariant(""); }, list("products"), true)}{list("variants").some(v => v.product_id === product) && selector("Variant", variant, setVariant, list("variants").filter(v => v.product_id === product), true)}<label>Batch code<input required maxLength={80} value={batchCode} onChange={e => setBatchCode(e.target.value)}/></label><label>Expiry date<input required type="date" value={expiry} onChange={e => setExpiry(e.target.value)}/></label><label>Assign existing stock<input required type="number" step="0.001" min="0.001" value={quantity} onChange={e => setQuantity(e.target.value)}/></label><button disabled={disabled} className="business-primary">Assign batch stock</button></form>}<div className="business-records">{batches.map(batch => <article key={batch.id}><span className={`business-badge ${batch.expired ? "expired" : batch.expires_soon ? "soon" : ""}`}>{batch.expired ? "Expired" : batch.expires_soon ? "Expiring soon" : "Available"}</span><h3>{batch.product_name}{batch.variant_id ? ` — ${list("variants").find(v => v.id === batch.variant_id)?.name || "Variant"}` : ""}</h3><p>{batch.code} · {batch.quantity} units</p><small>Expiry {batch.expires_on}</small></article>)}{!batches.length && <p>No batch stock assigned</p>}</div></>}

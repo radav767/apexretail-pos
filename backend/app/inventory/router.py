@@ -145,4 +145,23 @@ async def stock_take(
     if _actor.actor_type == "employee":
         enforce_actor_branch(_actor, data.branch_id or _actor.employee.branch_id)
         data.branch_id = data.branch_id or _actor.employee.branch_id
-    return [movement_response(row, _actor) for row in await service.stock_take(data)]
+    rows=await service.stock_take(data, actor=_actor) if isinstance(service,InventoryService) else await service.stock_take(data)
+    return [movement_response(row, _actor) for row in rows]
+
+
+@router.get("/stock-take/capabilities")
+async def count_capabilities(actor: AuthActor = Depends(get_auth_actor)):
+    from app.auth.dependencies import require_permission
+    await require_permission("inventory_count")(actor)
+    return {"idempotency":"audit-v1", "variant_counts":True, "expected_quantity":True}
+
+
+@router.get("/count-catalog/{company_id}")
+async def physical_count_catalog(company_id: UUID, branch_id: UUID,
+    actor: AuthActor = Depends(get_auth_actor), db: AsyncSession = Depends(get_db)):
+    from app.auth.dependencies import require_permission
+    from .count_catalog import count_catalog
+    ensure_company_access(actor, company_id)
+    await require_permission("inventory_count")(actor)
+    enforce_actor_branch(actor,branch_id)
+    return await count_catalog(db,company_id,branch_id)

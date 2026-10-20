@@ -50,44 +50,33 @@ class TransferService:
 
         # Stable product lock order prevents opposite multi-line requests from
         # locking the same products in opposite order.
-        for item in sorted(data.items, key=lambda row: str(row.product_id)):
-            if item.product_id in seen_products:
+        for item in sorted(data.items, key=lambda row: (str(row.product_id), str(row.variant_id or ""))):
+            dimension = (item.product_id, item.variant_id)
+            if dimension in seen_products:
                 raise HTTPException(
                     400,
                     "The same product appears more than once",
                 )
 
-            seen_products.add(item.product_id)
+            seen_products.add(dimension)
 
             product = await self.repo.get_product(
                 data.company_id,
                 item.product_id,
             )
 
+            variant = await self.repo.get_variant(data.company_id, product.id, item.variant_id) if item.variant_id else None
+            async def balance_for(branch):
+                if variant is not None:
+                    return await self.repo.get_variant_balance(data.company_id, branch, product, variant)
+                return await self.repo.get_balance(data.company_id, branch, product)
+
             if str(source_branch.id) < str(destination_branch.id):
-                source_balance = await self.repo.get_balance(
-                    data.company_id,
-                    source_branch,
-                    product,
-                )
-
-                destination_balance = await self.repo.get_balance(
-                    data.company_id,
-                    destination_branch,
-                    product,
-                )
+                source_balance = await balance_for(source_branch)
+                destination_balance = await balance_for(destination_branch)
             else:
-                destination_balance = await self.repo.get_balance(
-                    data.company_id,
-                    destination_branch,
-                    product,
-                )
-
-                source_balance = await self.repo.get_balance(
-                    data.company_id,
-                    source_branch,
-                    product,
-                )
+                destination_balance = await balance_for(destination_branch)
+                source_balance = await balance_for(source_branch)
 
             source_before = Decimal(
                 source_balance.quantity or 0
@@ -114,7 +103,11 @@ class TransferService:
             source_balance.quantity = source_after
             destination_balance.quantity = destination_after
 
-            await self.repo.sync_product_total(product)
+            if variant is None:
+                await self.repo.sync_product_total(product)
+
+            label = f"{product.name} — {variant.name}" if variant else product.name
+            cost = variant.cost_price if variant and variant.cost_price is not None else product.cost_price
 
             products.append(product)
             balances.extend(
@@ -130,13 +123,14 @@ class TransferService:
                         shop_id=source_branch.shop_id,
                         branch_id=source_branch.id,
                         product_id=product.id,
-                        product_name=product.name,
+                        variant_id=item.variant_id,
+                        product_name=label,
                         movement_type="transfer_out",
                         quantity=item.quantity,
                         before_qty=source_before,
                         after_qty=source_after,
                         unit_cost=Decimal(
-                            product.cost_price or 0
+                            cost or 0
                         ),
                         reference=reference,
                         reason=(
@@ -150,13 +144,14 @@ class TransferService:
                         shop_id=destination_branch.shop_id,
                         branch_id=destination_branch.id,
                         product_id=product.id,
-                        product_name=product.name,
+                        variant_id=item.variant_id,
+                        product_name=label,
                         movement_type="transfer_in",
                         quantity=item.quantity,
                         before_qty=destination_before,
                         after_qty=destination_after,
                         unit_cost=Decimal(
-                            product.cost_price or 0
+                            cost or 0
                         ),
                         reference=reference,
                         reason=(

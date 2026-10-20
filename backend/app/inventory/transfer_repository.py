@@ -19,8 +19,9 @@ class TransferRepository:
             return None  # Legacy callers retain their original contract.
         payload = {"source_branch_id":str(data.source_branch_id),"destination_branch_id":str(data.destination_branch_id),
             "reference":(data.reference or "").strip(),"notes":(data.notes or "").strip(),
-            "items":sorted([{"product_id":str(item.product_id),"quantity":format(item.quantity.normalize(),"f")}
-                for item in data.items],key=lambda row:row["product_id"])}
+            "items":sorted([{"product_id":str(item.product_id),"quantity":format(item.quantity.normalize(),"f"),
+                **({"variant_id":str(item.variant_id)} if item.variant_id else {})}
+                for item in data.items],key=lambda row:(row["product_id"],row.get("variant_id","")))}
         fingerprint = hashlib.sha256(json.dumps(payload,sort_keys=True,separators=(",",":")).encode()).hexdigest()
         identity = f"transfer:{data.company_id}:{data.request_id}"
         lock = int.from_bytes(hashlib.sha256(identity.encode()).digest()[:8],"big",signed=True)
@@ -77,6 +78,14 @@ class TransferRepository:
             branch,
             product,
         )
+
+    async def get_variant(self, company_id, product_id, variant_id):
+        from .dimensions import variant_for_stock
+        return await variant_for_stock(self.db, company_id, product_id, variant_id)
+
+    async def get_variant_balance(self, company_id, branch, product, variant):
+        from .dimensions import dimension_balance
+        return await dimension_balance(self.db, self.stock, company_id, branch, product, variant)
 
     async def sync_product_total(self, product):
         return await self.stock.sync_product_total(product)

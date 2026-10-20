@@ -15,10 +15,11 @@ from app.printing.service import permit, digest
 from .service import BusinessService
 
 
-async def resolve_batch_variant(db, company_id, product_id, variant_id):
+async def resolve_batch_variant(db, company_id, product_id, variant_id, *, include_inactive=False):
     """Resolve the explicit identity; never infer it from existing parent lots."""
     query = select(ProductVariant).where(ProductVariant.company_id == company_id,
-        ProductVariant.product_id == product_id, ProductVariant.active == True, ProductVariant.deleted == False)
+        ProductVariant.product_id == product_id, ProductVariant.deleted == False)
+    if not include_inactive:query=query.where(ProductVariant.active==True)
     if variant_id:
         variant = (await db.execute(query.where(ProductVariant.id == variant_id).with_for_update())).scalar_one_or_none()
         if variant is None: raise HTTPException(404, "Variant not found or inactive")
@@ -83,9 +84,10 @@ class BatchStockService(BusinessService):
         product = await repo.get_product_for_update(self.actor.company_id, data.product_id)
         if not product.track_inventory or product.product_type not in {"standard", "variable_weight"}:
             raise HTTPException(400, "Batch stock requires a standard stock-tracked product")
-        await resolve_batch_variant(self.db, self.actor.company_id, product.id, data.variant_id)
+        await resolve_batch_variant(self.db, self.actor.company_id, product.id, data.variant_id,include_inactive=data.operation=="count")
         payload = data.model_dump(mode="json")
         if data.variant_id is None: payload.pop("variant_id")  # Preserve pre-p7j retry hashes.
+        if data.expected_qty is None: payload.pop("expected_qty")  # Preserve existing operation receipts.
         fingerprint = digest(payload)
         old = (await self.db.execute(select(BatchStockOperation).where(
             BatchStockOperation.company_id == self.actor.company_id, BatchStockOperation.request_id == data.request_id))).scalar_one_or_none()
@@ -98,6 +100,8 @@ class BatchStockService(BusinessService):
                 ProductBatch.variant_id == data.variant_id, ProductBatch.code == data.code).with_for_update())).scalar_one_or_none()
             if batch and batch.expires_on != data.expires_on:
                 raise HTTPException(409, "Existing lot expiry differs; review the lot, do not rewrite its expiry")
+            if data.expected_qty is not None and (batch is None or batch.quantity!=data.expected_qty):
+                raise HTTPException(409,"Stock changed since counting started. Original count retained; review current stock")
             if not batch:
                 if data.operation != "receive": raise HTTPException(404, "Batch not found")
                 batch = ProductBatch(company_id=self.actor.company_id, branch_id=data.branch_id,

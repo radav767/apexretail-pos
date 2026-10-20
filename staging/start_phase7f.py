@@ -23,7 +23,12 @@ def main():
     if data['environment'] != 'phase7f-staging' or data['database'] != 'apexretail_phase7f_acceptance' or ROOT.stat().st_uid != user.pw_uid:
         raise SystemExit('Unexpected staging identity')
     if sys.argv[1:]==['--refresh-api-identity']:
-        if subprocess.check_output(['git','status','--porcelain'],cwd=SOURCE,text=True).strip():
+        changes=subprocess.check_output(['git','status','--porcelain','--untracked-files=all'],cwd=SOURCE,text=True).splitlines()
+        # Generated evidence and the unrelated APK policy document are not
+        # executable runtime inputs. All tracked changes and untracked code,
+        # configuration or secrets still prevent a refresh.
+        changes=[line for line in changes if not (line.startswith('?? artifacts/') or line=='?? docs/ANDROID-UPDATE-POLICY.md')]
+        if changes:
             raise SystemExit('Commit verified sources before refreshing staging identity')
         candidates=[]
         for proc in Path('/proc').iterdir():

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class TransferItem(BaseModel):
     product_id: UUID
+    variant_id: UUID | None = None
     quantity: Decimal = Field(gt=0)
 
 

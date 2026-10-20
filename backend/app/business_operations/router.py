@@ -1,6 +1,8 @@
 from datetime import date
 from uuid import UUID
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import Literal
+from pydantic import ValidationError
 from app.auth.dependencies import get_auth_actor
 from app.db.session import get_db
 from app.core.config import get_settings
@@ -14,6 +16,7 @@ from .tip_schema import TipConfigInput, TipInput
 from .tips import TipService
 from .returns import ReturnService, InspectionInput
 from .schema import OfflineDraftInput, OfflineEditInput
+from .schema import OfflineKitchenInput, OfflineKDSInput, OfflineResolutionInput
 from .schema import ProfileInput, TableInput, RoomInput, GuestInput, OrderInput, OrderItemInput, ItemUpdate, VersionInput, MoveInput, SplitInput, MergeInput, SettlementInput, BatchInput, KitchenStateInput
 
 router = APIRouter(prefix="/operations", tags=["business operations"])
@@ -45,6 +48,54 @@ async def recover_draft(data: OfflineDraftInput, db=Depends(get_db), actor=Depen
 @router.post("/offline/edits/recover")
 async def recover_edit(data: OfflineEditInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await OfflineOrderService(db, actor).recover(data, edit=True)
+
+
+@router.get("/offline/capabilities")
+async def offline_capabilities(actor=Depends(get_auth_actor)):
+    return {"protocol":"restaurant-offline-v2","commands":["drafts","edits","kitchen","kds"],"payments":False}
+
+
+@router.post("/offline/kitchen",dependencies=[Depends(require_operational_writes)])
+async def synchronize_kitchen(data:OfflineKitchenInput,db=Depends(get_db),actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db,actor).synchronize(data,action="kitchen")
+
+
+@router.post("/offline/kds",dependencies=[Depends(require_operational_writes)])
+async def synchronize_kds(data:OfflineKDSInput,db=Depends(get_db),actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db,actor).synchronize(data,action="kds")
+
+
+@router.post("/offline/kitchen/recover")
+async def recover_kitchen(data:OfflineKitchenInput,db=Depends(get_db),actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db,actor).recover(data,action="kitchen")
+
+
+@router.post("/offline/kds/recover")
+async def recover_kds(data:OfflineKDSInput,db=Depends(get_db),actor=Depends(get_auth_actor)):
+    return await OfflineOrderService(db,actor).recover(data,action="kds")
+
+
+def offline_command(kind,command):
+    model,action={"drafts":(OfflineDraftInput,"draft"),"edits":(OfflineEditInput,"edit"),
+        "kitchen":(OfflineKitchenInput,"kitchen"),"kds":(OfflineKDSInput,"kds")}[kind]
+    try:return model.model_validate(command),action
+    except ValidationError as error:
+        raise HTTPException(422,[{"loc":list(e["loc"]),"msg":e["msg"],"type":e["type"]} for e in error.errors()])
+
+
+@router.post("/offline/{kind}/review")
+async def review_offline(kind:Literal["drafts","edits","kitchen","kds"],data:OfflineResolutionInput,
+    db=Depends(get_db),actor=Depends(get_auth_actor)):
+    command,action=offline_command(kind,data.command)
+    return await OfflineOrderService(db,actor).review(command,action=action)
+
+
+@router.post("/offline/{kind}/resolve",dependencies=[Depends(require_operational_writes)])
+async def resolve_offline(kind:Literal["drafts","edits","kitchen","kds"],data:OfflineResolutionInput,
+    db=Depends(get_db),actor=Depends(get_auth_actor)):
+    command,action=offline_command(kind,data.command)
+    return await OfflineOrderService(db,actor).resolve(command,action=action,observed_version=data.observed_version,
+        observed_status=data.observed_status,reason=data.reason)
 
 
 @router.post("/batches/stock", dependencies=[Depends(require_operational_writes)])

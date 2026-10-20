@@ -19,6 +19,7 @@ type Balance = {
   product_id: string;
   quantity: string;
 };
+type Variant={id:string;product_id:string;name:string;sku?:string;stock_qty:string;active:boolean};
 type PendingTransfer = { payload: Record<string, unknown>; confirmed: boolean; retryProtected?:boolean };
 function readTransfer(key:string):PendingTransfer|null {
   try {
@@ -46,6 +47,7 @@ export default function BranchTransferPanel({
     useState("");
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [variants,setVariants]=useState<Variant[]>([]);const [variantId,setVariantId]=useState("");const [variantsReady,setVariantsReady]=useState(false);
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -64,7 +66,8 @@ export default function BranchTransferPanel({
     }
     transferLock.current=true;setLoading(true);
     try {
-      if(retry && (!command.retryProtected || (await api.get("/inventory/transfers/capabilities", {timeout:10000})).data?.idempotency!=="audit-v1"))throw new Error("This server cannot safely retry the original transfer");
+      if(retry){const caps=(await api.get("/inventory/transfers/capabilities", {timeout:10000})).data;
+        if(!command.retryProtected||caps?.idempotency!=="audit-v1"||((command.payload.items as {variant_id?:string}[])?.some(i=>i.variant_id)&&!caps.variant_transfers))throw new Error("This server cannot safely retry the original transfer");}
       const response=await api.post("/inventory/transfers",command.payload);
       if(!Array.isArray(response.data)||response.data.length!==2||!response.data.every(row=>row.id))throw new Error("Transfer acknowledgement unavailable");
       const ack={...command,confirmed:true};localStorage.setItem(transferKey,JSON.stringify(ack));setPending(ack);
@@ -75,12 +78,18 @@ export default function BranchTransferPanel({
   }
 
   const availableStock = useMemo(() => {
+    if(variantId)return Number(variants.find(v=>v.id===variantId)?.stock_qty||0);
     return Number(
       balances.find(
         (balance) => balance.product_id === productId,
       )?.quantity || 0,
     );
-  }, [balances, productId]);
+  }, [balances, productId, variants, variantId]);
+
+  useEffect(()=>{setVariantId("");setVariants([]);setVariantsReady(false);if(!sourceBranchId||!productId)return;let current=true;
+    void api.get<Variant[]>(`/products/variants/${companyId}`,{params:{product_id:productId,branch_id:sourceBranchId}}).then(r=>{if(current){setVariants(r.data.filter(v=>v.active));setVariantsReady(true);}}).catch(e=>{if(current){if(e.response?.status===404)setVariantsReady(true);else setMessage(e.response?.data?.detail||"Cannot verify variant stock");}});
+    return()=>{current=false;};
+  },[companyId,sourceBranchId,productId]);
 
   async function loadData() {
     const [branchResponse, productResponse] =
@@ -171,7 +180,7 @@ export default function BranchTransferPanel({
   }
 
   async function transferStock() {
-    if(transferLock.current || preparingTransfer.current || pending || !navigator.onLine)return;
+    if(transferLock.current || preparingTransfer.current || pending || !navigator.onLine||!variantsReady||(variants.length>0&&!variantId))return;
     const transferQuantity = Number(quantity);
 
     if (!sourceBranchId || !destinationBranchId) {
@@ -215,7 +224,9 @@ export default function BranchTransferPanel({
       setLoading(true);
       setMessage("");
 
-      const retryProtected=await api.get("/inventory/transfers/capabilities", {timeout:10000}).then(r=>r.data?.idempotency==="audit-v1").catch(()=>false);
+      const caps=await api.get("/inventory/transfers/capabilities", {timeout:10000}).then(r=>r.data).catch(()=>null);
+      if(variantId&&!caps?.variant_transfers)throw new Error("This server cannot safely transfer variants");
+      const retryProtected=caps?.idempotency==="audit-v1";
       const command: PendingTransfer = { confirmed:false,retryProtected, payload:{
         company_id: companyId,
         request_id: crypto.randomUUID(),
@@ -226,6 +237,7 @@ export default function BranchTransferPanel({
         items: [
           {
             product_id: productId,
+            ...(variantId?{variant_id:variantId}:{}),
             quantity,
           },
         ],
@@ -387,6 +399,7 @@ export default function BranchTransferPanel({
                 </select>
               </label>
 
+              {variants.length>0&&<label>Variant<select required value={variantId} onChange={e=>setVariantId(e.target.value)}><option value="">Select variant</option>{variants.map(v=><option key={v.id} value={v.id}>{v.name} · {v.sku||"No SKU"} · {v.stock_qty} available</option>)}</select></label>}
               <label>
                 Quantity
                 <input
@@ -430,7 +443,7 @@ export default function BranchTransferPanel({
               type="button"
               className="inventory-primary-button"
               onClick={transferStock}
-              disabled={loading}
+              disabled={loading||!variantsReady||(variants.length>0&&!variantId)}
             >
               {loading
                 ? "Processing..."

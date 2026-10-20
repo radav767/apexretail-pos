@@ -192,7 +192,14 @@ class InventoryService:
     async def stock_take(
         self,
         data: StockTakeCreate,
+        actor=None,
     ):
+        if data.request_id is not None:
+            from .count_requests import prepare_count
+            replay, self.repo.count_receipt = await prepare_count(self.repo.db, data, actor)
+            if replay is not None:return replay
+        elif hasattr(self.repo, "count_receipt"):
+            self.repo.count_receipt=None
         branch = await self.repo.resolve_branch(
             data.company_id,
             data.branch_id,
@@ -203,32 +210,41 @@ class InventoryService:
         balances = []
         movements = []
 
-        for item in data.items:
-            if item.product_id in seen_products:
+        for item in sorted(data.items,key=lambda row:(str(row.product_id),str(row.variant_id or ""))):
+            dimension=(item.product_id,item.variant_id)
+            if dimension in seen_products:
                 raise HTTPException(
                     400,
                     "The same product appears more than once",
                 )
 
-            seen_products.add(item.product_id)
+            seen_products.add(dimension)
 
             product = await self.repo.get_product_for_update(
                 data.company_id,
                 item.product_id,
             )
 
-            balance = await self.repo.get_balance_for_update(
-                data.company_id,
-                branch,
-                product,
-            )
+            variant = await self.repo.get_variant(data.company_id, product.id, item.variant_id) if item.variant_id else None
+            balance = await self.repo.get_variant_balance(data.company_id, branch, product, variant) if variant else await self.repo.get_balance_for_update(data.company_id, branch, product)
 
             before_qty = Decimal(balance.quantity or 0)
             after_qty = item.physical_qty
             variance = after_qty - before_qty
 
+            if data.request_id is not None and item.expected_qty is None:
+                raise HTTPException(422,"A protected count requires its original system quantity")
+            if item.expected_qty is not None and item.expected_qty != before_qty:
+                raise HTTPException(409,"Stock changed since counting started. Original count retained; review current stock")
+            if variance and hasattr(self.repo,"db") and not hasattr(self.repo,"batch"):
+                from sqlalchemy import select
+                from app.models import ProductBatch
+                tracked=(await self.repo.db.execute(select(ProductBatch.id).where(ProductBatch.company_id==data.company_id,
+                    ProductBatch.product_id==product.id,ProductBatch.branch_id==branch.id,ProductBatch.variant_id==item.variant_id).limit(1))).first()
+                if tracked:raise HTTPException(409,"Count each selected batch to preserve batch numbers and expiry dates")
+
             balance.quantity = after_qty
-            await self.repo.sync_product_total(product)
+            if variant is None:await self.repo.sync_product_total(product)
 
             products.append(product)
             balances.append(balance)
@@ -239,13 +255,14 @@ class InventoryService:
                     shop_id=branch.shop_id,
                     branch_id=branch.id,
                     product_id=product.id,
-                    product_name=product.name,
+                    variant_id=item.variant_id,
+                    product_name=f"{product.name} — {variant.name}" if variant else product.name,
                     movement_type="stock_take",
                     quantity=abs(variance),
                     before_qty=before_qty,
                     after_qty=after_qty,
                     unit_cost=Decimal(
-                        product.cost_price or 0
+                        (variant.cost_price if variant and variant.cost_price is not None else product.cost_price) or 0
                     ),
                     reference=self._clean(data.reference),
                     reason="Physical stock count",

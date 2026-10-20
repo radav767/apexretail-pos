@@ -309,7 +309,7 @@ class BusinessService(PrintingService):
             raise HTTPException(409, "Some changed items have no kitchen/bar routing. Nothing was dispatched")
         for item in changed: item.sent_quantity = item.quantity
         row.last_dispatch_context = context; row.version += 1
-        self.audit("order_kitchen_dispatched", order_id=row.id, version=version, jobs=[str(j["id"]) for j in jobs]); await self.db.commit()
+        self.audit("order_kitchen_dispatched", order_id=row.id, version=version, jobs=[str(j["id"]) for j in jobs]); await self.commit_operation()
         return {"jobs": jobs, "order": await self.order_out(row)}
 
     async def move(self, order_id, data):
@@ -468,7 +468,7 @@ class BusinessService(PrintingService):
         next_state = "acknowledged" if ticket.status == "needs_review" or (informational and ticket.status == "queued") else {"queued": "preparing", "preparing": "ready", "ready": "served"}.get(ticket.status)
         if next_state != status: raise HTTPException(409, "Invalid kitchen status transition")
         ticket.status = status
-        self.audit("kitchen_status_changed", ticket_id=ticket.id, status=status); await self.db.commit()
+        self.audit("kitchen_status_changed", ticket_id=ticket.id, status=status); await self.commit_operation()
         return {"status": status}
 
     async def rooms(self):

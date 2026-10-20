@@ -6,6 +6,7 @@ import BatchStockPanel from "../src/business/BatchStockPanel";
 import PosModulePage from "../src/PosModulePage";
 import FocusedOperationsPage from "../src/FocusedOperationsPage";
 import BranchTransferPanel from "../../backoffice/src/pages/BranchTransferPanel";
+import StockTakePanel from "../../backoffice/src/pages/StockTakePanel";
 import { api } from "../src/api/client";
 import { api as backofficeApi } from "../../backoffice/src/api/client";
 import { canManageProductTool, catalogPermission } from "../src/catalogAccess";
@@ -33,12 +34,18 @@ const adapter: typeof api.defaults.adapter = async config => {
   let data: unknown = [];
   if(url==="/inventory/transfers/capabilities") {
     if(query.get("legacy")==="true")throw new AxiosError("Not found","ERR_BAD_REQUEST",config,undefined,{data:{detail:"Not found"},status:404,statusText:"Not found",headers:{},config});
-    data={idempotency:"audit-v1"};
+    data={idempotency:"audit-v1",variant_transfers:true};
   } else if(url==="/inventory/transfers") {
     if(transferAttempts++===0)throw new AxiosError("Network Error","ERR_NETWORK",config);
     data=[{id:"source-movement"},{id:"destination-movement"}];
   }
-  else if (url.includes("/inventory/branches/")) data=[{id:"branch",name:"Synthetic branch",shop_name:"Synthetic shop"},{id:"destination",name:"Destination",shop_name:"Synthetic shop"}];
+  else if(url==="/inventory/stock-take/capabilities")data={idempotency:"audit-v1",variant_counts:true,expected_quantity:true};
+  else if(url.includes("/inventory/count-catalog/"))data=[{key:"variant",product_id:"product",variant_id:"variant",name:"Synthetic stock item — Small",sku:"SIZE-S",unit:"each",stock_qty:"8",active:true,batches:[]}];
+  else if(url==="/inventory/stock-take") {
+    if(transferAttempts++===0)throw new AxiosError("Network Error","ERR_NETWORK",config);
+    data=[{id:"count-movement"}];
+  }
+  else if (url.includes("/inventory/branches/")||url.includes("/inventory/transfer-destinations/")) data=[{id:"branch",name:"Synthetic branch",shop_name:"Synthetic shop"},{id:"destination",name:"Destination",shop_name:"Synthetic shop"}];
   else if(url.includes("/inventory/overview/") || url.includes("/inventory/branch-overview/"))data=[{product_id:"product",name:"Synthetic stock item",quantity:"100",unit:"each"}];
   else if (url.includes("/products/categories")) {
     if(method==="post") {const row={id:"created",active:true,...payload};categories.push(row);data=row;}
@@ -50,7 +57,7 @@ const adapter: typeof api.defaults.adapter = async config => {
   } else if(url.includes("/products/variants/")) {
     if(method==="post") {data={id:"created-variant",active:true,...payload};variants.push(data as Record<string,unknown>);}
     else if(method==="patch") {variants=variants.map(row=>row.id===url.split("/").at(-1)?{...row,...payload}:row);data=variants.find(row=>row.id===url.split("/").at(-1));}
-    else data=variants;
+    else data=feature==="transfers"&&query.get("variant")!=="true"?[]:variants;
   } else if(url.includes("/products/price-levels/")) {
     if(method==="post") {data={id:"created-price",active:true,...payload};prices.push(data as Record<string,unknown>);}
     else if(method==="patch") {prices=prices.map(row=>row.id===url.split("/").at(-1)?{...row,...payload}:row);data=prices.find(row=>row.id===url.split("/").at(-1));}
@@ -79,6 +86,7 @@ createRoot(document.getElementById("root")!).render(feature==="batch-count"
         if(countAttempts++===0) throw new Error("Synthetic timeout");
         return {movement_id:"synthetic-movement",batch_id:"synthetic-batch"};
       }} changed={async()=>undefined}/>
+  : feature==="stock-count" ? <StockTakePanel companyId="fixture-company" branchId="branch" client={api} identity={`synthetic-${query.get("app")}`} />
   : feature==="transfers" ? query.get("app")==="backoffice"
     ? <BranchTransferPanel companyId="fixture-company" />
     : <FocusedOperationsPage feature="stock-transfers" companyId="fixture-company" branchId="branch" identity="synthetic-employee" permitted />

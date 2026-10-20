@@ -49,6 +49,14 @@ class InventoryRepository:
     async def sync_product_total(self, product):
         return await self.stock.sync_product_total(product)
 
+    async def get_variant(self, company_id, product_id, variant_id):
+        from .dimensions import variant_for_stock
+        return await variant_for_stock(self.db, company_id, product_id, variant_id, include_inactive=True)
+
+    async def get_variant_balance(self, company_id, branch, product, variant):
+        from .dimensions import dimension_balance
+        return await dimension_balance(self.db, self.stock, company_id, branch, product, variant)
+
     async def apply_movement(
         self,
         product,
@@ -84,6 +92,10 @@ class InventoryRepository:
 
             from app.business_operations.batches import allocate_batch_movements
             await allocate_batch_movements(self.db, movements)
+            count_receipt = getattr(self, "count_receipt", None)
+            if count_receipt is not None:
+                count_receipt.details = {**count_receipt.details,"movement_ids":[str(m.id) for m in movements]}
+                self.db.add(count_receipt)
             if self.commit_on_save: await self.db.commit()
             else: await self.db.flush()
 

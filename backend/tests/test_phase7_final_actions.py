@@ -143,7 +143,8 @@ class FinalActionTests(unittest.IsolatedAsyncioTestCase):
     async def test_transfer_retry_capability_requires_current_permission(self):
         from app.inventory.transfer_router import transfer_capabilities
         result=await transfer_capabilities(self.owner)
-        self.assertEqual(result,{"idempotency":"audit-v1"})
+        self.assertEqual(result["idempotency"],"audit-v1")
+        self.assertTrue(result["variant_transfers"])
         actor=AuthActor(actor_type="employee",company_id=self.company.id,role="custom",employee=self.employee,
             permissions={"inventory_transfer":False},pos_session=self.session)
         with self.assertRaises(HTTPException): await transfer_capabilities(actor)
