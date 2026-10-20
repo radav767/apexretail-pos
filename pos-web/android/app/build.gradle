@@ -20,7 +20,7 @@ android {
         acceptance {
             initWith release
             applicationIdSuffix ".staging"
-            versionNameSuffix "-phase7f-acceptance"
+            versionNameSuffix "-phase7g-acceptance"
             signingConfig signingConfigs.debug
             matchingFallbacks = ['release']
         }
@@ -30,6 +30,13 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+// Acceptance upgrades only. The production release identity/version is unchanged.
+androidComponents {
+    onVariants(selector().withBuildType("acceptance")) { variant ->
+        variant.outputs.each { output -> output.versionCode.set(7) }
     }
 }
 

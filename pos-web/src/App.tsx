@@ -1,4 +1,5 @@
 import { applyDiscounts } from "./discounts";
+import { hasActiveCashierShift, saleShiftError } from "./shiftPolicy";
 import { checkoutPrice, accumulatedWeightedQuantity } from "./business/pricing";
 import TipPaymentPanel from "./business/TipPaymentPanel";
 import { canProcessSales, canAccessOperations } from "./business/access";
@@ -2479,6 +2480,8 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     if (!canProcessSales(cashier.permissions)) { setMessage("Sales permission is required"); return; }
+    const shiftError = currentSaleShiftError();
+    if (shiftError) { setMessage(shiftError); return; }
 
     if (Number(discounted.discount_amount) > 0 && !cashier.permissions?.discounts && !cashier.permissions?.sales_discount && !discountAuthorizationToken) {
       approvalClientSaleIdRef.current ||= (paymentMethod === "credit" ? creditClientSaleIdRef.current : null) || createClientSaleId();
@@ -2642,6 +2645,8 @@ const [loggedIn, setLoggedIn] = useState(
     }
 
     const completeOfflineSale = async () => {
+      const shiftError = currentSaleShiftError(true);
+      if (shiftError) throw new Error(shiftError);
       if (discountAuthorizationToken) {
         throw new Error("Manager-approved sales must complete online. Reconnect and retry this same transaction.");
       }
@@ -3672,7 +3677,14 @@ const [loggedIn, setLoggedIn] = useState(
     );
   }
 
-  if (cashier && activePosModule === "Sales" && canProcessSales(cashier.permissions) && !shiftPromptDismissed && (shiftLoading || !currentShift)) {
+  const requiresCashierShift = import.meta.env.VITE_REQUIRE_CASHIER_SHIFT === "true" || businessSettings?.shift_enforcement_enabled === true;
+  function currentCashierShiftIdentity() {
+    return { company_id: companyId, branch_id: branchId, employee_id: cashier?.id || "", device_id: localStorage.getItem("device_id") || "" };
+  }
+  function currentSaleShiftError(offline = false) {
+    return saleShiftError(requiresCashierShift, currentShift, currentCashierShiftIdentity(), offline);
+  }
+  if (cashier && activePosModule === "Sales" && canProcessSales(cashier.permissions) && (!shiftPromptDismissed || requiresCashierShift) && (shiftLoading || !hasActiveCashierShift(currentShift, currentCashierShiftIdentity()))) {
     if (shiftLoading) {
       return <main className="pos-shift-page"><section className="pos-shift-panel"><p>Checking the current cashier shift…</p></section></main>;
     }
@@ -3680,8 +3692,9 @@ const [loggedIn, setLoggedIn] = useState(
       companyId={companyId}
       branchId={branchId}
       cashier={cashier}
+      startRequired={requiresCashierShift}
       onBackToSales={() => {
-        if (!businessSettings?.shift_enforcement_enabled) setShiftPromptDismissed(true);
+        if (!requiresCashierShift) setShiftPromptDismissed(true);
       }}
       onPrintShiftSummary={handlePrintShiftSummary}
       onPrintZReport={handlePrintZReport}
@@ -3775,7 +3788,7 @@ const [loggedIn, setLoggedIn] = useState(
         />
       )}
 
-      <main style={mainArea} className="pos-sales-main">
+      <main style={activePosModule === "Sales" ? mainArea : { ...mainArea, display: "none" }} className="pos-sales-main">
         <PosSessionHeader
           eyebrow="Checkout"
           title="Sales"
@@ -3892,7 +3905,7 @@ const [loggedIn, setLoggedIn] = useState(
         )}
       </main>
 
-      <aside style={cartPanel} className="pos-sales-cart">
+      <aside style={activePosModule === "Sales" ? cartPanel : { ...cartPanel, display: "none" }} className="pos-sales-cart">
         <h2 style={{ marginTop: 0 }}>Current Sale</h2>
         <label className="pos-pricing-customer">Customer pricing<select value={pricingCustomer?.id||""} onFocus={()=>{if(!creditCustomers.length)void loadCreditCustomers("")}} onChange={event=>choosePricingCustomer(event.target.value)}><option value="">Retail / standard</option>{creditCustomers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.price_level_name?` — ${customer.price_level_name}`:""}</option>)}</select></label>
 

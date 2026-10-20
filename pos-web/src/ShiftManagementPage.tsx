@@ -48,6 +48,7 @@ type Props = {
   onPrintZReport: (shift: ShiftRecord) => Promise<void>;
   onShiftChanged?: (shift: ShiftRecord | null) => void;
   view?: "all" | "shift" | "z-reports";
+  startRequired?: boolean;
 };
 
 const emptyPage: PageResult = { items: [], page: 1, page_size: 10, total: 0, total_pages: 0 };
@@ -71,7 +72,7 @@ function validAmount(value: string, decimalPlaces: number, positiveOnly = false)
 }
 const idempotencyKey = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-export default function ShiftManagementPage({ companyId, cashier, onBackToSales, onPrintShiftSummary, onPrintZReport, onShiftChanged, view = "all" }: Props) {
+export default function ShiftManagementPage({ companyId, cashier, onBackToSales, onPrintShiftSummary, onPrintZReport, onShiftChanged, view = "all", startRequired = false }: Props) {
   const [online, setOnline] = useState(false);
   const [shift, setShift] = useState<ShiftRecord | null>(null);
   const [currencies, setCurrencies] = useState<CurrencyConfig[]>([]);
@@ -171,7 +172,7 @@ export default function ShiftManagementPage({ companyId, cashier, onBackToSales,
     if (!(await ensureOnline())) { mutationInFlight.current = false; return; }
     const balances = configuredCashCurrencies.map((currency) => ({
       currency_code: currency.code,
-      amount: (opening[currency.code] || "0").trim(),
+      amount: (opening[currency.code] || "").trim() || "0",
     }));
     if (balances.some((item) => !validAmount(item.amount, configuredCashCurrencies.find((currency) => currency.code === item.currency_code)?.decimal_places ?? 2))) {
       setError("Enter a valid non-negative opening amount for every cash currency.");
@@ -315,7 +316,7 @@ export default function ShiftManagementPage({ companyId, cashier, onBackToSales,
 
   return <main className={`pos-shift-page pos-shift-view-${view}`}>
     <header className="pos-shift-header">
-      <div><p className="pos-shift-eyebrow">{online ? "Online" : "Offline"} · {sessionRegisterName}</p><h1>Shift Management</h1><p>{cashier?.name || "Cashier"} · {sessionShopName} · {sessionBranchName}</p></div>
+      <div><p className="pos-shift-eyebrow">{online ? "Online" : "Offline"} · {sessionRegisterName}</p><h1>{startRequired && !shift ? "Start Shift" : "Shift Management"}</h1><p>{cashier?.name || "Cashier"} · {sessionShopName} · {sessionBranchName}</p></div>
       <div className="pos-shift-header-actions"><button type="button" onClick={() => void refresh()} disabled={loading}>Refresh</button><button type="button" onClick={onBackToSales}>Return to Sales</button></div>
     </header>
     {view === "all" && <nav className="pos-shift-nav" aria-label="Shift management sections">

@@ -48,15 +48,17 @@ def main():
                 cwd=ROOT,env={'PATH':'/usr/bin:/bin','PYTHONPATH':f'{SOURCE}/backend:{SOURCE}/staging'},stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
         (ROOT/'api.pid').write_text(str(process.pid)+'\n')
         print('Restarted only the dedicated staging API with clean source identity');return
-    if sys.argv[1:]==['--refresh-backoffice']:
-        source=SOURCE/'backoffice/dist';target=ROOT/'web/backoffice'
+    if sys.argv[1:] in (['--refresh-backoffice'],['--refresh-pos']):
+        project='backoffice' if sys.argv[1:]==['--refresh-backoffice'] else 'pos-web'
+        name='backoffice' if project=='backoffice' else 'pos'
+        source=SOURCE/project/'dist';target=ROOT/'web'/name
         if not target.is_dir() or not (source/'index.html').is_file():raise SystemExit('Missing staging build')
         for path in sorted(source.rglob('*'),key=lambda p:p.name=='index.html'):
             if not path.is_file():continue
             destination=target/path.relative_to(source);destination.parent.mkdir(parents=True,exist_ok=True)
             temporary=destination.with_name(destination.name+'.stage7f')
             shutil.copyfile(path,temporary);os.chown(temporary,user.pw_uid,user.pw_gid);os.replace(temporary,destination)
-        print('Refreshed staging Backoffice assets only, index last');return
+        print(f'Refreshed staging {name} assets only, index last');return
     for port in (18770,18771):
         with socket.socket() as check:
             check.bind(('127.0.0.1',port))

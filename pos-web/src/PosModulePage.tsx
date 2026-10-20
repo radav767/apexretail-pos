@@ -935,6 +935,7 @@ export default function PosModulePage({
       onBackToSales={onBackToSales}
       onPrintShiftSummary={onPrintShiftSummary}
       onPrintZReport={onPrintZReport}
+      onShiftChanged={onShiftChanged}
     />;
   }
 

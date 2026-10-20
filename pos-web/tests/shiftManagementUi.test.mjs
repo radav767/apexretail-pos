@@ -20,7 +20,12 @@ test("Shift Management is nested under Sales Management and not a top-level menu
 
 test("Sales automatically checks and gates on the authenticated cashier's current shift", () => {
   assert.match(app, /api\.get\("\/shifts\/current"\)/);
-  assert.match(app, /activePosModule === "Sales"[\s\S]*!currentShift/);
+  assert.match(app, /activePosModule === "Sales"[\s\S]*!hasActiveCashierShift\(currentShift, currentCashierShiftIdentity\(\)\)/);
+  assert.match(app, /const shiftError = currentSaleShiftError\(\)/);
+  assert.match(app, /const completeOfflineSale = async \(\) => \{\s*const shiftError = currentSaleShiftError\(true\)/);
+  assert.match(page, /startRequired && !shift \? "Start Shift"/);
+  assert.match(modulePage, /if \(activeModule === "Shift Management"\)[\s\S]*?onShiftChanged=\{onShiftChanged\}/);
+  assert.match(app, /activePosModule === "Sales" \? mainArea : \{ \.\.\.mainArea, display: "none" \}/);
   assert.match(app, /offline_shift_token: currentShift\?\.offline_shift_token/);
 });
 

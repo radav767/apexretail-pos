@@ -70,7 +70,7 @@ private = lambda k:k.private_bytes(serialization.Encoding.PEM,serialization.Priv
 save("keys/local-ca.pem",ca.public_bytes(serialization.Encoding.PEM));save("keys/tls.pem",leaf.public_bytes(serialization.Encoding.PEM));save("keys/tls-key.pem",private(leaf_key))
 entitlement = rsa.generate_private_key(public_exponent=65537,key_size=3072)
 save("keys/entitlement.pem",private(entitlement))
-save("keys/public-keyring.json",json.dumps({"version":1,"keys":[{"kid":"phase7f-staging-only","public_key_pem":entitlement.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode()}]}))
+save("keys/public-keyring.json",json.dumps({"version":1,"max_token_lifetime_seconds":43200,"max_offline_grace_seconds":259200,"keys":[{"kid":"phase7f-staging-only","public_key_pem":entitlement.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode()}]}))
 commit = subprocess.check_output(["git","rev-parse","HEAD"],cwd=SOURCE,text=True).strip()
 environment={"PATH":"/usr/bin:/bin","APP_ENV":"staging","JWT_SECRET":secrets.token_urlsafe(48),"PRODUCT_IMAGE_ROOT":str(ROOT/"images"),"ENTITLEMENT_SIGNING_KEY_FILE":str(ROOT/"keys/entitlement.pem"),"ENTITLEMENT_PUBLIC_KEYRING_FILE":str(ROOT/"keys/public-keyring.json"),"ENTITLEMENT_ACTIVE_KEY_ID":"phase7f-staging-only"}
 data={"environment":"phase7f-staging","source":str(SOURCE),"source_commit":commit,"database":"apexretail_phase7f_acceptance","database_url":f"postgresql+asyncpg://apex_user:{password}@/apexretail_phase7f_acceptance?host={ROOT}/socket&port=55437","api_environment":environment}

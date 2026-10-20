@@ -25,12 +25,14 @@ try {
   throw new Error("POS production build cannot continue: public keyring is invalid JSON.");
 }
 if (publicKeyring.includes("PRIVATE KEY") || parsedKeyring?.version !== 1 ||
+    !Number.isInteger(parsedKeyring.max_token_lifetime_seconds) || parsedKeyring.max_token_lifetime_seconds <= 0 ||
+    !Number.isInteger(parsedKeyring.max_offline_grace_seconds) || parsedKeyring.max_offline_grace_seconds <= 0 ||
     !Array.isArray(parsedKeyring?.keys) || parsedKeyring.keys.length === 0 ||
     parsedKeyring.keys.some((key) =>
       !key?.kid || !String(key.public_key_pem || "").includes("-----BEGIN PUBLIC KEY-----")
     )) {
   throw new Error(
-    "POS production build cannot continue: entitlement keyring must contain public keys only.",
+    "POS production build cannot continue: entitlement keyring requires positive integer lifetime limits and public keys only.",
   );
 }
 
