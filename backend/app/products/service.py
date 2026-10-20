@@ -533,6 +533,8 @@ class ProductService:
         branch_id = changes.pop("branch_id", None)
         stock_qty = changes.pop("stock_qty", None)
         reorder_level = changes.pop("reorder_level", None)
+        if branch_id is not None:
+            await self.repo.resolve_branch(company_id, branch_id)
         if branch_id is not None and stock_qty is not None:
             # Lot stock must not bypass inspection/FEFO through the generic
             # variant editor. Use the same product-first lock as sale/lot writes.
@@ -585,7 +587,13 @@ class ProductService:
                 await self.repo.db.commit()
                 rows = await self.list_variants(company_id, variant.product_id, branch_id)
                 return next(row for row in rows if row["id"] == variant.id)
-            return await self.repo.save_variant(variant)
+            saved = await self.repo.save_variant(variant)
+            if branch_id is not None:
+                # Metadata-only edits must not return schema defaults (zero
+                # stock) in place of the unchanged branch quantity.
+                rows = await self.list_variants(company_id, variant.product_id, branch_id)
+                return next(row for row in rows if row["id"] == variant.id)
+            return saved
         except IntegrityError as error:
             raise HTTPException(409, "Variant SKU or barcode already exists") from error
 

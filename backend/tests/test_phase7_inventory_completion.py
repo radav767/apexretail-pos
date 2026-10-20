@@ -8,7 +8,7 @@ from sqlalchemy import select,func
 from app.models import Branch,ProductBatch,BatchAllocation,InventoryMovement,VariantInventoryBalance
 from app.products.service import ProductService
 from app.products.repository import ProductRepository
-from app.products.schema import ProductVariantCreate
+from app.products.schema import ProductVariantCreate, ProductVariantUpdate
 from app.inventory.transfer_service import TransferService
 from app.inventory.transfer_repository import TransferRepository
 from app.inventory.transfer_schema import TransferCreate
@@ -24,6 +24,13 @@ import test_phase7d_operations as fixtures
 class InventoryCompletionTests(unittest.IsolatedAsyncioTestCase):
     asyncSetUp=fixtures.Phase7DOperationsTests.asyncSetUp
     cleanup=fixtures.Phase7DOperationsTests.cleanup
+
+    async def test_variant_metadata_edit_returns_real_unchanged_branch_stock(self):
+        await self.prepare()
+        result=await ProductService(ProductRepository(self.db)).update_variant(self.company.id,self.a['id'],
+            ProductVariantUpdate(branch_id=self.branch.id,name='Small renamed',selling_price=9))
+        self.assertEqual(result['stock_qty'],10)
+        self.assertEqual(result['name'],'Small renamed')
 
     async def prepare(self,*,batch=False):
         self.destination=Branch(company_id=self.company.id,shop_id=self.shop.id,name="Destination",active=True,deleted=False)
