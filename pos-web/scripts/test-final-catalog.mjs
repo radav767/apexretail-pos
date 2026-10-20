@@ -72,6 +72,20 @@ try{
   assert.equal(await page.getByRole('button',{name:'Retry original transfer',exact:true}).count(),0);pass(`${app}: legacy backend cannot enable protected retries`);
  }
  for(const app of ['pos','backoffice']){
+  await page.goto(`http://127.0.0.1:18931/tests/visual-final-catalog.html?app=${app}&feature=transfers&variant=true`);
+  const selects=page.locator(app==='pos'?'.business-form select':'.inventory-form-grid select');
+  await selects.nth(1).selectOption('destination');await selects.nth(2).selectOption('product');
+  await selects.nth(3).waitFor();assert.equal(await page.getByRole('button',{name:'Transfer Stock',exact:true}).isDisabled(),true);
+  await selects.nth(3).selectOption('variant');
+  await page.locator(app==='pos'?'.business-form input[type=number]':'.inventory-form-grid input[type=number]').fill('2');
+  await page.getByRole('button',{name:'Transfer Stock',exact:true}).click();
+  await page.getByRole('button',{name:'Retry original transfer',exact:true}).waitFor();
+  const sent=await page.evaluate(()=>window.catalogRequests.find(r=>r.url==='/inventory/transfers').payload);
+  assert.equal(sent.items[0].variant_id,'variant');assert.equal(sent.items[0].quantity,'2');
+  await page.getByRole('button',{name:'Retry original transfer',exact:true}).click();await page.getByRole('button',{name:'New transfer',exact:true}).waitFor();
+  pass(`${app}: variant transfer selection required and original variant retained on retry`);
+ }
+ for(const app of ['pos','backoffice']){
   await open(app,app==='pos'?'product-variants':'variants');
   let row=page.getByRole('row').filter({hasText:'Small'});await row.getByRole('button',{name:'Edit',exact:true}).click();
   await page.getByPlaceholder('Variant name',{exact:true}).fill('Small green');

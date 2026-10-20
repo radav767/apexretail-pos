@@ -15,6 +15,14 @@ SOURCE = Path(__file__).resolve().parents[1]
 PYTHON = '/tmp/apexretail-phase7b-venv/bin/python'
 ACCOUNT = 'apexstage7f'
 
+def verify_staging_build(source):
+    scripts=list((source/'assets').glob('*.js'))
+    content='\n'.join(path.read_text() for path in scripts)
+    if not scripts or 'https://localhost:18770/api' not in content or 'https://api.apexpos.cloud' in content:
+        raise SystemExit('Refusing staging assets without the isolated HTTPS API target')
+    if source.parent.name=='backoffice' and 'src="/backoffice/assets/' not in (source/'index.html').read_text():
+        raise SystemExit('Backoffice staging build must use --base=/backoffice/')
+
 def main():
     if os.geteuid() != 0 or str(SOURCE) != '/tmp/apexpos-phase7f':
         raise SystemExit('Approved root execution from staging worktree required')
@@ -58,6 +66,7 @@ def main():
         name='backoffice' if project=='backoffice' else 'pos'
         source=SOURCE/project/'dist';target=ROOT/'web'/name
         if not target.is_dir() or not (source/'index.html').is_file():raise SystemExit('Missing staging build')
+        verify_staging_build(source)
         for path in sorted(source.rglob('*'),key=lambda p:p.name=='index.html'):
             if not path.is_file():continue
             destination=target/path.relative_to(source);destination.parent.mkdir(parents=True,exist_ok=True)
@@ -69,6 +78,7 @@ def main():
             check.bind(('127.0.0.1',port))
     for project, name in [('pos-web','pos'),('backoffice','backoffice')]:
         source = SOURCE/project/'dist'
+        verify_staging_build(source)
         target = ROOT/'web'/name
         if not (source/'index.html').is_file() or target.exists():
             raise SystemExit('Missing tested build or staging assets already published; inspect rather than overwrite')

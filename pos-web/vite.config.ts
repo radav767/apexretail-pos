@@ -53,5 +53,8 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     plugins: [react()],
+    // Reused inventory components must use the POS renderer's React instance,
+    // not a second copy resolved from the Backoffice workspace.
+    resolve: { dedupe: ["react", "react-dom"] },
   };
 });

@@ -19,7 +19,7 @@ OUT=SOURCE/'artifacts/phase7-software-completion'
 
 def main():
     OUT.mkdir(parents=True,exist_ok=True)
-    account=json.loads((ROOT/'acceptance-accounts.json').read_text())['accounts'][0]
+    account=json.loads((ROOT/'acceptance-accounts.json').read_text())['accounts'][1]
     reg=account['registration'];company=reg['company']['id'];branch=reg['branch']['id'];device=reg['device']
     run=str(uuid4());checks=[];actor=None
     def check(name,condition=True):
@@ -37,7 +37,7 @@ def main():
         check('Existing isolated database, restricted runtime role and committed API source',identity['database']=='apexretail_phase7f_acceptance' and identity['role']=='apex_user' and identity['source_commit']==expected)
         owner=call('POST','/auth/login',{'email':account['email'],'password':account['password']})['token'];actor=owner
         check('Actual owner password authentication',bool(owner))
-        other=json.loads((ROOT/'acceptance-accounts.json').read_text())['accounts'][1]['registration']['company']['id']
+        other=json.loads((ROOT/'acceptance-accounts.json').read_text())['accounts'][0]['registration']['company']['id']
         call('GET',f'/inventory/count-catalog/{other}?branch_id={branch}',status=403)
         check('Count catalog rejects another tenant')
         categories='/products/categories'
@@ -56,7 +56,10 @@ def main():
         call('DELETE',f'/products/price-levels/{company}/item/{level["id"]}')
         check('Price level create/edit/delete')
         branches=call('GET',f'/inventory/transfer-destinations/{company}')
-        destination=next(r['id'] for r in branches if r['id']!=branch)
+        destination=next((r['id'] for r in branches if r['id']!=branch),None)
+        if destination is None:
+            destination=call('POST','/inventory/branches',{'company_id':company,'shop_id':reg['shop']['id'],'name':'Completion destination '+run})['id']
+            check('Authenticated branch creation for transfer test')
         transfer={'company_id':company,'source_branch_id':branch,'destination_branch_id':destination,'request_id':str(uuid4()),'items':[{'product_id':product['id'],'variant_id':variant['id'],'quantity':'3'}]}
         moved=call('POST','/inventory/transfers',transfer);again=call('POST','/inventory/transfers',transfer)
         check('Authenticated variant transfer retry returns original two movements',len(moved)==2 and [r['id'] for r in moved]==[r['id'] for r in again] and all(r['variant_id']==variant['id'] for r in moved))
@@ -92,10 +95,10 @@ def main():
             call('PUT','/operations/profile',{'profile':'restaurant','tip_product_id':old_profile.get('tip_product_id'),'service_product_id':old_profile.get('service_product_id')})
             station=call('POST','/printing/stations',{'shop_id':reg['shop']['id'],'branch_id':branch,'device_id':device['id'],'name':'Synthetic kitchen '+run,'purpose':'kitchen','transport':'system','paper_width':'58mm','auto_print':False,'routes':[{'target_type':'product','target_id':product['id']}]})
             check('Kitchen station routes only selected synthetic product',bool(station['id']))
-            login={'company_id':company,'branch_id':branch,'shop_id':reg['shop']['id'],'device_id':device['id'],'device_key':device['device_key'],'pin':account['pin']}
+            login={'company_id':company,'branch_id':branch,'shop_id':reg['shop']['id'],'device_id':device['id'],'device_key':device['device_key'],'pin':account['pin'],'takeover':True}
             session=call('POST','/employees/pin-login',login);actor=session['access_token']
             check('Actual employee PIN and registered-device authentication',session['id']==reg['employee']['id'])
-            draft={'request_id':str(uuid4()),'employee_id':session['id'],'captured_at':datetime.now(timezone.utc).isoformat(),'order':{'request_id':str(uuid4()),'branch_id':branch,'device_id':device['id'],'kind':'restaurant'},'items':[{'version':1,'product_id':product['id'],'quantity':'2'}]}
+            draft={'request_id':str(uuid4()),'employee_id':session['id'],'captured_at':datetime.now(timezone.utc).isoformat(),'order':{'request_id':str(uuid4()),'branch_id':branch,'device_id':device['id'],'kind':'restaurant'},'items':[{'version':1,'product_id':product['id'],'variant_id':variant['id'],'quantity':'2'}]}
             saved=call('POST','/operations/offline/drafts',draft);replay=call('POST','/operations/offline/drafts',draft)
             check('Offline saved order synchronizes once',saved['order']['id']==replay['order']['id'])
             recovered=call('POST','/operations/offline/drafts/recover',draft)
@@ -131,6 +134,8 @@ def main():
             for width in (58,80):check(f'{width}mm report generation only (not physical print)',b'<html' in call('GET',f'/shifts/{shift["id"]}/z-report/thermal?paper_width={width}mm').lower())
             call('POST','/employees/session/logout');actor=owner
         finally:
+            if actor!=owner:
+                call('POST','/employees/session/logout');actor=owner
             call('PUT','/operations/profile',{'profile':old_profile['profile'],'tip_product_id':old_profile.get('tip_product_id'),'service_product_id':old_profile.get('service_product_id')},token=owner)
         empty=call('POST',categories,{'company_id':company,'name':'Temporary empty '+run})
         call('DELETE',f'{categories}/{company}/{empty["id"]}')

@@ -88,8 +88,8 @@ createRoot(document.getElementById("root")!).render(feature==="batch-count"
       }} changed={async()=>undefined}/>
   : feature==="stock-count" ? <StockTakePanel companyId="fixture-company" branchId="branch" client={api} identity={`synthetic-${query.get("app")}`} />
   : feature==="transfers" ? query.get("app")==="backoffice"
-    ? <BranchTransferPanel companyId="fixture-company" />
-    : <FocusedOperationsPage feature="stock-transfers" companyId="fixture-company" branchId="branch" identity="synthetic-employee" permitted />
+    ? <BranchTransferPanel companyId={query.get("variant")==="true"?"fixture-company-variant":"fixture-company"} />
+    : <FocusedOperationsPage feature="stock-transfers" companyId={query.get("variant")==="true"?"fixture-company-variant":"fixture-company"} branchId="branch" identity="synthetic-employee" permitted />
   : query.get("app")==="module" ? <PosModulePage {...moduleProps} />
   : query.get("app")==="backoffice"
   ? <ProductsPage companyId="fixture-company" />
