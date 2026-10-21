@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:redirect-security": "node --test tests/redirectSecurity.test.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test:dashboard": "node scripts/run-dashboard-tests.mjs && node --test tests/navigation.test.mjs",

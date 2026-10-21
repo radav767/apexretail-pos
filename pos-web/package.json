@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:redirect-security": "node --test ../backoffice/tests/redirectSecurity.test.mjs",
     "dev": "vite",
     "build": "node scripts/build-production.mjs",
     "test:entitlement": "node scripts/run-entitlement-tests.mjs && node --test tests/entitlementUi.test.mjs tests/entitlementBuildPolicy.test.mjs",
