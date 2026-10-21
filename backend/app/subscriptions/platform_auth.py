@@ -23,18 +23,15 @@ async def login(db,email,password):
             db.add(PlatformAudit(admin_id=admin.id,action='platform_login_rejected',details={}))
             await db.commit()
         raise HTTPException(401,'Invalid platform credentials or account unavailable')
-    admin.failed_attempts=0;admin.locked_until=None
-    token='apx_platform_'+token_urlsafe(48)
-    db.add(PlatformSession(admin_id=admin.id,token_hash=hash_session_token(token),expires_at=now+timedelta(minutes=30)))
-    db.add(PlatformAudit(admin_id=admin.id,action='platform_login',details={}))
-    await db.commit()
-    return {'access_token':token,'expires_in':1800,'role':admin.role,'admin_id':str(admin.id)}
+    # Do not reset the shared failure budget before MFA succeeds.
+    from .platform_mfa import challenge
+    return await challenge(db,admin)
 
 async def authenticate(db,token):
     if not token.startswith('apx_platform_'):raise HTTPException(401,'Platform authentication required')
     result=(await db.execute(select(PlatformAdmin,PlatformSession).join(PlatformSession,PlatformSession.admin_id==PlatformAdmin.id).where(
         PlatformSession.token_hash==hash_session_token(token),PlatformSession.revoked_at.is_(None),
-        PlatformSession.expires_at>datetime.now(UTC),PlatformAdmin.active==True))).first()
+        PlatformSession.expires_at>datetime.now(UTC),PlatformSession.mfa_verified==True,PlatformAdmin.active==True))).first()
     if not result:raise HTTPException(401,'Platform session expired or revoked')
     return result
 

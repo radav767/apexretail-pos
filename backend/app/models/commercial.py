@@ -15,6 +15,8 @@ class PlatformAdmin(Base):
     active=Column(Boolean,nullable=False,default=True)
     failed_attempts=Column(Integer,nullable=False,default=0)
     locked_until=Column(DateTime(timezone=True))
+    mfa_secret=Column(String(500))  # encrypted with independently provisioned key
+    mfa_last_step=Column(Integer,nullable=False,default=-1,server_default='-1')
 
 class PlatformSession(Base):
     __tablename__='platform_sessions'
@@ -23,6 +25,22 @@ class PlatformSession(Base):
     token_hash=Column(String(64),nullable=False,unique=True)
     expires_at=Column(DateTime(timezone=True),nullable=False)
     revoked_at=Column(DateTime(timezone=True))
+    mfa_verified=Column(Boolean,nullable=False,default=False,server_default='false')
+
+class PlatformChallenge(Base):
+    __tablename__='platform_challenges'
+    id=uid(primary_key=True)
+    admin_id=Column(UUID(as_uuid=True),ForeignKey('platform_admins.id'),nullable=False)
+    token_hash=Column(String(64),nullable=False,unique=True)
+    pending_secret=Column(String(500))
+    expires_at=Column(DateTime(timezone=True),nullable=False)
+    used_at=Column(DateTime(timezone=True))
+
+class PlatformSetting(Base):
+    __tablename__='platform_settings'
+    id=Column(Integer,primary_key=True)
+    version=Column(Integer,nullable=False)
+    values=Column(JSON,nullable=False)
 
 class PlatformAudit(Base):
     __tablename__='platform_audit'

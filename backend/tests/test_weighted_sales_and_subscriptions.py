@@ -130,6 +130,12 @@ class FakeSubscriptionDb:
     def add(self, value):
         self.added.append(value)
 
+    async def get(self, model, _key):
+        # Phase 10's optional platform defaults; no setting is configured here.
+        if model.__name__ == 'PlatformSetting':
+            return None
+        raise AssertionError(f'Unexpected model lookup: {model.__name__}')
+
     async def execute(self, *_args, **_kwargs):
         event = next(
             (

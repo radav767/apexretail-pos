@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from os import environ
 
-from pydantic import ValidationError
+from pydantic import ValidationError,SecretStr
 from pydantic_settings import BaseSettings
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     entitlement_max_offline_grace_seconds: int = 259200
     product_image_root: str = "/var/lib/apexretail/product-images"
     product_image_max_bytes: int = 5242880
+    platform_mfa_key: SecretStr | None = None
 
     class Config:
         env_file = ".env"

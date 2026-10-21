@@ -3,7 +3,7 @@ import{mkdir,writeFile}from'node:fs/promises';
 import{fileURLToPath}from'node:url';
 import{createServer}from'vite';
 import{chromium}from'/root/.npm/_npx/420ff84f11983ee5/node_modules/playwright/index.mjs';
-const root=fileURLToPath(new URL('..',import.meta.url)),out=fileURLToPath(new URL('../../artifacts/phase8-commercial',import.meta.url));await mkdir(out,{recursive:true});
+const root=fileURLToPath(new URL('..',import.meta.url)),out=process.env.PLATFORM_BROWSER_OUTPUT_DIR||fileURLToPath(new URL('../../artifacts/phase8-commercial',import.meta.url));await mkdir(out,{recursive:true});
 const server=await createServer({root,server:{host:'127.0.0.1',port:18932,strictPort:true}});await server.listen();
 const browser=await chromium.launch({executablePath:'/tmp/apexretail-pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
 const context=await browser.newContext(),errors=[],external=[],checks=[];
@@ -14,6 +14,7 @@ async function login(role='super_admin'){
  await page.goto(`http://127.0.0.1:18932/tests/visual-phase8.html?role=${role}`);
  if(await page.getByLabel('Email',{exact:true}).count()){
   await page.getByLabel('Email',{exact:true}).fill('synthetic@example.test');await page.getByLabel('Password',{exact:true}).fill('synthetic-only-not-a-real-account');await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  await page.getByLabel('Authentication code',{exact:true}).fill('123456');await page.getByRole('button',{name:'Verify code',exact:true}).click();
  }
  await page.getByRole('heading',{name:'Dashboard',exact:true}).waitFor();
 }

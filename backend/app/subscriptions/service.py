@@ -262,7 +262,10 @@ class SubscriptionService:
             return self.apply_status_windows(existing)
 
         now = datetime.now(UTC)
-        trial_ends_at = now + timedelta(days=TRIAL_DAYS)
+        from app.models.commercial import PlatformSetting
+        platform_settings = await self.db.get(PlatformSetting, 1)
+        trial_days = platform_settings.values.get('trial_days', TRIAL_DAYS) if platform_settings else TRIAL_DAYS
+        trial_ends_at = now + timedelta(days=trial_days)
         subscription = CompanySubscription(
             company_id=company_id,
             plan=None,
@@ -277,7 +280,7 @@ class SubscriptionService:
             licensed_terminal_count=None,
             unit_price=None,
             total_amount=None,
-            status_reason="Initial 30-day free trial",
+            status_reason=f"Initial {trial_days}-day free trial",
         )
         self.db.add(subscription)
         await self.db.flush()

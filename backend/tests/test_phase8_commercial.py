@@ -1,6 +1,8 @@
 """Commercial billing/security through existing rollback-only PostgreSQL fixtures."""
 import calendar
 import unittest
+import time
+from cryptography.fernet import Fernet
 from datetime import datetime,timedelta,timezone
 from decimal import Decimal
 from uuid import uuid4
@@ -33,6 +35,7 @@ class CommercialTests(unittest.IsolatedAsyncioTestCase):
     cleanup=fixtures.Phase7DOperationsTests.cleanup
     async def asyncSetUp(self):
         await fixtures.Phase7DOperationsTests.asyncSetUp(self)
+        self.mfa_env=patch.dict('os.environ',{'PLATFORM_MFA_KEY':Fernet.generate_key().decode()});self.mfa_env.start();self.addCleanup(self.mfa_env.stop)
         self.admin=PlatformAdmin(email=str(uuid4())+'@platform.test',password_hash=hash_password('synthetic-platform-password'),role='super_admin')
         self.db.add(self.admin);await self.db.commit()
         self.svc=CommercialService(self.db,self.admin)
@@ -114,6 +117,8 @@ class CommercialTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException):await authenticate(self.db,create_access_token(str(self.user.id),self.user.email))
         self.admin.role='super_admin'
         result=await login(self.db,self.admin.email,'synthetic-platform-password')
+        from app.subscriptions.platform_mfa import verify,totp
+        result=await verify(self.db,result['challenge'],totp(result['secret'],int(time.time())//30))
         admin,session=await authenticate(self.db,result['access_token']);self.assertEqual(admin.id,self.admin.id)
         session.revoked_at=datetime.now(UTC);await self.db.commit()
         with self.assertRaises(HTTPException):await authenticate(self.db,result['access_token'])
@@ -141,6 +146,10 @@ class CommercialTests(unittest.IsolatedAsyncioTestCase):
                 owner=create_access_token(str(self.user.id),self.user.email)
                 self.assertEqual((await client.get('/api/platform/dashboard',headers={'Authorization':'Bearer '+owner})).status_code,401)
                 auth=await client.post('/api/platform/login',json={'email':self.admin.email,'password':'synthetic-platform-password'})
+                self.assertEqual(auth.status_code,200)
+                from app.subscriptions.platform_mfa import totp
+                challenge=auth.json()
+                auth=await client.post('/api/platform/mfa',json={'challenge':challenge['challenge'],'code':totp(challenge['secret'],int(time.time())//30)})
                 self.assertEqual(auth.status_code,200);token=auth.json()['access_token']
                 self.assertEqual((await client.get('/api/platform/dashboard',headers={'Authorization':'Bearer '+token})).status_code,200)
                 self.assertEqual((await client.get('/api/subscriptions/billing/'+str(uuid4()),headers={'Authorization':'Bearer '+owner})).status_code,403)
