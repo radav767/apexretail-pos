@@ -5,7 +5,7 @@ import {mkdir,writeFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {chromium} from '/root/.npm/_npx/420ff84f11983ee5/node_modules/playwright/index.mjs';
-const root=fileURLToPath(new URL('..',import.meta.url)),out=fileURLToPath(new URL('../../artifacts/phase10-domain',import.meta.url));await mkdir(out,{recursive:true});
+const root=fileURLToPath(new URL('..',import.meta.url)),out=process.env.UI_AUDIT_OUTPUT_DIR||fileURLToPath(new URL('../../artifacts/phase10-domain',import.meta.url));await mkdir(out,{recursive:true});
 const server=await createServer({root,server:{host:'127.0.0.1',port:18936,strictPort:true}});await server.listen();
 const browser=await chromium.launch({executablePath:'/tmp/apexretail-pw-browsers/chromium-1194/chrome-linux/chrome',args:['--no-sandbox']});
 const context=await browser.newContext(),calls=[],errors=[],external=[],checks=[];

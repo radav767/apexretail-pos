@@ -9,6 +9,9 @@ api.defaults.adapter=async config=>{
   const url=config.url||"";const body=typeof config.data==="string"?JSON.parse(config.data):config.data;
   calls.push({url,method:config.method,body,params:config.params});let data:unknown;
   if(url.startsWith("/inventory/branches"))data=[{id:"source",name:"Main",shop_name:"Synthetic shop"},{id:"destination",name:"Store room",shop_name:"Synthetic shop"}];
+  else if(url.startsWith("/inventory/transfer-destinations"))data=[{id:"destination",name:"Store room",shop_name:"Synthetic shop"}];
+  else if(url.startsWith("/products/variants/"))data=[];
+  else if(url==="/inventory/transfers/capabilities")data={idempotency:"audit-v1",variant_transfers:true};
   else if(url.startsWith("/inventory/branch-overview"))data=[{product_id:"product",product_name:"Synthetic stock",quantity:"20"}];
   else if(url==="/inventory/transfers"){
     const receipt=[{id:"movement-out",product_id:"product",branch_id:"source",quantity:body.items[0].quantity,movement_type:"transfer_out",reference:body.reference},{id:"movement-in"}];

@@ -3,7 +3,7 @@ import {mkdir,writeFile} from "node:fs/promises";
 import {resolve} from "node:path";
 import {pathToFileURL} from "node:url";
 import {spawn} from "node:child_process";
-const root=resolve(import.meta.dirname,"../..");const output=resolve(root,"phase7e-evidence/completion/preview");await mkdir(output,{recursive:true});
+const root=resolve(import.meta.dirname,"../..");const output=process.env.UI_AUDIT_OUTPUT_DIR||resolve(root,"phase7e-evidence/completion/preview");await mkdir(output,{recursive:true});
 const {chromium}=await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE).href);
 const base="http://127.0.0.1:5194/tests/visual-phase7e-completion.html";
 const server=spawn(process.execPath,[resolve(root,"backoffice/node_modules/vite/bin/vite.js"),"--host","127.0.0.1","--port","5194","--strictPort"],{cwd:resolve(root,"backoffice"),stdio:"ignore"});
