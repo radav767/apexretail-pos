@@ -1,0 +1,3 @@
+# Verified CPython 3.10 / Ubuntu 22.04 runtime. Do not install into production
+# during preparation; preserve its existing environment until release approval.
+-r requirements-runtime.lock
