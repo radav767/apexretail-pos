@@ -1,0 +1,13 @@
+# APPROVAL REQUIRED. Temporary HTTP-only bootstrap, no changes to other vhosts.
+# Enable only this bootstrap before requesting the dedicated certificate.
+# Replace with admin.apexpos.cloud.conf.example AFTER certificate validation.
+server {
+    listen 80;
+    server_name admin.apexpos.cloud;
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/apexretail-acme;
+        default_type text/plain;
+        try_files $uri =404;
+    }
+    location / { return 503; }
+}

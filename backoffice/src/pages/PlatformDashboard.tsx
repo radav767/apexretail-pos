@@ -3,8 +3,9 @@ import axios from 'axios';
 import {api as businessApi} from '../api/client';
 import './platform.css';
 import PlatformManagement from './PlatformManagement';
+import {platformApiBase} from '../platformEntry';
 
-const platformClient=axios.create({baseURL:businessApi.defaults.baseURL,timeout:20000});
+const platformClient=axios.create({baseURL:platformApiBase(location.hostname,businessApi.defaults.baseURL),timeout:20000});
 const FEATURES=['restaurant','hospitality','pharmacy','wholesale','variants','composites','kitchen_printing','advanced_reports'];
 type Session={access_token:string;role:string;admin_id:string};
 type Row=Record<string,any>;
