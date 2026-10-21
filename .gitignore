@@ -7,6 +7,22 @@ node_modules/
 dist/
 backend/secrets/
 backups/
+# Real backup credentials/recovery material stay outside the repository.
+# Credential-free *.example proposals remain reviewable.
+rclone.conf
+rclone.conf.*
+client_secret*.json
+credentials*.json
+token.json
+token.pickle
+*.key
+*.kbx
+*private*.asc
+*.dump.gpg
+/ops/phase10/backup.json
+/ops/phase10/backup-offserver.json
+/ops/phase10/backup-activation.json
+/ops/phase10/google-drive.json
 *.dump
 *.apk
 *.tar.gz
