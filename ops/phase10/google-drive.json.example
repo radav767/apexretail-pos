@@ -4,5 +4,5 @@
   "folder_name": "ApexRetail-POS-Secure-Backups",
   "root_folder_id": null,
   "rclone_config": "/etc/apexretail/drive/rclone.conf",
-  "remote": "apexretail-backups"
+  "remote": "apexretail_drive"
 }

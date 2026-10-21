@@ -30,7 +30,7 @@ def config(path):
     if (set(data) != {'provider', 'owner_email', 'folder_name', 'root_folder_id',
                       'rclone_config', 'remote'}
             or data['provider'] != 'google-drive' or data['owner_email'] != OWNER
-            or data['folder_name'] != FOLDER or data['remote'] != 'apexretail-backups'
+            or data['folder_name'] != FOLDER or data['remote'] != 'apexretail_drive'
             or not re.fullmatch('[A-Za-z0-9_-]{10,200}', str(data['root_folder_id']))):
         raise ValueError('Approved dedicated Google Drive destination required')
     credential = Path(data['rclone_config'])

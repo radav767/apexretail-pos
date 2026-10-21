@@ -26,7 +26,7 @@ class DriveBackup(unittest.TestCase):
         self.cfgfile = self.root / 'drive.json'
         self.cfg = {'provider': 'google-drive', 'owner_email': drive.OWNER,
                     'folder_name': drive.FOLDER, 'root_folder_id': 'TEST_FOLDER_123456',
-                    'remote': 'apexretail-backups', 'rclone_config': str(self.credentials)}
+                    'remote': 'apexretail_drive', 'rclone_config': str(self.credentials)}
         self.write(self.cfgfile, self.cfg)
         self.credential()
 
@@ -40,7 +40,7 @@ class DriveBackup(unittest.TestCase):
                   'token': json.dumps({'access_token': 'FAKE_ACCESS', 'refresh_token': 'FAKE_REFRESH',
                                        'token_type': 'Bearer'})}
         values.update(overrides)
-        self.write(self.credentials, '[apexretail-backups]\n' + '\n'.join(f'{k} = {v}' for k, v in values.items()))
+        self.write(self.credentials, '[apexretail_drive]\n' + '\n'.join(f'{k} = {v}' for k, v in values.items()))
 
     def package(self):
         folder = self.root / 'package'
@@ -76,7 +76,7 @@ class DriveBackup(unittest.TestCase):
         cfg = drive.config(self.cfgfile)
         with patch.object(drive.Path, 'lstat', return_value=SimpleNamespace(st_mode=0o100755, st_uid=0)), \
              patch.object(drive.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as run:
-            drive.transfer(cfg, '/private/archive.gpg', 'apexretail-backups:unique/archive.gpg')
+            drive.transfer(cfg, '/private/archive.gpg', 'apexretail_drive:unique/archive.gpg')
         args, kwargs = run.call_args
         self.assertEqual(args[0][:2], ['/usr/bin/rclone', 'copyto'])
         self.assertIn('--immutable', args[0])
@@ -90,7 +90,7 @@ class DriveBackup(unittest.TestCase):
         def transfer(cfg, source, target):
             if fail:
                 raise RuntimeError('simulated transfer failure')
-            if str(source).startswith('apexretail-backups:'):
+            if str(source).startswith('apexretail_drive:'):
                 Path(target).write_bytes(b'CORRUPTED' if corrupt else stored[str(source)])
                 Path(target).chmod(0o600)
             else:

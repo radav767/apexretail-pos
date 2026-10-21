@@ -1,0 +1,10 @@
+# TEMPLATE ONLY. Do not install as an authorized config or put real tokens in Git.
+# Create the real remote interactively in a private terminal via SSH forwarding.
+# root_folder_id remains blank until the app-created backup folder is verified.
+[apexretail_drive]
+type = drive
+scope = drive.file
+client_id =
+client_secret =
+root_folder_id =
+token =

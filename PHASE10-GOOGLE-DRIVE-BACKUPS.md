@@ -8,8 +8,10 @@ OAuth grant, production key generation or Phase7–10 deployment occurred.
 
 ## Implementation / findings
 
-rclone was NOT found in the VPS PATH. Installation and installed-version testing
-remain prerequisites; no installation was performed. Existing GPG is available.
+rclone is now installed from Ubuntu: package1.53.3-4ubuntu1.22.04.5,
+reports v1.53.3-DEV. Its installed help confirms drive.file, root_folder_id,
+copyto/immutable and connection/retry flags. OAuth and live adapter acceptance
+remain pending. Existing GPG is available. Initial preparation predated installation.
 Current backup script correctly targets apexretail_pos, remains plaintext and
 uses the existing daily02:00UTC timer. Preserve all existing backups/schedules.
 
@@ -70,7 +72,7 @@ into this conversation. Google password is entered only on accounts.google.com.
    rclone config --config /etc/apexretail/drive/rclone.conf
    ```
 
-5. Create only remote `apexretail-backups`, type `drive`, own client ID/secret,
+5. Create only remote `apexretail_drive`, type `drive`, own client ID/secret,
    scope `drive.file` (select by NAME, not a version-dependent menu number).
    Leave root folder blank ONLY for initial folder creation; no service account
    or Shared Drive. Choose web-browser authentication **Y** through the SSH tunnel.
@@ -82,7 +84,7 @@ into this conversation. Google password is entered only on accounts.google.com.
 6. Create the folder with THIS OAuth client so drive.file can access it:
 
    ```sh
-   rclone mkdir apexretail-backups:ApexRetail-POS-Secure-Backups --config /etc/apexretail/drive/rclone.conf
+   rclone mkdir apexretail_drive:ApexRetail-POS-Secure-Backups --config /etc/apexretail/drive/rclone.conf
    ```
 
    Confirm ownership/private sharing in Drive. If an existing same-named folder
@@ -161,15 +163,15 @@ private configs, stable refresh binding, plaintext refusal, full simulated readb
 transfer/corruption failures, duplicate evidence refusal and real disposable GPG
 encryption/decryption/missing-private-key/corruption checks. Existing real-dump
 full PostgreSQL restore evidence retained (34tables/890rows, hashes/controls/ACLs
-match); not rerun here. Drive/rclone calls are simulated because rclone/OAuth are
-not installed/provisioned. No actual Google upload, account identity, granted scope,
+match); not rerun here. Drive transfer calls are simulated; rclone is now installed
+but OAuth is not provisioned. No actual Google upload, account identity, granted scope,
 quota, revocation or recovery test is reported as passed.
 
 An initial sandbox GPG-agent failure and a nonexistent-keyring packet-inspection
 failure were resolved by privileged TEMPORARY test execution and inspection with
 the approved public-only keyring; final18 tests pass, not skipped.
 
-Still needed: utility installation; owner private OAuth consent/folder verification;
+Still needed: owner private OAuth consent/folder verification;
 real recipient/custodian/escrow; alert contact/channel; approved one-off upload and
 real-key isolated recovery; installed-version/API acceptance. THEN request explicit
 approval before changing the existing backup schedule/service. No production
