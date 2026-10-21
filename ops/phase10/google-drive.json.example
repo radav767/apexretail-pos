@@ -1,0 +1,8 @@
+{
+  "provider": "google-drive",
+  "owner_email": "prophetdavie@gmail.com",
+  "folder_name": "ApexRetail-POS-Secure-Backups",
+  "root_folder_id": null,
+  "rclone_config": "/etc/apexretail/drive/rclone.conf",
+  "remote": "apexretail-backups"
+}

@@ -176,8 +176,15 @@ def verified_package(folder, now):
                 or receipt.get('archive_sha256') != data['ciphertext_sha256']
                 or not created <= instant(receipt['verified_at']) <= now):
             raise ValueError('Missing or mismatched verification evidence')
+    drive = remote.get('provider') == 'google-drive'
+    if drive:
+        if (remote.get('host') != 'www.googleapis.com'
+                or not re.fullmatch('[A-Za-z0-9_-]{10,200}', str(remote.get('root_folder_id', '')))
+                or not re.fullmatch('[a-f0-9]{64}', str(remote.get('oauth_binding_sha256', '')))):
+            raise ValueError('Complete dedicated Drive authorization evidence required')
+    elif remote.get('provider') not in (None, 'sftp') or not re.fullmatch('SHA256:[A-Za-z0-9+/]{43}', str(remote.get('host_key_fingerprint', ''))):
+        raise ValueError('Pinned SSH host identity required')
     if (not re.fullmatch('[a-f0-9]{64}', str(remote.get('config_sha256', '')))
-            or not re.fullmatch('SHA256:[A-Za-z0-9+/]{43}', str(remote.get('host_key_fingerprint', '')))
             or not re.fullmatch(data['ciphertext_sha256'] + '-[a-f0-9]{32}', str(remote.get('object_id', '')))
             or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9.-]{0,252}', str(remote.get('host', '')))):
         raise ValueError('Complete pinned-host readback evidence required')

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import backup_proposal as backup
 import backup_safety as safety
+import backup_drive as drive
 
 REMOTE = Path('/etc/apexretail/backup-offserver.json')
 APPROVAL = Path('/etc/apexretail/backup-activation.json')
@@ -17,7 +18,8 @@ APPROVAL = Path('/etc/apexretail/backup-activation.json')
 
 def preflight():
     config = backup.load_config(backup.CONFIG)
-    remote = safety.remote_config(REMOTE)
+    is_drive = safety.read_private_json(REMOTE).get('provider') == 'google-drive'
+    remote = drive.config(REMOTE) if is_drive else safety.remote_config(REMOTE)
     approval = safety.read_private_json(APPROVAL)
     now = datetime.now(timezone.utc)
     if (approval.get('approved_for_schedule') is not True
@@ -33,10 +35,16 @@ def preflight():
     _, manifest, receipt = safety.verified_package(proof, now)
     if (manifest.get('recipient') != config['recipient']
             or manifest['ciphertext_sha256'] != approval.get('verified_archive_sha256')
-            or receipt['config_sha256'] != backup.digest_file(REMOTE)
-            or receipt['host'] != remote['host']
-            or receipt['host_key_fingerprint'] != remote['host_key_fingerprint']):
+            or receipt['config_sha256'] != backup.digest_file(REMOTE)):
         raise RuntimeError('Actual matching-recipient off-server restore proof required')
+    if is_drive:
+        if (receipt.get('provider') != 'google-drive'
+                or receipt.get('root_folder_id') != remote['root_folder_id']
+                or receipt.get('oauth_binding_sha256') != remote['oauth_binding_sha256']):
+            raise RuntimeError('Actual matching Drive authorization recovery proof required')
+    elif (receipt.get('provider') not in (None, 'sftp') or receipt['host'] != remote['host']
+          or receipt['host_key_fingerprint'] != remote['host_key_fingerprint']):
+        raise RuntimeError('Actual pinned SFTP recovery proof required')
     backup.verify_public_keyring(config['gnupg_home'], config['recipient'])
 
 
@@ -53,7 +61,10 @@ def run():
         # Custody, configuration and acceptance gates precede a production dump.
         preflight()
         folder = backup.run(announce=False)
-        safety.publish(folder, REMOTE)
+        if safety.read_private_json(REMOTE).get('provider') == 'google-drive':
+            drive.publish(folder, REMOTE)
+        else:
+            safety.publish(folder, REMOTE)
     print('Encrypted backup and off-server full readback verified; no pruning performed.')
 
 
