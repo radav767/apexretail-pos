@@ -1,0 +1,5 @@
+# PROPOSAL ONLY. Requires approval, a provisioned root:root 0600 key file,
+# backed-up key material, and the approved Phase 10 backend/schema.
+# Do not replace existing environment/entitlement/drop-in configuration.
+[Service]
+EnvironmentFile=/etc/apexretail/platform-mfa.env
