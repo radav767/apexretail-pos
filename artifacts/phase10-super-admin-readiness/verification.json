@@ -1,0 +1,56 @@
+{
+  "date_utc": "2026-10-21",
+  "runtime_candidate": "932557e3abca1a2fa046b2d04d0d6f8c6d4bcc35",
+  "preparation_base": "d4b2eccb36a265f6a234954da25a530530a2056c",
+  "runtime_source_changed": false,
+  "production_deployed": false,
+  "production_business_or_schema_writes": false,
+  "database_created_reset_migrated_or_restored": false,
+  "apk_built": false,
+  "tests": {
+    "isolated_backend_passed": 54,
+    "isolated_backend_subtests_passed": 33,
+    "failures": 0,
+    "errors": 0,
+    "skips": 0,
+    "existing_pydantic_warnings": 3,
+    "synthetic_console_browser_checks": 16,
+    "synthetic_domain_browser_checks": 9,
+    "private_nginx_tests": 4,
+    "renewal_hook_uses_fake_commands_only": true
+  },
+  "production": {
+    "database": "apexretail_pos",
+    "revision": "p5h_runtime_write_permissions",
+    "api_health": true,
+    "pos_http": 200,
+    "backoffice_http": 200,
+    "existing_services_active": true,
+    "historical_hashes_and_financial_controls_unchanged": true,
+    "open_shifts_preserved": 5,
+    "shift_enforcement": false,
+    "live_nginx_test": "PASS",
+    "live_nginx_configuration_changed": false,
+    "ntp_synchronized": true,
+    "backup_activation_record_present": false
+  },
+  "admin": {
+    "dns_a": "187.77.179.100",
+    "aaaa_observed": false,
+    "explicit_host_or_apex_caa_observed": false,
+    "live_https": "FAIL certificate hostname mismatch (curl60)",
+    "dedicated_certificate_present": false,
+    "mfa_key_provisioned": false,
+    "real_admin_account_or_credentials_created": false,
+    "live_login_attempted": false,
+    "real_authenticator_acceptance": "PENDING",
+    "new_vhost_and_renewal_hook_installed": false
+  },
+  "dependencies": {
+    "single_head": "p10a_platform_management",
+    "pending_revision_count": 14,
+    "order": "Phase7 schema -> Phase8 schema -> Phase9 schema -> Phase10 schema -> full matching backend -> matching frontends -> admin HTTPS and MFA onboarding",
+    "phase9_live_fiscalisation": "NO-GO; disabled preparation/status only"
+  },
+  "decision": "NO-GO for live Super Admin activation and consolidated deployment pending owner/security/manual gates"
+}

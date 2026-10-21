@@ -1,0 +1,7 @@
+#!/bin/sh
+# UNINSTALLED: approve only after the dedicated certificate/final vhost is ready.
+# Never restart the API or reload for unrelated certificate lineages.
+set -eu
+[ "${RENEWED_LINEAGE-}" = /etc/letsencrypt/live/admin.apexpos.cloud ] || exit 0
+/usr/sbin/nginx -t
+/usr/bin/systemctl reload nginx

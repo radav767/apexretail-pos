@@ -52,6 +52,10 @@ server {
     }
     location = /api { return 404; }
     location /api/ { return 404; }
+    # The shared Backoffice root also contains existing downloads/previews.
+    # Do not expose those through the new administration hostname.
+    location = /downloads { return 404; }
+    location ^~ /downloads/ { return 404; }
     location ~ /\. { return 404; }
     location ~* \.(?:map|env|pem|key|sql|dump|apk)$ { return 404; }
     location /assets/ { try_files $uri =404; }

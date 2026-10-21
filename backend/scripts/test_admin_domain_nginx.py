@@ -26,6 +26,8 @@ class DomainConfiguration(unittest.TestCase):
         cls.base=Path(cls.temp.name);cls.base.chmod(0o755)
         cls.static=cls.base/'static';cls.static.mkdir();(cls.static/'index.html').write_text('SYNTHETIC CONSOLE INDEX')
         (cls.static/'assets').mkdir();(cls.static/'assets/example.js').write_text('// synthetic asset')
+        (cls.static/'downloads/token').mkdir(parents=True)
+        (cls.static/'downloads/token/preview.png').write_text('SYNTHETIC PRIVATE PREVIEW')
         cls.acme=cls.base/'acme/.well-known/acme-challenge';cls.acme.mkdir(parents=True);(cls.acme/'synthetic').write_text('SYNTHETIC ACME')
         cls.upstream=ThreadingHTTPServer(('127.0.0.1',0),Upstream)
         cls.addClassCleanup(cls.upstream.server_close);cls.addClassCleanup(cls.upstream.shutdown)
@@ -87,7 +89,7 @@ class DomainConfiguration(unittest.TestCase):
         self.assertEqual(self.request('/api/platform/login',method='POST')[0],401)
 
     def test_tenant_api_and_sensitive_files_are_not_exposed(self):
-        for path in ('/api','/api/sales','/api/products/test','/.env','/.git/config','/secrets/key.pem','/backup.dump','/download.apk','/assets/missing.js'):
+        for path in ('/api','/api/sales','/api/products/test','/.env','/.git/config','/secrets/key.pem','/backup.dump','/download.apk','/downloads','/downloads/token/preview.png','/assets/missing.js'):
             with self.subTest(path=path):self.assertEqual(self.request(path)[0],404)
         self.assertEqual(self.request('/assets/example.js')[0],200)
 
