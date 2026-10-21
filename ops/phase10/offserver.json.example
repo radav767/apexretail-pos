@@ -1,0 +1,9 @@
+{
+  "host": null,
+  "port": 22,
+  "user": null,
+  "remote_root": null,
+  "identity_file": "/etc/apexretail/backup-upload-identity",
+  "known_hosts_file": "/etc/apexretail/backup-known-hosts",
+  "host_key_fingerprint": null
+}

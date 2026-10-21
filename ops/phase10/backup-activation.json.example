@@ -1,0 +1,10 @@
+{
+  "approved_for_schedule": false,
+  "key_custody_verified": false,
+  "offserver_storage_approved": false,
+  "recipient": null,
+  "remote_config_sha256": null,
+  "verified_package": null,
+  "verified_archive_sha256": null,
+  "expires_at": null
+}

@@ -2,5 +2,6 @@
 # Keep the existing timer and all backup history; do not install this yet.
 [Service]
 ExecStart=
-ExecStart=/usr/bin/python3 /opt/apexretail-backup/backup_proposal.py --run-approved
+ExecStart=/usr/bin/python3 /opt/apexretail-backup/backup_schedule.py --run-approved
 UMask=0077
+TimeoutStartSec=2h

@@ -27,14 +27,23 @@ def main():
     checks.TARGET=target
     with tempfile.TemporaryDirectory(prefix='apexretail-backup-test-key-') as folder:
         home=Path(folder);home.chmod(0o700);base=['/usr/bin/gpg','--homedir',folder,'--batch','--no-tty']
+        public_home=home/'public-only';public_home.mkdir(mode=0o700)
         try:
             subprocess.run(base+['--pinentry-mode','loopback','--passphrase','','--quick-generate-key',
                 'ApexRetail EPHEMERAL RESTORE TEST ONLY','rsa2048','encrypt','1d'],capture_output=True,check=True)
             listing=subprocess.run(base+['--with-colons','--list-keys'],capture_output=True,text=True,check=True).stdout
             recipient=next(line.split(':')[9] for line in listing.splitlines() if line.startswith('fpr:'))
+            try:backup.verify_public_keyring(home,recipient)
+            except RuntimeError:pass
+            else:raise RuntimeError('Scheduler accepted a private recovery key')
+            exported=subprocess.run(base+['--export',recipient],capture_output=True,check=True).stdout
+            public_base=['/usr/bin/gpg','--homedir',str(public_home),'--batch','--no-tty']
+            subprocess.run(public_base+['--import'],input=exported,capture_output=True,check=True)
+            subprocess.run(public_base+['--import-ownertrust'],input=(recipient+':6:\n').encode(),capture_output=True,check=True)
+            backup.verify_public_keyring(public_home,recipient)
             ciphertext=home/'test-only.dump.gpg'
             with dump.open('rb') as source:
-                subprocess.run(backup.encrypt_command(home,recipient,ciphertext),stdin=source,capture_output=True,check=True)
+                subprocess.run(backup.encrypt_command(public_home,recipient,ciphertext),stdin=source,capture_output=True,check=True)
             # Authentication-integrity failure must be detected, not silently accepted.
             damaged=bytearray(ciphertext.read_bytes());damaged[-25]^=1
             broken=home/'damaged-test-only.gpg';broken.write_bytes(damaged)
@@ -66,8 +75,11 @@ def main():
                 'clone':target,'clone_application_access':False,'tables':len(restored['tables']),
                 'rows':sum(t['count'] for t in restored['tables'].values()),'historical_hashes_controls_acl_preserved':True,
                 'revision':restored['revision'],'production_connected_or_modified':False,
+                'public_only_encryption_keyring_passed':True,'scheduler_private_key_refused':True,
                 'routine_encrypted_backup_acceptance':'PENDING owner recipient, escrow, off-host storage and real-key restore'}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
-        finally:subprocess.run(['gpgconf','--homedir',folder,'--kill','gpg-agent'],capture_output=True)
+        finally:
+            for key_home in (folder,str(public_home)):
+                subprocess.run(['gpgconf','--homedir',key_home,'--kill','gpg-agent'],capture_output=True)
 
 if __name__=='__main__':main()
