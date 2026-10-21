@@ -1,0 +1,59 @@
+{
+  "date_utc": "2026-10-21",
+  "runtime_candidate": "932557e3abca1a2fa046b2d04d0d6f8c6d4bcc35",
+  "preparation_base": "f52f2826283a183d3d020d0bca12bb80134f3025",
+  "production_modified": false,
+  "deployment_authorized_by_this_report": false,
+  "production": {
+    "database": "apexretail_pos",
+    "revision": "p5h_runtime_write_permissions",
+    "api_health": true,
+    "pos_http": 200,
+    "backoffice_http": 200,
+    "api_and_health_and_backup_timers_active": true,
+    "historical_tables": 34,
+    "historical_rows": 886,
+    "historical_content_hashes_unchanged": true,
+    "financial_controls_unchanged": true,
+    "open_shifts_preserved": 5,
+    "mandatory_shift_enforcement": false,
+    "preexisting_public_schema_create_preserved": true
+  },
+  "tests": {
+    "backend_passed": 503,
+    "backend_subtests_passed": 214,
+    "backend_failures": 0,
+    "backend_errors": 0,
+    "backend_skips": 0,
+    "backend_warnings": 6,
+    "frontend_commands_passed": 25,
+    "private_nginx_tests_passed": 4,
+    "synthetic_encryption_roundtrip": "PASS",
+    "temporary_runner_permission_and_target_guards": "PASS",
+    "exact_runner_disposable_downgrade_and_forward": "PASS"
+  },
+  "runner": {
+    "installed": false,
+    "bundle": "/tmp/apexretail-phase10-owner-bundle-y30if_fv",
+    "manifest_sha256": "ea3627e276d09bfc80f08f84090c367c9bb94b1d66ad058723dea44f603e5d9a",
+    "runner_sha256": "ba72ec501354e0b0c71648151d9d4a1de606de5e545dd04e4dc2597c3132ff06",
+    "clone": "apexretail_phase10_recovery_20261021t072213",
+    "clone_final_revision": "p10a_platform_management"
+  },
+  "backup": {
+    "sha256": "a69ea01ff53bf196e36dc3491d76fdecc0a47e70c60adde3a5230d101a9403d7",
+    "restores_verified_in_preceding_preparation": 2,
+    "checksum_and_catalog_rechecked": true,
+    "encrypted_at_rest": false,
+    "new_backup_job_installed_or_run": false,
+    "real_encryption_recipient_and_encrypted_restore": "PENDING"
+  },
+  "remaining_approvals": [
+    "Backup ExecStart correction, public key trust/escrow, retention and encrypted off-host recovery",
+    "Protected runner installation and installed-context disposable rehearsal",
+    "MFA key provisioning, encrypted escrow, service drop-in and initial administrator identity",
+    "Admin ACME bootstrap, certificate issuance/renewal, Nginx vhost and graceful reload",
+    "Separate coordinated release, maintenance and database-specific connection freeze with exact ACL restoration"
+  ],
+  "decision": "NO-GO for production implementation pending approvals and operational acceptance"
+}

@@ -1,0 +1,6 @@
+# UNINSTALLED PROPOSAL: requires approved recipient, restore and installation.
+# Keep the existing timer and all backup history; do not install this yet.
+[Service]
+ExecStart=
+ExecStart=/usr/bin/python3 /opt/apexretail-backup/backup_proposal.py --run-approved
+UMask=0077

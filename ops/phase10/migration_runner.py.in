@@ -1,0 +1,116 @@
+#!/usr/bin/python3
+"""PROPOSED protected owner runner. No install/service/freeze/deployment actions."""
+import argparse,fcntl,hashlib,json,os,re,stat,subprocess,sys
+from datetime import datetime,timezone,timedelta
+from pathlib import Path
+
+COMMIT='932557e3abca1a2fa046b2d04d0d6f8c6d4bcc35'
+START='p5h_runtime_write_permissions'
+HEAD='p10a_platform_management'
+EXPECTED_MANIFEST='@@PAYLOAD_SHA256@@'
+ROOT=Path(__file__).resolve().parent
+MAINTENANCE=Path('/run/apexretail-phase10-maintenance.json')
+CONFIRM=f'MIGRATE apexretail_pos {START} TO {HEAD} AT {COMMIT}'
+
+def fail(message):raise RuntimeError(message)
+
+def protected(path,private=False):
+    s=path.lstat()
+    if stat.S_ISLNK(s.st_mode) or s.st_uid!=0 or s.st_mode&0o022:fail('Root ownership and no non-root write access required')
+    if private and s.st_mode&0o077:fail('Private root-only path required')
+
+def payload():
+    if os.geteuid()!=0:fail('Authorized root execution required')
+    protected(ROOT);protected(Path(__file__))
+    manifest=ROOT/'PAYLOAD.sha256';protected(manifest)
+    if hashlib.sha256(manifest.read_bytes()).hexdigest()!=EXPECTED_MANIFEST:fail('Pinned manifest mismatch')
+    expected=set()
+    for line in manifest.read_text().splitlines():
+        digest,name=line.split('  ',1)
+        if name.startswith('/') or '..' in Path(name).parts:fail('Unsafe manifest path')
+        path=ROOT/name;protected(path)
+        for parent in path.parents:
+            if parent==ROOT:break
+            protected(parent)
+        if hashlib.sha256(path.read_bytes()).hexdigest()!=digest:fail('Pinned payload mismatch')
+        expected.add(name)
+    actual={str(p.relative_to(ROOT)) for folder in ('backend','tools') for p in (ROOT/folder).rglob('*') if p.is_file()}
+    if any(p.is_symlink() for folder in ('backend','tools') for p in (ROOT/folder).rglob('*')):fail('Payload symlinks are forbidden')
+    actual.add('owner_worker.py')
+    if actual!=expected:fail('Unexpected/missing payload files')
+
+def owner_snapshot(database,columns=None):
+    command=['/usr/sbin/runuser','-u','postgres','--','/usr/bin/env','-i','PATH=/usr/bin:/bin','PYTHONDONTWRITEBYTECODE=1',
+        '/usr/bin/python3',str(ROOT/'owner_worker.py'),database]
+    result=subprocess.run(command,input=json.dumps(columns),capture_output=True,text=True)
+    if result.returncode:fail('Owner read-only preflight failed; no migration performed')
+    return json.loads(result.stdout)
+
+def clearance():
+    protected(MAINTENANCE,True);data=json.loads(MAINTENANCE.read_text())
+    now=datetime.now(timezone.utc);end=datetime.fromisoformat(data['expires_at'])
+    if end.tzinfo is None or not now<end<=now+timedelta(minutes=15):fail('Maintenance approval is expired or overlong')
+    if data.get('release_commit')!=COMMIT or data.get('database')!='apexretail_pos' or data.get('sales_paused') is not True or data.get('offline_queues_clear') is not True:fail('Explicit operator clearance required')
+    if type(data.get('approved_open_shift_count')) is not int or data['approved_open_shift_count']<0:fail('Explicit open-shift preservation approval required')
+    for unit in ('apexpos.service','apexpos-health.timer','apexpos-health.service'):
+        s=subprocess.run(['/usr/bin/systemctl','show',unit,'--property=LoadState','--property=ActiveState'],capture_output=True,text=True,check=True).stdout
+        if 'LoadState=loaded' not in s or 'ActiveState=inactive' not in s:fail('API/watchdog must already be stopped by approved operator')
+    return data
+
+def preserve(before,after):
+    for key in ('tables','numeric_control_totals','enforcement_enabled','open_shifts','schema_create'):
+        if before[key]!=after[key]:fail('Historical preservation failure: '+key)
+    for table in before['columns']:
+        if before['ownership'][table]['owner']!=after['ownership'][table]['owner']:fail('Historical owner changed')
+
+def main():
+    parser=argparse.ArgumentParser();parser.add_argument('--database',required=True);parser.add_argument('--action',choices=['verify','upgrade','downgrade-disposable'],required=True)
+    parser.add_argument('--confirm-production');parser.add_argument('--baseline-disposable',type=Path)
+    args=parser.parse_args();db=args.database;production=db=='apexretail_pos'
+    if not production and not re.fullmatch(r'apexretail_phase10_[a-z0-9_]+',db):fail('Only approved Phase 10 disposable targets are permitted')
+    if production and args.action!='verify':
+        if args.action!='upgrade' or args.confirm_production!=CONFIRM or args.baseline_disposable:fail('Production downgrade/implicit migration forbidden')
+    elif args.confirm_production:fail('Production confirmation not valid in this mode')
+    if production and args.baseline_disposable:fail('Production cannot adopt a disposable baseline')
+    payload();os.umask(0o077)
+    evidence=ROOT/'evidence';evidence.mkdir(mode=0o700,exist_ok=True);protected(evidence,True)
+    with (evidence/'runner.lock').open('a') as lock:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        approval=clearance() if production and args.action!='verify' else None
+        if approval:
+            path=Path('/run/lock/apexpos-production-deploy.lock')
+            fd=os.open(path,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600);protected(path,True)
+            fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)  # held until process exit
+        baseline=None
+        if args.baseline_disposable:
+            protected(args.baseline_disposable,True);baseline=json.loads(args.baseline_disposable.read_text())
+        before=owner_snapshot(db,baseline['columns'] if baseline else None)
+        if baseline:preserve(baseline,before['snapshot'])
+        if before['snapshot']['enforcement_enabled']:fail('Mandatory shift enforcement must remain OFF')
+        if not production and before['app_connect']:fail('Disposable application access is prohibited')
+        if production and args.action!='verify' and (before['app_connect'] or before['other_sessions'] or before['snapshot']['open_shifts']!=approval['approved_open_shift_count']):fail('Database connection freeze/shift clearance not established')
+        if args.action=='verify':print('VERIFIED pinned source, owner identity, baseline and safety flags; no DDL');return
+        start=START if args.action=='upgrade' else HEAD;target=HEAD if args.action=='upgrade' else START
+        if before['snapshot']['revision']!=start:fail('Unexpected start revision')
+        if args.action=='downgrade-disposable' and baseline is None:fail('Verified original baseline required for disposable downgrade')
+        expected=baseline or before['snapshot']
+        stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+        report=evidence/(stamp+'-'+db+'.json')
+        (evidence/(stamp+'-'+db+'-before.json')).write_text(json.dumps(before,indent=2))
+        command=['/usr/sbin/runuser','-u','postgres','--','/usr/bin/env','-i','PATH=/usr/bin:/bin','PYTHONDONTWRITEBYTECODE=1',
+            f'DATABASE_URL=postgresql+psycopg2://postgres@/{db}?host=/var/run/postgresql','JWT_SECRET=migration-only-not-production',
+            'PGOPTIONS=-c lock_timeout=5000 -c statement_timeout=180000','/usr/bin/python3','-m','alembic','-c','alembic.ini',
+            'upgrade' if args.action=='upgrade' else 'downgrade',target]
+        result=subprocess.run(command,cwd=ROOT/'backend',capture_output=True,text=True)
+        report.write_text(json.dumps({'commit':COMMIT,'database':db,'action':args.action,'exit_code':result.returncode,'stderr':result.stderr},indent=2))
+        if result.returncode:fail('Migration failed; evidence preserved; no destructive recovery attempted')
+        after=owner_snapshot(db,expected['columns'])
+        preserve(expected,after['snapshot'])
+        if after['snapshot']['revision']!=target or after['app_connect']!=before['app_connect']:fail('Final revision/freeze assertion failed')
+        (evidence/(stamp+'-'+db+'-after.json')).write_text(json.dumps(after,indent=2))
+        report.write_text(json.dumps({'commit':COMMIT,'database':db,'action':args.action,'exit_code':0,'target':target,'stderr':result.stderr,'historical_hashes_totals_owners_unchanged':True},indent=2))
+        print('PASS '+args.action+' '+target+'; historical records, ownership, currencies, shifts and privilege baseline preserved')
+
+if __name__=='__main__':
+    try:main()
+    except Exception as e:print('BLOCKED: '+str(e),file=sys.stderr);raise SystemExit(1)
