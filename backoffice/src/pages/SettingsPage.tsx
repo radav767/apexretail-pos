@@ -6,6 +6,7 @@ import CurrencySettingsPanel from "./CurrencySettingsPanel";
 import PrinterManagement from "../../../pos-web/src/printing/PrinterManagement";
 import TipsSettingsPanel from "./TipsSettingsPanel";
 import CommercialBillingPanel from './CommercialBillingPanel';
+import FiscalSettingsPanel from './FiscalSettingsPanel';
 import "./settings.css";
 
 type SettingsSection =
@@ -17,7 +18,8 @@ type SettingsSection =
   | "subscription"
   | "devices"
   | "printers"
-  | "tips";
+  | "tips"
+  | "fiscal";
 
 type AggregateSettings = {
   company_id: string;
@@ -263,6 +265,7 @@ export default function SettingsPage({
 
   const summaryCards = useMemo(
     () => [
+      { id: "fiscal" as const, title: "Fiscalisation", description: "Device setup, draft tax mappings and commissioning status." },
       { id: "tips" as const, title: "Tips & Service Charges", description: "Policies, entitlements, payouts and reports." },
       { id: "printers" as const, title: "Printers & kitchen", description: "Stations, product routing and print queue." },
       {
@@ -743,6 +746,7 @@ export default function SettingsPage({
 
       {section === "printers" && <PrinterManagement companyId={companyId} api={api} canManage />}
       {section === "tips" && <TipsSettingsPanel companyId={companyId} />}
+      {section === "fiscal" && <FiscalSettingsPanel key={companyId} companyId={companyId} />}
 
       {section === "company" ? (
         <section className="settings-card">

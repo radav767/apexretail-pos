@@ -44,3 +44,4 @@ from app.models.business_operations import BusinessProfile, DiningTable, Hospita
 from app.models.tips import TipSettings, TipEntry, TipEntitlement
 from app.models.batch_returns import BatchReturnHold, BatchReturnInspection, BatchInspectionDisposal
 from app.models.commercial import PlatformAdmin, PlatformSession, PlatformAudit, BillingPlan, BillingInvoice, BillingPayment, BillingNotice
+from app.models.fiscal import FiscalConfiguration, FiscalPreparation, FiscalAudit
