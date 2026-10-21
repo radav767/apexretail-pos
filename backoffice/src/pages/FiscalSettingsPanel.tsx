@@ -9,6 +9,8 @@ type Draft = {
 };
 type Status = { version: number; settings: (Draft & { credential_configured: boolean; taxes: unknown[] }) | null; blockers: string[] };
 type RecordRow = { id: string; sale_id: string; state: string; sha256: string };
+type Runtime = { day_status: string; day_no: number | null; pending_operation: string | null;
+  documents: { id: string; sale_id: string; status: string; environment: string; receipt_id: number | null }[] };
 const empty: Draft = { environment: 'test', taxpayer_tin: '', vat_number: null, branch_id: '', register_id: '', device_id: 1, device_serial: '', model_name: '', model_version: '' };
 function message(error: unknown): string {
   const response = (error as { response?: { data?: { detail?: unknown }; status?: number } }).response;
@@ -23,15 +25,18 @@ export default function FiscalSettingsPanel({ companyId }: { companyId: string }
   const [taxes, setTaxes] = useState('[]'), [saleId, setSaleId] = useState('');
   const [notice, setNotice] = useState(''), [busy, setBusy] = useState(false);
   const [audits, setAudits] = useState<{ action: string; created_at: string }[]>([]);
+  const [runtime, setRuntime] = useState<Runtime | null>(null), [preview, setPreview] = useState('');
+  const [paper, setPaper] = useState('80mm');
   useEffect(() => {
     let current = true;
-    setStatus(null); setDraft(empty); setTaxes('[]'); setNotice(''); setRecords([]); setAudits([]); setSaleId('');
+    setStatus(null); setDraft(empty); setTaxes('[]'); setNotice(''); setRecords([]); setAudits([]); setSaleId(''); setRuntime(null); setPreview('');
     void Promise.all([
       api.get<Status>(`/fiscal/${companyId}/configuration`),
       api.get<Option[]>(`/devices/branches/${companyId}`), api.get<Option[]>(`/devices/${companyId}`),
       api.get<RecordRow[]>(`/fiscal/${companyId}/preparations`),
       api.get<{ action: string; created_at: string }[]>(`/fiscal/${companyId}/audit`),
-    ]).then(([config, branch, device, prepared, audit]) => {
+      api.get<Runtime>(`/fiscal/${companyId}/runtime`),
+    ]).then(([config, branch, device, prepared, audit, protocol]) => {
       if (!current) return;
       setStatus(config.data); if (config.data.settings) {
         const value = config.data.settings;
@@ -41,6 +46,7 @@ export default function FiscalSettingsPanel({ companyId }: { companyId: string }
         setTaxes(JSON.stringify(value.taxes, null, 2));
       }
       setBranches(branch.data); setDevices(device.data); setRecords(prepared.data); setAudits(audit.data);
+      setRuntime(protocol.data);
     }).catch(error => { if (current) setNotice(message(error)); });
     return () => { current = false; };
   }, [companyId]);
@@ -64,6 +70,12 @@ export default function FiscalSettingsPanel({ companyId }: { companyId: string }
       setAudits((await api.get(`/fiscal/${companyId}/audit`)).data);
       setNotice('Immutable source review saved. Not a fiscal receipt; nothing transmitted.');
     } catch (error) { setNotice(message(error)); }
+    finally { setBusy(false); }
+  }
+  async function view(documentId: string) {
+    setBusy(true); setNotice('');
+    try { setPreview((await api.get<string>(`/fiscal/${companyId}/documents/${encodeURIComponent(documentId)}/preview`, { params: { paper }, responseType: 'text' })).data); }
+    catch (error) { setNotice(message(error)); }
     finally { setBusy(false); }
   }
   return <section className="settings-card">
@@ -91,6 +103,13 @@ export default function FiscalSettingsPanel({ companyId }: { companyId: string }
       <button className="settings-secondary-button" disabled={busy || !saleId} onClick={() => void prepare()}>Prepare review snapshot</button>
       <p>Manual review only. Does not issue, sign, backdate or send a fiscal invoice.</p>
       {records.length ? records.map(row => <p key={row.id} style={{ overflowWrap: 'anywhere' }}>{row.sale_id} · Review only · SHA-256 {row.sha256}</p>) : <p>No source review snapshots.</p>}
+      <h4>Fiscal protocol · test only</h4>
+      <p>Day {runtime?.day_no ?? '—'} · {runtime?.day_status || 'Not initialised'}{runtime?.pending_operation ? ` · Pending ${runtime.pending_operation}` : ''}</p>
+      <label>Review paper<select value={paper} onChange={event => { setPaper(event.target.value); setPreview(''); }}><option value="80mm">80mm</option><option value="58mm">58mm</option><option value="A4">A4</option></select></label>
+      {runtime?.documents?.map(row => <article key={row.id} style={{ overflowWrap: 'anywhere' }}><p>{row.sale_id} · {row.status} · TEST</p>
+        <button className="settings-secondary-button" disabled={busy} onClick={() => void view(row.id)}>View fiscal review</button></article>)}
+      {preview && <><button className="settings-secondary-button" onClick={() => setPreview('')}>Close review</button>
+        <iframe title="Fiscal receipt review — not a valid fiscal document" sandbox="" srcDoc={preview} style={{ width: '100%', minHeight: 560, border: '1px solid #ddd' }}/></>}
       <h4>Fiscal audit · latest 50 events</h4>{audits.map((row, index) => <p key={`${row.created_at}-${index}`}>{row.created_at} · {row.action}</p>)}
     </>}
   </section>;

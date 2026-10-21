@@ -2,6 +2,7 @@ import { applyDiscounts } from "./discounts";
 import { hasActiveCashierShift, saleShiftError } from "./shiftPolicy";
 import { checkoutPrice, accumulatedWeightedQuantity } from "./business/pricing";
 import TipPaymentPanel from "./business/TipPaymentPanel";
+import FiscalSaleStatus from './components/FiscalSaleStatus';
 import {offlineCartLicenseError} from './offline/licensedCart';
 import { canProcessSales, canAccessOperations } from "./business/access";
 import { flushPrintIntents, scheduleSalePrint } from "./printing/queue";
@@ -4442,6 +4443,7 @@ const [loggedIn, setLoggedIn] = useState(
               )}
             </div>
 
+            <FiscalSaleStatus key={`fiscal-${receipt.id}`} companyId={companyId} saleId={receipt.id}/>
             {cashier?.permissions?.tips_collect && <TipPaymentPanel key={receipt.id} api={api} companyId={companyId} saleId={receipt.id}/>}
             <button style={primaryButton} onClick={printReceipt}>
               Print Receipt

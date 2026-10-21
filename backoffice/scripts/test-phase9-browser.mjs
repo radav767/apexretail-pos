@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { chromium } from '/root/.npm/_npx/420ff84f11983ee5/node_modules/playwright/index.mjs';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const out = fileURLToPath(new URL('../../artifacts/phase9-fiscal', import.meta.url));
+const out = fileURLToPath(new URL('../../artifacts/phase9-fiscal-integration', import.meta.url));
 await mkdir(out, { recursive: true });
 const server = await createServer({ root, server: { host: '127.0.0.1', port: 18933, strictPort: true } });
 await server.listen();
@@ -43,6 +43,22 @@ try {
   await page.getByText('Business owner account required.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Save draft configuration' }).count(), 0);
   checks.push('Denied role cannot render editing controls');
+  await page.goto('http://127.0.0.1:18933/tests/visual-phase9.html?pos=true');
+  await page.getByText(/Acknowledged in test; validity not confirmed/).waitFor();
+  assert.equal(await page.getByText(/TEST ONLY/).count(), 1);
+  checks.push('POS receipt distinguishes test acknowledgement from fiscal validity');
+  await page.goto('http://127.0.0.1:18933/tests/visual-phase9.html?pos=true&uncertain=true');
+  await page.getByText(/Submission requires reconciliation; do not create a replacement/).waitFor();
+  checks.push('POS uncertainty does not suggest creating a replacement sale');
+  for (const paper of ['58mm', '80mm', 'A4']) {
+    await page.goto('about:blank');
+    await page.setViewportSize({ width: 390, height: 1000 });
+    await page.setContent(await readFile(`/tmp/phase9b-preview-${paper}.html`, 'utf8'));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.getByText(/NOT A VALID FISCAL DOCUMENT/).waitFor();
+    await page.screenshot({ path: `${out}/fiscal-receipt-review-${paper}.png`, fullPage: true });
+    checks.push(`${paper} synthetic backend-rendered review fits mobile; not a physical printer test`);
+  }
   assert.deepEqual(errors, []); assert.deepEqual(external, []);
   checks.push('No external requests or uncaught browser errors');
 } catch (error) { process.exitCode = 1; console.error(error); }

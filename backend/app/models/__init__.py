@@ -45,3 +45,4 @@ from app.models.tips import TipSettings, TipEntry, TipEntitlement
 from app.models.batch_returns import BatchReturnHold, BatchReturnInspection, BatchInspectionDisposal
 from app.models.commercial import PlatformAdmin, PlatformSession, PlatformAudit, BillingPlan, BillingInvoice, BillingPayment, BillingNotice
 from app.models.fiscal import FiscalConfiguration, FiscalPreparation, FiscalAudit
+from app.models.fiscal_protocol import FiscalProtocolState, FiscalDocument, FiscalProtocolEvent

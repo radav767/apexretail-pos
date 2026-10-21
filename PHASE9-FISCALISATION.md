@@ -1,5 +1,8 @@
 # Phase 9 — ZIMRA fiscalisation preparation
 
+This is the initial foundation report. See [PHASE9-INTEGRATION.md](PHASE9-INTEGRATION.md)
+for the subsequent protocol implementation, verification and current limitations.
+
 Status: DEVELOPMENT FOUNDATION; NOT COMMISSIONED, NOT CERTIFIED, NOT PRODUCTION READY.
 
 Continues Phase 8 `f13f62a2301f73bd4ceb0c519e7278bb80e61ac9` on branch

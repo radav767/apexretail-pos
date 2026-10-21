@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../..', import.meta.url));
-const out = `${root}/artifacts/phase9-fiscal/frontend`;
+const out = `${root}/artifacts/phase9-fiscal-integration/frontend`;
 await mkdir(out, { recursive: true });
 const results = [];
 for (const app of ['pos-web', 'backoffice']) {

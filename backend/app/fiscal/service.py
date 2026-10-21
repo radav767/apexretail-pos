@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.auth.dependencies import ensure_company_access, require_owner
 from app.models import Branch, Company, Device, Sale, SaleItem
 from app.models.fiscal import FiscalAudit, FiscalConfiguration, FiscalPreparation
+from app.models.fiscal_protocol import FiscalProtocolState, FiscalDocument, FiscalProtocolEvent
 from .schema import FiscalSettings
 
 
@@ -22,9 +23,10 @@ class FiscalService:
         if actor.actor_type != 'user' or actor.user is None or actor.role != 'owner':
             raise HTTPException(403, 'Business owner account required')
         self.db, self.actor, self.company_id = db, actor, company_id
+        self.actor_user_id = actor.user.id
 
     def audit(self, action, details):
-        self.db.add(FiscalAudit(company_id=self.company_id, actor_user_id=self.actor.user.id, action=action, details=details))
+        self.db.add(FiscalAudit(company_id=self.company_id, actor_user_id=self.actor_user_id, action=action, details=details))
 
     async def configuration(self):
         config = await self.db.get(FiscalConfiguration, self.company_id)
@@ -45,6 +47,8 @@ class FiscalService:
         config = await self.db.get(FiscalConfiguration, self.company_id, populate_existing=True)
         if data.expected_version != (config.version if config else 0):
             raise HTTPException(409, 'Fiscal settings changed; reload before saving')
+        if await self.db.get(FiscalProtocolState, self.company_id):
+            raise HTTPException(409, 'Fiscal protocol is initialised; reviewed recommissioning required before configuration changes')
         branch = await self.db.get(Branch, data.branch_id)
         device = await self.db.get(Device, data.register_id)
         if not branch or branch.company_id != self.company_id or not device or device.company_id != self.company_id or device.branch_id != branch.id:
@@ -122,3 +126,24 @@ class FiscalService:
         rows = (await self.db.execute(select(FiscalAudit).where(FiscalAudit.company_id == self.company_id)
                                      .order_by(FiscalAudit.created_at.desc(), FiscalAudit.id).offset(offset).limit(50))).scalars().all()
         return [{'action': row.action, 'details': row.details, 'created_at': row.created_at} for row in rows]
+
+    async def runtime_status(self, offset=0):
+        state = await self.db.get(FiscalProtocolState, self.company_id)
+        rows = (await self.db.execute(select(FiscalDocument, FiscalPreparation.sale_id).join(
+            FiscalPreparation, FiscalPreparation.id == FiscalDocument.preparation_id).where(
+            FiscalDocument.company_id == self.company_id, FiscalPreparation.company_id == self.company_id)
+            .order_by(FiscalDocument.created_at.desc(), FiscalDocument.id).offset(offset).limit(50))).all()
+        documents = []
+        for row, sale_id in rows:
+            events = (await self.db.execute(select(FiscalProtocolEvent).where(FiscalProtocolEvent.company_id == self.company_id,
+                FiscalProtocolEvent.document_id == row.id).order_by(FiscalProtocolEvent.sequence))).scalars().all()
+            ack = next((event for event in reversed(events) if event.kind == 'receipt_acknowledged'), None)
+            documents.append({'id': row.id, 'sale_id': sale_id, 'day_no': row.day_no, 'global_no': row.global_no,
+                              'status': 'acknowledged_test_validation_unknown' if ack else events[-1].kind if events else 'not_submitted',
+                              'receipt_id': ack.details['receiptID'] if ack else None, 'environment': 'test',
+                              'certified': False, 'sha256': row.payload_hash})
+        data = state.data if state else {}
+        return {'environment': 'test' if state else 'uncommissioned', 'submission_enabled': False,
+                'certification': 'not_approved', 'day_status': data.get('status', 'not_initialised'),
+                'day_no': data.get('day_no'), 'pending_operation': (data.get('pending') or {}).get('operation'),
+                'documents': documents}
