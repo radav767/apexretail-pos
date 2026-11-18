@@ -206,7 +206,7 @@ class AuthService:
             await self.repo.rollback_registration()
             raise
 
-        token = create_access_token(str(user.id), user.email)
+        token = create_access_token(str(user.id), user.email, session_version=user.session_version)
 
         return {
             "ok": True,
@@ -243,7 +243,7 @@ class AuthService:
         if not user or not verify_password(data.password, user.password_hash):
             raise HTTPException(401, "Invalid email or password")
 
-        token = create_access_token(str(user.id), user.email)
+        token = create_access_token(str(user.id), user.email, session_version=user.session_version)
 
         return {
             "ok": True,

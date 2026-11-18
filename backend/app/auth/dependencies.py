@@ -187,6 +187,10 @@ async def resolve_auth_actor(
             "User session is no longer valid",
         )
 
+    session_version = payload.get('session_version', 0)
+    if type(session_version) is not int or session_version != user.session_version:
+        raise HTTPException(401, "User session is no longer valid")
+
     return AuthActor(
         actor_type="user",
         company_id=user.company_id,

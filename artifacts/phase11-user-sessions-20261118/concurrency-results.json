@@ -1,0 +1,8 @@
+{
+  "synthetic_only": true,
+  "concurrent_revocations": 2,
+  "final_session_version": 2,
+  "audit_events": 2,
+  "stale_token_denied": true,
+  "fresh_token_accepted": true
+}

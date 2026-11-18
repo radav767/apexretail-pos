@@ -68,15 +68,15 @@ async def main():
                 async with conn.begin_nested():await conn.execute(table.select().limit(0))
                 checks.append({'scope':'runtime_schema','table':table.name,'passed':True})
             except Exception as e:failures.append({'scope':'runtime_schema','table':table.name,'error_type':type(e).__name__})
-        owners=(await conn.execute(select(User.id,User.email,User.company_id).where(User.role=='owner',User.active==True,User.deleted==False))).all()
+        owners=(await conn.execute(select(User.id,User.email,User.company_id,User.session_version).where(User.role=='owner',User.active==True,User.deleted==False))).all()
         if not owners:raise RuntimeError('Compatibility checks require owner fixtures')
         async def override():
             async with AsyncSession(bind=conn,expire_on_commit=False,join_transaction_mode='create_savepoint') as session:yield session
         app.dependency_overrides[get_db]=override
         try:
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app,raise_app_exceptions=False),base_url='http://isolated-clone.test') as client:
-                for uid,email,company in owners:
-                    token=create_access_token(str(uid),email)
+                for uid,email,company,session_version in owners:
+                    token=create_access_token(str(uid),email,session_version=session_version)
                     paths=[('/api/products/{company}',200),('/api/products/variants/{company}',200),('/api/inventory/overview/{company}',200),
                            ('/api/sales/{company}',200),('/api/employees/{company}',200),('/api/shifts/company/{company}',200),
                            ('/api/currencies/{company}',200),('/api/credit/{company}/receivables',200),('/api/credit/{company}/settlements',200),

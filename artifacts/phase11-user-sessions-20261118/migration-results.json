@@ -1,0 +1,25 @@
+{
+  "synthetic_only": true,
+  "before": {
+    "users": 2,
+    "sha256": "26d871ccac60fd90f4f8a8da2f36163f1bbe119af4fe18f775fbbdcb0473a8e4",
+    "head": "p10a_platform_management"
+  },
+  "upgraded": {
+    "users": 2,
+    "sha256": "26d871ccac60fd90f4f8a8da2f36163f1bbe119af4fe18f775fbbdcb0473a8e4",
+    "head": "p11a_user_session_revocation"
+  },
+  "zero_version_downgrade": {
+    "users": 2,
+    "sha256": "26d871ccac60fd90f4f8a8da2f36163f1bbe119af4fe18f775fbbdcb0473a8e4",
+    "head": "p10a_platform_management"
+  },
+  "forward_recovery": {
+    "users": 2,
+    "sha256": "26d871ccac60fd90f4f8a8da2f36163f1bbe119af4fe18f775fbbdcb0473a8e4",
+    "head": "p11a_user_session_revocation"
+  },
+  "fresh_database_head": "p11a_user_session_revocation",
+  "user_hashes_preserved": true
+}

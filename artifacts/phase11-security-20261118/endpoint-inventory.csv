@@ -1,8 +1,9 @@
 method,path,source,business_auth,billable_dependency,dependencies,review
-POST,/api/auth/login,backend/app/auth/router.py:25,not_visible,,app.db.session.get_db,service_and_replay_review_required
-POST,/api/auth/register,backend/app/auth/router.py:18,not_visible,,app.db.session.get_db,service_and_replay_review_required
-GET,/api/auth/registration-currencies,backend/app/auth/router.py:13,not_visible,,,service_and_replay_review_required
-GET,/api/auth/test,backend/app/auth/router.py:32,not_visible,,,service_and_replay_review_required
+POST,/api/auth/login,backend/app/auth/router.py:27,not_visible,,app.db.session.get_db,service_and_replay_review_required
+POST,/api/auth/logout-all,backend/app/auth/router.py:34,required,,app.auth.dependencies.get_auth_actor;app.db.session.get_db;fastapi.security.http.HTTPBearer,service_and_replay_review_required
+POST,/api/auth/register,backend/app/auth/router.py:20,not_visible,,app.db.session.get_db,service_and_replay_review_required
+GET,/api/auth/registration-currencies,backend/app/auth/router.py:15,not_visible,,,service_and_replay_review_required
+GET,/api/auth/test,backend/app/auth/router.py:40,not_visible,,,service_and_replay_review_required
 POST,/api/credit/settlements,backend/app/credit/router.py:36,required,app.auth.dependencies.require_billable_body_company,app.auth.dependencies.get_auth_actor;app.auth.dependencies.require_billable_body_company;app.auth.dependencies.require_body_permission.<locals>.dependency;app.auth.dependencies.require_permission.<locals>.dependency[credit_settlements];app.credit.router.get_service;app.db.session.get_db;fastapi.security.http.HTTPBearer,service_and_replay_review_required
 GET,/api/credit/{company_id}/receivables,backend/app/credit/router.py:22,required,,app.auth.dependencies.get_auth_actor;app.auth.dependencies.require_path_permission.<locals>.dependency;app.auth.dependencies.require_permission.<locals>.dependency[customers_view];app.credit.router.get_service;app.db.session.get_db;fastapi.security.http.HTTPBearer,service_and_replay_review_required
 GET,/api/credit/{company_id}/receivables/{receivable_id},backend/app/credit/router.py:31,required,,app.auth.dependencies.get_auth_actor;app.auth.dependencies.require_path_permission.<locals>.dependency;app.auth.dependencies.require_permission.<locals>.dependency[customers_view];app.credit.router.get_service;app.db.session.get_db;fastapi.security.http.HTTPBearer,service_and_replay_review_required

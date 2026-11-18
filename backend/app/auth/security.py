@@ -107,12 +107,17 @@ def _create_token(payload: dict, expires_in_minutes: int) -> str:
 def create_access_token(
     user_id: str,
     email: str,
+    *,
+    session_version: int = 0,
 ) -> str:
+    if type(session_version) is not int or session_version < 0:
+        raise ValueError('Invalid user session version')
     return _create_token(
         {
             "sub": user_id,
             "email": email,
             "token_type": "user",
+            "session_version": session_version,
         },
         ACCESS_TOKEN_MINUTES,
     )

@@ -64,7 +64,7 @@ def main():
     if actual != expected or len(actual) != len(rows):
         raise RuntimeError('Registered route inventory does not match OpenAPI operations')
     rows.sort(key=lambda row: (row['path'], row['method']))
-    writer = csv.DictWriter(sys.stdout, fieldnames=list(rows[0]))
+    writer = csv.DictWriter(sys.stdout, fieldnames=list(rows[0]), lineterminator='\n')
     writer.writeheader()
     writer.writerows(rows)
     mutating = [r for r in rows if r['method'] not in {'GET', 'HEAD', 'OPTIONS'}]
