@@ -1,0 +1,9 @@
+{
+  "src/App.tsx": "62c108d53f9f6c740cab35fba12d3e04281a6b7a74b9b8dc4bdffe6c2c9ac090",
+  "src/api/client.ts": "01d0d94ebce06584f34682a36d371374a15bfc9f873fe875ddc784952bd8c06d",
+  "src/device.ts": "364fc7f0bc9150d6a83d013039267601f5d4d6b72dd3955d547bf415856766e3",
+  "src/api/authLifecycle.ts": "ff1923d0ea80f9e86287e11ed1dfd1acb35e027f8e70378107d0c872edc1ffe7",
+  "tests/authLifecycle.test.ts": "84a8bb83a634d41d8b375521f37b6b7e628aef39f0c29be2e4d39259352a5e9a",
+  "scripts/run-auth-lifecycle-tests.mjs": "267c9561b44b5f9b0c8deb720d933e93c0e84e0d79150f9c9e7d34966093b26e",
+  "scripts/reproduce-baseline-startup-races.mjs": "0369e62d63fb2d8a2456d32bd2831983dd080d45931a5e4ce4927341618947c8"
+}

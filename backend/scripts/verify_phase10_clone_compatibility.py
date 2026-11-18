@@ -7,14 +7,26 @@ import asyncio,json,os,sys
 from pathlib import Path
 from sqlalchemy import select,text
 from sqlalchemy.ext.asyncio import create_async_engine,AsyncSession
+from sqlalchemy.engine import make_url
 
 DATABASE='apexretail_phase10_fresh_20261021t072213'
-URL=f'postgresql+asyncpg://postgres@/{DATABASE}?host=/var/run/postgresql'
-os.environ['DATABASE_URL']=URL
-os.environ['JWT_SECRET']='isolated-phase10-compatibility-not-production'
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
+def compatibility_url(value):
+    """Require an explicit clone destination before importing application config."""
+    if not value:
+        raise RuntimeError('PHASE10_COMPATIBILITY_DATABASE_URL is required')
+    url=make_url(value)
+    if url.drivername!='postgresql+asyncpg' or url.database!=DATABASE:
+        raise RuntimeError('Only the named disposable compatibility clone is allowed')
+    if url.host or not str(url.query.get('host','')).startswith('/'):
+        raise RuntimeError('An explicit local PostgreSQL socket is required')
+    return value
+
 async def main():
+    URL=compatibility_url(os.environ.get('PHASE10_COMPATIBILITY_DATABASE_URL'))
+    os.environ['DATABASE_URL']=URL
+    os.environ['JWT_SECRET']='isolated-phase10-compatibility-not-production'
     import httpx
     from app.main import app
     from app.db.session import get_db
@@ -45,6 +57,8 @@ async def main():
     async with engine.connect() as conn:
         outer=await conn.begin()
         await conn.execute(text('SET TRANSACTION READ ONLY'))
+        if (await conn.execute(text('SHOW transaction_read_only'))).scalar_one()!='on':
+            raise RuntimeError('Read-only transaction was not established')
         identity=(await conn.execute(text('SELECT current_database()'))).scalar_one()
         if identity!=DATABASE:raise RuntimeError('Wrong database')
         if (await conn.execute(text("SELECT has_database_privilege('apex_user',current_database(),'CONNECT')"))).scalar_one():raise RuntimeError('Clone must remain application-inaccessible')
@@ -55,6 +69,7 @@ async def main():
                 checks.append({'scope':'runtime_schema','table':table.name,'passed':True})
             except Exception as e:failures.append({'scope':'runtime_schema','table':table.name,'error_type':type(e).__name__})
         owners=(await conn.execute(select(User.id,User.email,User.company_id).where(User.role=='owner',User.active==True,User.deleted==False))).all()
+        if not owners:raise RuntimeError('Compatibility checks require owner fixtures')
         async def override():
             async with AsyncSession(bind=conn,expire_on_commit=False,join_transaction_mode='create_savepoint') as session:yield session
         app.dependency_overrides[get_db]=override

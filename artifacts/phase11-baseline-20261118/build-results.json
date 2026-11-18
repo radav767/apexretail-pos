@@ -1,0 +1,54 @@
+{
+  "candidate": "46252e4497829213ff6e1e0e4a763e641f064b57",
+  "node": "v20.20.2",
+  "npm": "10.8.2",
+  "copy": "/tmp/apex-phase11-build-xijhpj7t",
+  "keyring": "ephemeral synthetic public key only; no release artifact",
+  "first_build": {
+    "pos-web": {
+      "assets/cameraDetector-bCgQuFPp.js": "141252b406882d7fc54ab4185c65898fa950cda93ec61e3fa3dce329dca10aa0",
+      "assets/index-BAFAqs7K.js": "d6d8b6045b9f1db07a9bd6aa40d8ae65716692fef974b661c6909422ae6976d0",
+      "assets/index-DAF0LqVv.css": "68866c900cff3b791b939f4b1616bf34c7b3c99833b4036985f2586741e6ec61",
+      "assets/ponyfill-mSFP3S02.js": "7428447aca80b0446eeed8a51123614e66ed90176f3a760fd92d042c9830bbcf",
+      "assets/web-CiDeKwsl.js": "990d5e013b05308cb663b763f7755602ef9ed8e1fa14e38c18a426b08f990ba2",
+      "assets/web-Kl_gZVN3.js": "3e317de3d8d858646e90cbaef94d6edc8a5be21c05a1c868f1be60c541d2f29a",
+      "assets/zxing_reader-BxB2YfIY.wasm": "2ebda08a93eea3efcd8399cda6b276e6a0b1de4fec60b4d8988a047de4c6d1ba",
+      "favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
+      "icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
+      "index.html": "fe084c7a5c1d741997066895401d50db5999c256dfdde6221a6de543db31f4f1"
+    },
+    "backoffice": {
+      "assets/index-DJcTnW_u.js": "ebbf97f588a7ac3c3bcbc1ca7d0dfc8a6ad1e8e4c0b37ca23ec7cf4cd00c73bd",
+      "assets/index-DMYA4O_D.css": "bdcaf1df99377d607b41bc19a2f250c353cd7333a18f7e2f22cec526c5d6900d",
+      "favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
+      "icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
+      "index.html": "58463c0fd9a6325a6667114f8522f0e26af9f0b998269c1f1442c89a64c90d1d"
+    }
+  },
+  "second_build": {
+    "pos-web": {
+      "assets/cameraDetector-bCgQuFPp.js": "141252b406882d7fc54ab4185c65898fa950cda93ec61e3fa3dce329dca10aa0",
+      "assets/index-BAFAqs7K.js": "d6d8b6045b9f1db07a9bd6aa40d8ae65716692fef974b661c6909422ae6976d0",
+      "assets/index-DAF0LqVv.css": "68866c900cff3b791b939f4b1616bf34c7b3c99833b4036985f2586741e6ec61",
+      "assets/ponyfill-mSFP3S02.js": "7428447aca80b0446eeed8a51123614e66ed90176f3a760fd92d042c9830bbcf",
+      "assets/web-CiDeKwsl.js": "990d5e013b05308cb663b763f7755602ef9ed8e1fa14e38c18a426b08f990ba2",
+      "assets/web-Kl_gZVN3.js": "3e317de3d8d858646e90cbaef94d6edc8a5be21c05a1c868f1be60c541d2f29a",
+      "assets/zxing_reader-BxB2YfIY.wasm": "2ebda08a93eea3efcd8399cda6b276e6a0b1de4fec60b4d8988a047de4c6d1ba",
+      "favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
+      "icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
+      "index.html": "fe084c7a5c1d741997066895401d50db5999c256dfdde6221a6de543db31f4f1"
+    },
+    "backoffice": {
+      "assets/index-DJcTnW_u.js": "ebbf97f588a7ac3c3bcbc1ca7d0dfc8a6ad1e8e4c0b37ca23ec7cf4cd00c73bd",
+      "assets/index-DMYA4O_D.css": "bdcaf1df99377d607b41bc19a2f250c353cd7333a18f7e2f22cec526c5d6900d",
+      "favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
+      "icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
+      "index.html": "58463c0fd9a6325a6667114f8522f0e26af9f0b998269c1f1442c89a64c90d1d"
+    }
+  },
+  "lock_sha256": {
+    "pos-web": "e0812e285faf369728382f1a20e8b7dd49d16f402f29966b27563c9ff3bc5319",
+    "backoffice": "413afcf21c8d0103bdb62c8f616c9db19b8674480d3be7fadfe8e8aaa4d24712"
+  },
+  "repeat_build_hashes_equal": true
+}

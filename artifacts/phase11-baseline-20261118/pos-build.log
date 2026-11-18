@@ -1,0 +1,23 @@
+
+> pos-web@0.0.0 build
+> node scripts/build-production.mjs
+
+vite v8.1.6 building client environment for production...
+[2Ktransforming...✓ 524 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.45 kB │ gzip:   0.29 kB
+dist/assets/zxing_reader-BxB2YfIY.wasm  1,093.28 kB │ gzip: 463.82 kB
+dist/assets/index-DAF0LqVv.css             85.25 kB │ gzip:  15.89 kB
+dist/assets/cameraDetector-bCgQuFPp.js      0.42 kB │ gzip:   0.29 kB
+dist/assets/web-CiDeKwsl.js                 1.12 kB │ gzip:   0.54 kB
+dist/assets/web-Kl_gZVN3.js                 9.46 kB │ gzip:   1.31 kB
+dist/assets/ponyfill-mSFP3S02.js           43.27 kB │ gzip:  14.87 kB
+dist/assets/index-BAFAqs7K.js             667.28 kB │ gzip: 193.26 kB
+
+✓ built in 726ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

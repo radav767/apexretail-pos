@@ -1,0 +1,628 @@
+{
+  "database": "apexretail_phase10_fresh_20261021t072213",
+  "production_accessed": false,
+  "business_writes": false,
+  "owners_checked": 2,
+  "contracts": {
+    "checked": false
+  },
+  "checks": [
+    {
+      "scope": "runtime_schema",
+      "table": "billing_plans",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "categories",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "companies",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "device_tombstones",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "platform_admins",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "platform_settings",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "products",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "subscription_webhook_events",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "billing_invoices",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "billing_notices",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "business_profiles",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "company_subscriptions",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "customers",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "device_activation_attempts",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "employee_roles",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "expense_categories",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "fiscal_configurations",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "fiscal_protocol_states",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "platform_audit",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "platform_challenges",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "platform_sessions",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "product_components",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "product_creation_requests",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "product_media",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "product_price_levels",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "product_variants",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "shops",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "tip_settings",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "users",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "billing_payments",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "branches",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "company_currencies",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "company_subscription_history",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "fiscal_audit",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "subscription_checkout_sessions",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "company_settings",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "currency_exchange_rates",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "devices",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "dining_tables",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "employees",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "hospitality_rooms",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "inventory_balances",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "inventory_movements",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "product_batches",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "variant_inventory_balances",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "audit_events",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "batch_allocations",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "batch_return_holds",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "batch_stock_operations",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "employee_device_access",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "employee_shop_access",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "guest_accounts",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "manager_authorizations",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "order_sync_receipts",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "pos_sessions",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "printer_stations",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "batch_return_inspections",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "cashier_shifts",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "printer_routes",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "batch_inspection_disposals",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "cashier_shift_cash_movements",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "cashier_shift_currency_snapshots",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "expenses",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "sales",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "commerce_orders",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "credit_receivables",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "fiscal_preparations",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "offline_sale_resolutions",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "sale_items",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "tip_entries",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "commerce_order_items",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "credit_settlements",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "fiscal_documents",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "print_jobs",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "sale_item_components",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "tip_entitlements",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "fiscal_protocol_events",
+      "passed": true
+    },
+    {
+      "scope": "runtime_schema",
+      "table": "kitchen_tickets",
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/products/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/products/variants/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/inventory/overview/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/sales/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/employees/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/shifts/company/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/currencies/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/credit/{company}/receivables",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/credit/{company}/settlements",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/expenses/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/subscriptions/access/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/reports/financial-summary/{company}?date_from=2026-01-01&date_to=2026-12-31",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/platform/dashboard",
+      "status": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/platform/administrators",
+      "status": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "scope": "cross_business_denial",
+      "status": 403,
+      "expected": 403,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/products/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/products/variants/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/inventory/overview/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/sales/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/employees/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/shifts/company/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/currencies/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/credit/{company}/receivables",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/credit/{company}/settlements",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/expenses/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/subscriptions/access/{company}",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/reports/financial-summary/{company}?date_from=2026-01-01&date_to=2026-12-31",
+      "status": 200,
+      "expected": 200,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/platform/dashboard",
+      "status": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "scope": "owner_readonly_api",
+      "endpoint": "/api/platform/administrators",
+      "status": 401,
+      "expected": 401,
+      "passed": true
+    },
+    {
+      "scope": "cross_business_denial",
+      "status": 403,
+      "expected": 403,
+      "passed": true
+    },
+    {
+      "scope": "anonymous_api",
+      "endpoint": "/api/platform/dashboard",
+      "status": 401,
+      "passed": true
+    },
+    {
+      "scope": "anonymous_api",
+      "endpoint": "/api/platform/devices",
+      "status": 401,
+      "passed": true
+    },
+    {
+      "scope": "anonymous_api",
+      "endpoint": "/api/platform/settings",
+      "status": 401,
+      "passed": true
+    }
+  ],
+  "failures": []
+}
