@@ -21,6 +21,14 @@ from app.models.company_settings import CompanySetting
 
 
 class SalesRepository:
+    async def begin_command(self, data, actor):
+        from app.sales.commands import begin
+        return await begin(self.db, data, actor)
+
+    def record_command(self, data, proof, sale, device):
+        from app.sales.commands import record
+        record(self.db, data, proof, sale, device)
+
     def __init__(self, db: AsyncSession, *, commit_on_save: bool = True):
         self.db = db
         self.commit_on_save = commit_on_save

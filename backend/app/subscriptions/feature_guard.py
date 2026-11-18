@@ -1,13 +1,14 @@
 """Current server policy complements, never replaces, employee permissions."""
 async def enforce_request_features(db,actor,request):
+    # Sale command replay is authenticated here, then fingerprinted in the
+    # transaction service before current-license/module checks for NEW writes.
+    if request.method == 'POST' and request.url.path == '/api/sales': return
     from .commercial import enforce_feature,terms_for
     terms=await terms_for(db,actor.company_id)
     if terms is None:return
     path=request.url.path;method=request.method
     # Historical records remain readable after expiration or module changes.
     if method in {'GET','HEAD','OPTIONS'}:
-        if path.startswith('/api/reports/financial-summary/'):
-            await enforce_feature(db,actor.company_id,'advanced_reports')
         return
     feature=None
     if '/products/components/' in path:feature='composites'

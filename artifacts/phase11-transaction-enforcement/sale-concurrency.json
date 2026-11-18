@@ -1,0 +1,23 @@
+{
+  "synthetic_only": true,
+  "same_command_statuses": [
+    200,
+    200,
+    200
+  ],
+  "same_command_one_sale": true,
+  "conflicting_payload_statuses": [
+    200,
+    409
+  ],
+  "credit_retry_one_receivable": true,
+  "counts": {
+    "sales": 3,
+    "movements": 3,
+    "receivables": 1
+  },
+  "final_stock": "94.000",
+  "outstanding_credit": "24.00",
+  "committed_replay_after_suspension": true,
+  "new_write_after_suspension_denied": true
+}

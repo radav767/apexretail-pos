@@ -57,6 +57,7 @@ class SalesService:
         )
         if sale is None:
             raise HTTPException(404, "Sale transaction was not found")
+        enforce_actor_branch(actor, sale.branch_id)
         return sale
 
     @staticmethod
@@ -104,6 +105,9 @@ class SalesService:
         resolved_device=None,
         resolution_record=None,
     ):
+        data = data.model_copy(deep=True)
+        command_data = data.model_copy(deep=True)
+        command_proof = None
         device = resolved_device
         discount_approved = False
         requires_discount_approval = False
@@ -141,6 +145,13 @@ class SalesService:
         if requires_discount_approval and (actor is None or actor.employee is None):
             raise HTTPException(403, "Manager approval required")
 
+        if hasattr(self.repo, 'begin_command'):
+            if actor is not None and actor.actor_type == 'employee':
+                command_data.employee_id = actor.employee.id if actor.employee else None
+            committed, command_proof = await self.repo.begin_command(command_data, actor)
+            if committed is not None:
+                return committed
+
         # An Android device may submit the same queued sale more than
         # once when connectivity returns. Return the existing sale
         # instead of deducting stock again.
@@ -167,6 +178,8 @@ class SalesService:
             data.company_id,
             data.branch_id,
         )
+        if actor is not None:
+            enforce_actor_branch(actor, branch.id)
         shift = resolved_shift
         if shift is None:
             shift = await resolve_shift_for_write(
@@ -207,7 +220,7 @@ class SalesService:
                 ),
             )
 
-            if device is None:
+            if device is None or not getattr(device, 'active', True):
                 raise terminal_authority_error(
                     403,
                     TERMINAL_IDENTITY_REVOKED,
@@ -251,7 +264,7 @@ class SalesService:
             if data.client_sale_id
             else None
         )
-        if existing_client_sale:
+        if existing_client_sale and command_proof is None:
             return existing_client_sale
 
         # Consume approval only after the idempotency lookup. If the first
@@ -276,11 +289,9 @@ class SalesService:
 
         # Load the tax configuration used for this transaction.
 
-        settings = await BusinessSettingsService(self.repo.db).get(
-
-            data.company_id
-
-        )
+        settings_service = BusinessSettingsService(self.repo.db)
+        settings = (await settings_service.get(data.company_id, commit=False) if command_proof is not None
+                    else await settings_service.get(data.company_id))
 
         tax_name = str(
 
@@ -919,6 +930,8 @@ class SalesService:
                 action="credit_sale_created",
                 details={"sale_id": str(sale.id), "customer_id": str(customer.id), "receivable_id": str(receivable_id), "amount": str(total)},
             )
+            if command_proof is not None:
+                self.repo.record_command(command_data, command_proof, sale, device)
             if sale_item_components:
                 return await self.repo.save_credit_sale(
                     sale, sale_items, products, balances, inventory_movements,
@@ -929,6 +942,8 @@ class SalesService:
                 receivable, audit,
             )
 
+        if command_proof is not None:
+            self.repo.record_command(command_data, command_proof, sale, device)
         if sale_item_components:
             return await self.repo.save_sale(
                 sale, sale_items, products, balances, inventory_movements,

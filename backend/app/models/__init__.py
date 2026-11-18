@@ -49,3 +49,4 @@ from app.models.fiscal_protocol import FiscalProtocolState, FiscalDocument, Fisc
 from app.models.business_auth import BusinessSession, BusinessRefreshCredential
 from app.models.business_auth import PasswordResetGrant, BusinessEmailOutbox, BusinessAuthThrottle
 from app.models.business_auth import BackofficeHandoff
+from app.models.sale_command import SaleCommandReceipt

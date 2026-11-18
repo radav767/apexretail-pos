@@ -41,9 +41,6 @@ async def create_sale(
     actor: AuthActor | None = Depends(
         get_auth_actor
     ),
-    _entitlement: None = Depends(
-        require_billable_body_company
-    ),
 ):
     return await service.create_sale(data, actor=actor)
 

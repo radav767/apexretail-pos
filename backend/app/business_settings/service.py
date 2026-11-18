@@ -42,6 +42,7 @@ class BusinessSettingsService:
     async def get_or_create_setting(
         self,
         company_id: UUID,
+        *, commit: bool = True,
     ) -> CompanySetting:
         result = await self.db.execute(
             select(CompanySetting).where(
@@ -54,7 +55,8 @@ class BusinessSettingsService:
         if setting is None:
             setting = CompanySetting(company_id=company_id)
             self.db.add(setting)
-            await self.db.commit()
+            if commit: await self.db.commit()
+            else: await self.db.flush()
             await self.db.refresh(setting)
 
         return setting
@@ -153,9 +155,9 @@ class BusinessSettingsService:
             "active": shop.active,
         }
 
-    async def get(self, company_id: UUID) -> dict:
+    async def get(self, company_id: UUID, *, commit: bool = True) -> dict:
         company = await self.get_company(company_id)
-        setting = await self.get_or_create_setting(company_id)
+        setting = await self.get_or_create_setting(company_id, commit=commit)
         return self.serialize(company, setting)
 
     async def get_company_profile(self, company_id: UUID) -> dict:
