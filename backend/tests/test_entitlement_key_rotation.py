@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from jose import jwt
+import jwt
 
 from app.auth.security import (
     ENTITLEMENT_AUDIENCE,
@@ -146,6 +146,19 @@ class EntitlementKeyRotationTest(unittest.TestCase):
             )
         self.assertEqual(jwt.get_unverified_header(token)["kid"], "active-2026")
         self.assertEqual(claims["company_id"], COMPANY_ID)
+
+    def test_original_jose_rsa_token_verifies_with_replacement(self):
+        fixture=json.loads((Path(__file__).parent/'fixtures/legacy-jose-tokens.json').read_text())
+        settings=self.settings()
+        settings.entitlement_public_keyring_file=None
+        settings.entitlement_public_key=fixture['public_key']
+        settings.entitlement_legacy_key_id='synthetic-legacy'
+        settings.entitlement_legacy_accept_until='2026-10-23T00:00:00+00:00'
+        with patch('app.auth.security.get_settings',return_value=settings):
+            claims=decode_entitlement_token(fixture['tokens']['entitlement'],
+                       expected_company_id='synthetic-company',
+                       now=datetime.fromtimestamp(fixture['claims']['entitlement']['iat'],UTC))
+        self.assertEqual(claims,fixture['claims']['entitlement'])
 
     def test_valid_old_kid_and_bounded_no_kid_legacy(self):
         old_token = self.encode(self.old_private, kid="legacy-2026")

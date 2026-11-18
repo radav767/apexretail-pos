@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from jose import JWTError
+from jwt import PyJWTError as JWTError
 from sqlalchemy import select
 
 from app.auth.security import decode_offline_shift_token

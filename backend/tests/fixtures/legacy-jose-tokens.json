@@ -1,0 +1,49 @@
+{
+  "producer": "python-jose 3.5.0; SYNTHETIC ONLY",
+  "secret": "synthetic-cross-library-secret-64-characters-for-tests-only-123456",
+  "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmraqj99HvMMJ/vkLEXY9\nTBHFRudBiVU5w8GCJKczfTnWmbMje1hB4DnDk13BWw+D6rpkMXPjWQ4krPjJQJJS\ngJY2f8VcV5s//czvwGVK5E7GVJi7wUvBRmaDCrH6XWlB6Yf4QivdEuPCoAieEAJ9\nNBH9iHOJTNegTlDY5dfq/fLphsFgmjkmQneR+x/NaToJvBsziR8biCsJdJMq6v9a\nLeLuPtTL2zu9M57dSYv9+8OzJAJXjm4aYXInxtcDFWmf3l8zgTfOgMg82c2uoTba\nO9MNlUwitPsEBfO642HgLrtQD4WIq1PoIOAE6QyRPP4q4D4NVYg+MJsKftSA1kyh\ncwIDAQAB\n-----END PUBLIC KEY-----\n",
+  "claims": {
+    "access": {
+      "sub": "synthetic-user",
+      "exp": 4102444800,
+      "email": "fixture@example.invalid",
+      "token_type": "user"
+    },
+    "employee": {
+      "sub": "synthetic-user",
+      "exp": 4102444800,
+      "company_id": "synthetic-company",
+      "role": "cashier",
+      "token_type": "employee"
+    },
+    "offline": {
+      "sub": "synthetic-user",
+      "exp": 4102444800,
+      "token_type": "offline_shift",
+      "shift_id": "synthetic-shift",
+      "branch_id": "synthetic-branch",
+      "company_id": "synthetic-company",
+      "device_id": "synthetic-device",
+      "employee_id": "synthetic-cashier",
+      "opened_at": "2026-10-21T00:00:00Z"
+    },
+    "entitlement": {
+      "sub": "synthetic-company",
+      "company_id": "synthetic-company",
+      "status": "active",
+      "plan": "monthly",
+      "token_type": "entitlement",
+      "iat": 1792540800,
+      "exp": 1792544400,
+      "offline_grace_expires_at": "2026-10-22T00:00:00+00:00",
+      "iss": "apexpos",
+      "aud": "apexpos-pos-entitlement"
+    }
+  },
+  "tokens": {
+    "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzeW50aGV0aWMtdXNlciIsImV4cCI6NDEwMjQ0NDgwMCwiZW1haWwiOiJmaXh0dXJlQGV4YW1wbGUuaW52YWxpZCIsInRva2VuX3R5cGUiOiJ1c2VyIn0.k-_engczHpskuy022V1KcaizXZpsvmfd-tlaU1KoA8Q",
+    "employee": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzeW50aGV0aWMtdXNlciIsImV4cCI6NDEwMjQ0NDgwMCwiY29tcGFueV9pZCI6InN5bnRoZXRpYy1jb21wYW55Iiwicm9sZSI6ImNhc2hpZXIiLCJ0b2tlbl90eXBlIjoiZW1wbG95ZWUifQ.ag-aK_7lsagRbfF6Z8tegmGQrZ15k7A8gHw3qQo2qSA",
+    "offline": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzeW50aGV0aWMtdXNlciIsImV4cCI6NDEwMjQ0NDgwMCwidG9rZW5fdHlwZSI6Im9mZmxpbmVfc2hpZnQiLCJzaGlmdF9pZCI6InN5bnRoZXRpYy1zaGlmdCIsImJyYW5jaF9pZCI6InN5bnRoZXRpYy1icmFuY2giLCJjb21wYW55X2lkIjoic3ludGhldGljLWNvbXBhbnkiLCJkZXZpY2VfaWQiOiJzeW50aGV0aWMtZGV2aWNlIiwiZW1wbG95ZWVfaWQiOiJzeW50aGV0aWMtY2FzaGllciIsIm9wZW5lZF9hdCI6IjIwMjYtMTAtMjFUMDA6MDA6MDBaIn0.sllCU_KLNb1xVH5EEoMCtdpQMq5m_hqGJB68kY60ma0",
+    "entitlement": "eyJhbGciOiJSUzI1NiIsImtpZCI6InN5bnRoZXRpYy1sZWdhY3kiLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJzeW50aGV0aWMtY29tcGFueSIsImNvbXBhbnlfaWQiOiJzeW50aGV0aWMtY29tcGFueSIsInN0YXR1cyI6ImFjdGl2ZSIsInBsYW4iOiJtb250aGx5IiwidG9rZW5fdHlwZSI6ImVudGl0bGVtZW50IiwiaWF0IjoxNzkyNTQwODAwLCJleHAiOjE3OTI1NDQ0MDAsIm9mZmxpbmVfZ3JhY2VfZXhwaXJlc19hdCI6IjIwMjYtMTAtMjJUMDA6MDA6MDArMDA6MDAiLCJpc3MiOiJhcGV4cG9zIiwiYXVkIjoiYXBleHBvcy1wb3MtZW50aXRsZW1lbnQifQ.ZGUxaPg2nmGZEITJGgSQ3eD3byGXjNPpzkPsmPbOnrRlLnBxmq7gbyi_0cKWd4x3i7qyQGy3qoBPGjuB37V9foSqF9403h1JLBfwQDuLfSypkYXRVDnE4Slojcx4EW2BVs8bmQx44DUbIqApdxVGeDWXeXvF9gF_OMmQq-d5HvnfHOokoq0oAS8lZ0LMbMd6TJPAZ1r74Dec6gv22WeIN7AOTqZAvxYsw4Gaf_2bwHh6tVrNMPT7rKNYxO7zPhq9frE-CcHtLLffA4BeZzn5DQ_lI2mwi-tz_L08r8xkdJeKy-J_E0EBl_ygBdxRRKYQnbLkw_wKW5XKiIorThkQXg"
+  }
+}

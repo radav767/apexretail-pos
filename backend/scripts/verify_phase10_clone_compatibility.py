@@ -23,7 +23,7 @@ async def main():
     from app.models import User
     engine=create_async_engine(URL);checks=[];failures=[]
     contracts={'checked':False}
-    schema_file=Path('/tmp/phase10-production-openapi.json')
+    schema_file=Path(os.environ.get('PHASE10_COMPATIBILITY_SCHEMA','/tmp/phase10-production-openapi.json'))
     if schema_file.exists():
         old=json.loads(schema_file.read_text());new=app.openapi();missing=[];required=[];operations=0
         def fields(document,operation):
@@ -84,7 +84,7 @@ async def main():
         finally:app.dependency_overrides.clear()
         await outer.rollback()
     await engine.dispose()
-    out=Path('/tmp/phase10-clone-compatibility.json')
+    out=Path(os.environ.get('PHASE10_COMPATIBILITY_OUTPUT','/tmp/phase10-clone-compatibility.json'))
     out.write_text(json.dumps({'database':DATABASE,'production_accessed':False,'business_writes':False,'owners_checked':len(owners),'contracts':contracts,'checks':checks,'failures':failures},indent=2));out.chmod(0o600)
     print(json.dumps({'checks':len(checks),'owners_checked':len(owners),'contracts':contracts,'failures':failures,'evidence':str(out)}))
     if failures:raise SystemExit(1)

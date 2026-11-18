@@ -151,7 +151,9 @@ class FiscalLocalTests(unittest.TestCase):
             self.assertIn('Number of items', html)
             # Generated synthetic render evidence; not application source or a print.
             from pathlib import Path
-            Path(f'/tmp/phase9b-preview-{paper}.html').write_text(html)
+            from tempfile import TemporaryDirectory
+            with TemporaryDirectory(prefix='phase9b-preview-') as folder:
+                Path(folder,f'{paper}.html').write_text(html)
         receipt['receiptLinesTaxInclusive'] = False
         with self.assertRaises(ValueError): receipt_preview(receipt, synthetic_config(), device_id=1, day_no=1, paper='58mm')
 

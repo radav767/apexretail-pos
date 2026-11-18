@@ -3,7 +3,8 @@ import logging
 
 import bcrypt
 import hashlib, secrets
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 
 from app.auth.entitlement_keys import (
     EntitlementKeyConfigurationError,
@@ -234,7 +235,7 @@ def create_entitlement_snapshot_token(
             token,
             active_key.public_key_pem,
             algorithms=["RS256"],
-            options={"verify_aud": False, "verify_exp": False},
+            options={"verify_aud": False, "verify_exp": False, "verify_iat": False},
         )
     except JWTError as exc:
         raise EntitlementKeyConfigurationError(
@@ -300,7 +301,7 @@ def decode_entitlement_token(
             token,
             verification_key.public_key_pem,
             algorithms=["RS256"],
-            options={"verify_aud": False, "verify_exp": False},
+            options={"verify_aud": False, "verify_exp": False, "verify_iat": False},
         )
     except JWTError:
         _verification_failure("invalid_signature", kid)
