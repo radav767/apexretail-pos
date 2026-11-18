@@ -298,7 +298,7 @@ class SubscriptionPresentationTest(unittest.TestCase):
             status_reason="Payment overdue",
         )
         service.ensure_current = AsyncMock(return_value=subscription)
-        service.snapshot_for = lambda _subscription: {
+        service.snapshot_for = lambda _subscription, **_kwargs: {
             "status": "grace_period",
             "display_status": "past_due",
             "display_status_label": "Past due",
@@ -329,10 +329,10 @@ class SubscriptionPresentationTest(unittest.TestCase):
 
     def test_enforce_writes_allowed_returns_clear_message_for_expired_company(self):
         company_id = uuid4()
-        service = SubscriptionService(db=SimpleNamespace())
-        service.ensure_current = AsyncMock(
-            return_value=SimpleNamespace(status="expired")
-        )
+        subscription = SimpleNamespace(status="expired", trial_ends_at=None, current_period_ends_at=None,
+                                       grace_ends_at=None, commercial_terms=None)
+        db = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: subscription)))
+        service = SubscriptionService(db=db)
 
         with self.assertRaises(HTTPException) as error:
             self.async_run(service.enforce_writes_allowed(company_id))

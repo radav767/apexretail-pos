@@ -1,0 +1,14 @@
+{
+  "synthetic_only": true,
+  "three_equal_count_transfer_batch_retries_one_result_each": true,
+  "conflicting_batch_payload_statuses": [
+    200,
+    409
+  ],
+  "movements": 5,
+  "source_stock": "90.000",
+  "destination_stock": "5.000",
+  "committed_replay_after_expiry_and_module_removal": true,
+  "new_stock_commands_denied": true,
+  "real_provider_actions": false
+}

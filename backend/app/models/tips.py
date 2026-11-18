@@ -1,6 +1,6 @@
 """Separate, append-only tip accounting. Never product revenue or stock."""
 import uuid
-from sqlalchemy import Column, String, Numeric, Boolean, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Integer, Column, String, Numeric, Boolean, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.db.base import Base
 
@@ -19,6 +19,10 @@ class TipEntry(Base):
     __tablename__ = "tip_entries"
     __table_args__ = (UniqueConstraint("company_id", "request_id", name="uq_tip_entry_request"),)
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_type = Column(String(10), nullable=True)
+    actor_id = Column(UUID(as_uuid=True), nullable=True)
+    device_id = Column(UUID(as_uuid=True), nullable=True)
+    assignment_revision = Column(Integer, nullable=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     branch_id = Column(UUID(as_uuid=True), ForeignKey("branches.id"), nullable=False)
     shift_id = Column(UUID(as_uuid=True), ForeignKey("cashier_shifts.id"), nullable=False)

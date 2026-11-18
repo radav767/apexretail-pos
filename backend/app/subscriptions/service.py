@@ -697,12 +697,15 @@ class SubscriptionService:
         self,
         company_id: UUID,
     ):
-        subscription = await self.ensure_current(company_id)
-        if subscription.status not in WRITE_ALLOWED_STATUSES:
-            raise HTTPException(
-                402,
-                "This subscription is no longer active. Renew it to continue creating new sales or changing billable records.",
-            )
+        # Write authorization must not bootstrap a trial or commit the caller's
+        # transaction. Preserve the legacy route response while sharing the
+        # current, pure server decision with replay-aware services.
+        from .write_policy import require_new_write
+        try:
+            await require_new_write(self.db, company_id)
+        except HTTPException as error:
+            if error.status_code != 402: raise
+            raise HTTPException(402, "This subscription is no longer active. Renew it to continue creating new sales or changing billable records.") from error
 
     async def enforce_device_activation_allowed(
         self,

@@ -12,7 +12,7 @@ async def require_new_write(db, company_id, *, features=()):
         raise HTTPException(402, detail={'code': 'subscription_unconfigured', 'message': 'Reconnect with a configured subscription. Retain pending transactions.'})
     now = datetime.now(timezone.utc)
     status = subscription.status
-    end = subscription.trial_ends_at if status == 'trial' else subscription.current_period_ends_at or subscription.trial_ends_at
+    end = subscription.trial_ends_at if status == 'trial' else subscription.current_period_ends_at
     if status in {'trial', 'active'} and end and now > end:
         status = 'grace_period' if subscription.grace_ends_at and now <= subscription.grace_ends_at else 'expired'
     if status == 'grace_period' and subscription.grace_ends_at and now > subscription.grace_ends_at:

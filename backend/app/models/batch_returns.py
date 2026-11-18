@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Numeric, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Integer, Column, String, Numeric, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
@@ -19,6 +19,10 @@ class BatchReturnInspection(Base):
     __tablename__ = "batch_return_inspections"
     __table_args__ = (UniqueConstraint("company_id", "request_id", name="uq_batch_return_request"),)
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_type = Column(String(10), nullable=True)
+    actor_id = Column(UUID(as_uuid=True), nullable=True)
+    device_id = Column(UUID(as_uuid=True), nullable=True)
+    assignment_revision = Column(Integer, nullable=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id"), nullable=False)
     hold_id = Column(UUID(as_uuid=True), ForeignKey("batch_return_holds.id"), nullable=False, unique=True)
     batch_id = Column(UUID(as_uuid=True), ForeignKey("product_batches.id"), nullable=False)

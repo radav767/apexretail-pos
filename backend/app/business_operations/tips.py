@@ -15,6 +15,8 @@ from app.printing.service import PrintingService, permit, digest
 from app.financial_access import enforce_actor_branch
 from app.shifts.service import ShiftService
 from app.shifts.repository import ShiftRepository
+from app.inventory.command_policy import context, verify_row
+from app.subscriptions.write_policy import require_new_write
 
 
 def allocate(amount, weights, precision):
@@ -57,6 +59,7 @@ class TipService(PrintingService):
 
     async def configure(self, data):
         permit(self.actor, "tips_manage"); permit(self.actor, "business_settings_manage")
+        await require_new_write(self.db, self.actor.company_id)
         await self.lock_company()
         if data.enabled and data.policy == "business" and not data.business_retention_confirmed:
             raise HTTPException(400, "Owner confirmation of permitted business retention is required")
@@ -137,9 +140,12 @@ class TipService(PrintingService):
             if (shift.employee_id != self.actor.employee.id or shift.device_id != session.device_id
                     or shift.branch_id != session.branch_id or shift.shop_id != session.shop_id):
                 raise HTTPException(403, "Use the original cashier's authenticated register")
+        proof = await context(self.db, self.actor, self.actor.company_id, shift.branch_id)
         if existing:
+            verify_row(existing, proof)
             if existing.payload_hash != fingerprint: raise HTTPException(409, "Tip request identity already has different values")
             return {"id": existing.id, "already_recorded": True}
+        await require_new_write(self.db, self.actor.company_id)
         if shift.status != "open": raise HTTPException(409, "Record tips on an open shift; closed snapshots are locked")
         currency = (await self.db.execute(select(CompanyCurrency).where(CompanyCurrency.company_id == self.actor.company_id,
             CompanyCurrency.code == data.currency_code, CompanyCurrency.active == True))).scalar_one_or_none()
@@ -221,7 +227,7 @@ class TipService(PrintingService):
                     currency_code=data.currency_code, amount=data.amount, base_amount=(data.amount / rate).quantize(Decimal("0.01")),
                     exchange_rate_snapshot=rate, reason=f"Tip {data.kind}: {data.reason}", idempotency_key=f"tip:{data.request_id}")
                 self.db.add(movement); await self.db.flush()
-            entry = TipEntry(company_id=shift.company_id, branch_id=shift.branch_id, shift_id=shift.id, sale_id=sale_id,
+            entry = TipEntry(**proof, company_id=shift.company_id, branch_id=shift.branch_id, shift_id=shift.id, sale_id=sale_id,
                 original_id=original.id if original else None, request_id=data.request_id, payload_hash=fingerprint,
                 kind=data.kind, policy=policy, payment_method=data.payment_method, currency_code=data.currency_code,
                 decimal_places=precision, amount=data.amount, reason=data.reason, reference=data.reference,

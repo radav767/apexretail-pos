@@ -14,6 +14,10 @@ class InventoryRepository:
         self.commit_on_save = commit_on_save
         self.stock = BranchStockRepository(db)
 
+    async def authorize_command(self, data, actor, permission=None, *, new=False):
+        from .command_policy import authorize
+        return await authorize(self.db, data, actor, permission, new=new)
+
     async def resolve_branch(
         self,
         company_id: UUID,

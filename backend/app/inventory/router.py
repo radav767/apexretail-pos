@@ -105,7 +105,7 @@ async def receive_stock(
     if _actor.actor_type == "employee":
         enforce_actor_branch(_actor, data.branch_id or _actor.employee.branch_id)
         data.branch_id = data.branch_id or _actor.employee.branch_id
-    return movement_response(await service.receive_stock(data), _actor)
+    return movement_response(await service.receive_stock(data, actor=_actor) if isinstance(service, InventoryService) else await service.receive_stock(data), _actor)
 
 
 @router.post(
@@ -137,9 +137,6 @@ async def stock_take(
     service: InventoryService = Depends(get_service),
     _actor: AuthActor = Depends(
         require_body_permission("inventory_count")
-    ),
-    _entitlement: None = Depends(
-        require_billable_body_company
     ),
 ):
     if _actor.actor_type == "employee":

@@ -115,7 +115,7 @@ class InventoryCompletionTests(unittest.IsolatedAsyncioTestCase):
         await self.prepare(batch=True)
         with self.assertRaises(HTTPException) as caught:await InventoryService(InventoryRepository(self.db)).stock_take(
             StockTakeCreate(company_id=self.company.id,branch_id=self.branch.id,items=[
-                {"product_id":self.product.id,"variant_id":self.a["id"],"physical_qty":0}]))
+                {"product_id":self.product.id,"variant_id":self.a["id"],"physical_qty":0}]),actor=self.owner)
         self.assertEqual(caught.exception.status_code,409)
         catalog=await count_catalog(self.db,self.company.id,self.branch.id)
         row=next(r for r in catalog if r["variant_id"]==self.a["id"])

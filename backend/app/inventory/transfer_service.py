@@ -14,6 +14,8 @@ class TransferService:
         self.repo = repo
 
     async def transfer(self, data: TransferCreate, actor=None):
+        if hasattr(self.repo, "authorize_command"):
+            await self.repo.authorize_command(data, actor)
         if data.source_branch_id == data.destination_branch_id:
             raise HTTPException(
                 400,
@@ -25,6 +27,8 @@ class TransferService:
             if replay is not None:
                 return replay
 
+        if hasattr(self.repo, "authorize_command"):
+            await self.repo.authorize_command(data, actor, new=True)
         source_branch = await self.repo.resolve_branch(
             data.company_id,
             data.source_branch_id,

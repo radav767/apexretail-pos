@@ -13,6 +13,7 @@ from app.models import ProductVariant, ProductBatch, BatchAllocation
 from app.models.business_operations import BatchStockOperation
 from app.printing.service import permit, digest
 from .service import BusinessService
+from app.inventory.command_policy import context, lock_request, verify_row
 
 
 async def resolve_batch_variant(db, company_id, product_id, variant_id, *, include_inactive=False):
@@ -77,14 +78,9 @@ class BatchStockService(BusinessService):
         permit(self.actor, "batches_manage")
         permit(self.actor, "inventory_receive" if data.operation == "receive" else
             "inventory_count" if data.operation == "count" else "inventory_adjust")
-        await self.feature("pharmacy")
         await self.branch(data.branch_id)
-        # Same product-first lock order as sales, GRNs and FEFO allocation.
-        repo = InventoryRepository(self.db)
-        product = await repo.get_product_for_update(self.actor.company_id, data.product_id)
-        if not product.track_inventory or product.product_type not in {"standard", "variable_weight"}:
-            raise HTTPException(400, "Batch stock requires a standard stock-tracked product")
-        await resolve_batch_variant(self.db, self.actor.company_id, product.id, data.variant_id,include_inactive=data.operation=="count")
+        proof = await context(self.db, self.actor, self.actor.company_id, data.branch_id)
+        await lock_request(self.db, 'batch', self.actor.company_id, data.request_id)
         payload = data.model_dump(mode="json")
         if data.variant_id is None: payload.pop("variant_id")  # Preserve pre-p7j retry hashes.
         if data.expected_qty is None: payload.pop("expected_qty")  # Preserve existing operation receipts.
@@ -92,8 +88,17 @@ class BatchStockService(BusinessService):
         old = (await self.db.execute(select(BatchStockOperation).where(
             BatchStockOperation.company_id == self.actor.company_id, BatchStockOperation.request_id == data.request_id))).scalar_one_or_none()
         if old:
+            verify_row(old, proof)
             if old.payload_hash != fingerprint: raise HTTPException(409, "Batch request identity reused with different values")
             return {"movement_id": old.movement_id, "batch_id": old.batch_id, "already_processed": True}
+        await self.require_write('pharmacy', *(['variants'] if data.variant_id else []))
+        await self.feature('pharmacy')
+        # Same product-first lock order as sales, GRNs and FEFO allocation.
+        repo = InventoryRepository(self.db)
+        product = await repo.get_product_for_update(self.actor.company_id, data.product_id)
+        if not product.track_inventory or product.product_type not in {"standard", "variable_weight"}:
+            raise HTTPException(400, "Batch stock requires a standard stock-tracked product")
+        await resolve_batch_variant(self.db, self.actor.company_id, product.id, data.variant_id,include_inactive=data.operation=="count")
         try:
             batch = (await self.db.execute(select(ProductBatch).where(ProductBatch.company_id == self.actor.company_id,
                 ProductBatch.branch_id == data.branch_id, ProductBatch.product_id == product.id,
@@ -112,7 +117,7 @@ class BatchStockService(BusinessService):
                 product_id=product.id, quantity=data.quantity, reason=data.reason,
                 reference=f"batch:{data.request_id}")
             if data.operation == "receive":
-                movement = await inventory.receive_stock(GRNCreate(**common, received_unit=data.received_unit))
+                movement = await inventory.receive_stock(GRNCreate(**common, received_unit=data.received_unit), actor=self.actor)
             elif data.operation == "count":
                 if data.received_unit:
                     raise HTTPException(400, "Batch counts use base units")
@@ -123,11 +128,11 @@ class BatchStockService(BusinessService):
                     raise HTTPException(409, "Batch count conflicts with physical inventory; reconcile before counting")
                 movement = (await inventory.stock_take(StockTakeCreate(company_id=self.actor.company_id,
                     branch_id=data.branch_id, items=[{"product_id":product.id,"physical_qty":physical_total}],
-                    reference=common["reference"], notes=data.reason)))[0]
+                    reference=common["reference"], notes=data.reason), actor=self.actor))[0]
             else:
                 if data.received_unit: raise HTTPException(400, "Returns/disposal use base units")
                 movement = await inventory.adjust_stock(StockAdjustmentCreate(**common, adjustment_type="remove"), actor=self.actor)
-            self.db.add(BatchStockOperation(company_id=self.actor.company_id, request_id=data.request_id,
+            self.db.add(BatchStockOperation(**proof, company_id=self.actor.company_id, request_id=data.request_id,
                 payload_hash=fingerprint, batch_id=batch.id, movement_id=movement.id, operation=data.operation))
             self.audit("batch_stock_" + data.operation, batch_id=batch.id, movement_id=movement.id,
                 request_id=data.request_id, reason=data.reason, quantity=str(data.quantity))

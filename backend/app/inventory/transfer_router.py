@@ -56,9 +56,6 @@ async def create_stock_transfer(
     _actor: AuthActor = Depends(
         require_body_permission("inventory_transfer")
     ),
-    _entitlement: None = Depends(
-        require_billable_body_company
-    ),
 ):
     enforce_actor_branch(_actor, data.source_branch_id)
     rows = await service.transfer(data, actor=_actor) if isinstance(service, TransferService) else await service.transfer(data)

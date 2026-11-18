@@ -22,7 +22,10 @@ class InventoryService:
     def __init__(self, repo: InventoryRepository):
         self.repo = repo
 
-    async def receive_stock(self, data: GRNCreate):
+    async def receive_stock(self, data: GRNCreate, actor=None):
+        data = data.model_copy()
+        if hasattr(self.repo, "authorize_command"):
+            await self.repo.authorize_command(data, actor, "inventory_receive", new=True)
         branch = await self.repo.resolve_branch(
             data.company_id,
             data.branch_id,
@@ -94,6 +97,9 @@ class InventoryService:
         data: StockAdjustmentCreate,
         actor=None,
     ):
+        data = data.model_copy()
+        if hasattr(self.repo, "authorize_command"):
+            await self.repo.authorize_command(data, actor, new=True)
         if actor is not None and actor.actor_type == "employee" and not has_permission(actor.permissions, "inventory_adjust"):
             await consume_manager_authorization(
                 self.repo.db, actor, data.manager_authorization_token,
@@ -194,12 +200,17 @@ class InventoryService:
         data: StockTakeCreate,
         actor=None,
     ):
+        data = data.model_copy()
+        if hasattr(self.repo, "authorize_command"):
+            await self.repo.authorize_command(data, actor, "inventory_count")
         if data.request_id is not None:
             from .count_requests import prepare_count
             replay, self.repo.count_receipt = await prepare_count(self.repo.db, data, actor)
             if replay is not None:return replay
         elif hasattr(self.repo, "count_receipt"):
             self.repo.count_receipt=None
+        if hasattr(self.repo, "authorize_command"):
+            await self.repo.authorize_command(data, actor, "inventory_count", new=True)
         branch = await self.repo.resolve_branch(
             data.company_id,
             data.branch_id,

@@ -13,6 +13,7 @@ from app.printing.service import permit, digest
 from .service import BusinessService
 from .batch_stock import LotInventoryRepository
 from .batches import business_today
+from app.inventory.command_policy import context, lock_request, verify_row
 
 
 class InspectionInput(BaseModel):
@@ -42,21 +43,25 @@ class ReturnService(BusinessService):
         permit(self.actor, "batches_manage")
         if data.disposition == "dispose": permit(self.actor, "inventory_adjust")
         if not data.confirmed: raise HTTPException(400, "Confirm physical inspection before releasing or disposing of a return")
+        await lock_request(self.db, 'return-inspection', self.actor.company_id, data.request_id)
         hold = await self.db.get(BatchReturnHold, data.hold_id)
         if not hold or hold.company_id != self.actor.company_id: raise HTTPException(404, "Return hold not found")
         branch = await self.branch(hold.branch_id)
+        proof = await context(self.db, self.actor, self.actor.company_id, hold.branch_id)
+        fingerprint = digest(data.model_dump(mode="json"))
+        existing = (await self.db.execute(select(BatchReturnInspection).where(BatchReturnInspection.company_id == self.actor.company_id,
+            BatchReturnInspection.request_id == data.request_id))).scalar_one_or_none()
+        if existing:
+            verify_row(existing, proof)
+            if existing.payload_hash != fingerprint: raise HTTPException(409, "Return request identity reused with different values")
+            return {"id": existing.id, "already_inspected": True}
         stock = InventoryRepository(self.db)
         product = await stock.get_product_for_update(self.actor.company_id, hold.product_id)
         # The immutable refund movement is authoritative, including historical
         # holds. Never choose a variant from the current UI or product defaults.
         original_movement = await self.db.get(InventoryMovement, hold.movement_id)
         variant_id = original_movement.variant_id
-        fingerprint = digest(data.model_dump(mode="json"))
-        existing = (await self.db.execute(select(BatchReturnInspection).where(BatchReturnInspection.company_id == self.actor.company_id,
-            BatchReturnInspection.request_id == data.request_id))).scalar_one_or_none()
-        if existing:
-            if existing.payload_hash != fingerprint: raise HTTPException(409, "Return request identity reused with different values")
-            return {"id": existing.id, "already_inspected": True}
+        await self.require_write('pharmacy', *(['variants'] if variant_id else []))
         if (await self.db.execute(select(BatchReturnInspection.id).where(BatchReturnInspection.hold_id == hold.id))).first():
             raise HTTPException(409, "This customer return has already been inspected")
         if data.disposition == "restock" and data.expires_on < await business_today(self.db, self.actor.company_id):
@@ -78,7 +83,7 @@ class ReturnService(BusinessService):
                 self.db.add(batch); await self.db.flush()
             batch.quantity += hold.quantity
             self.db.add(BatchAllocation(batch_id=batch.id, movement_id=hold.movement_id, quantity=hold.quantity))
-            inspection = BatchReturnInspection(company_id=hold.company_id, hold_id=hold.id, batch_id=batch.id,
+            inspection = BatchReturnInspection(**proof, company_id=hold.company_id, hold_id=hold.id, batch_id=batch.id,
                 request_id=data.request_id, payload_hash=fingerprint, disposition=data.disposition, reason=data.reason)
             self.db.add(inspection); await self.db.flush()
             if data.disposition == "dispose":

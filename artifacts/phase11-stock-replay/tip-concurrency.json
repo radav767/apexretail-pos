@@ -1,0 +1,19 @@
+{
+  "synthetic_only": true,
+  "manual_test_transfer_ledger_only": true,
+  "three_equal_tip_requests_one_receipt": true,
+  "conflicting_payload_statuses": [
+    200,
+    409
+  ],
+  "counts": {
+    "tips": 2,
+    "cash_movements": 2,
+    "sales": 1,
+    "stock_movements": 1
+  },
+  "stock": "98.000",
+  "committed_replay_after_suspension": true,
+  "new_tip_denied": true,
+  "provider_or_cash_drawer_hardware_actions": false
+}

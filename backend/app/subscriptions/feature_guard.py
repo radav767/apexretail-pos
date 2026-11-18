@@ -4,7 +4,9 @@ async def enforce_request_features(db,actor,request):
     # transaction service before current-license/module checks for NEW writes.
     if request.method == 'POST' and (request.url.path in {'/api/sales', '/api/operations/orders',
             '/api/operations/offline/drafts', '/api/operations/offline/edits',
-            '/api/operations/offline/kitchen', '/api/operations/offline/kds'}
+            '/api/operations/offline/kitchen', '/api/operations/offline/kds',
+            '/api/inventory/stock-take', '/api/inventory/transfers',
+            '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries'}
             or request.url.path.startswith('/api/operations/orders/') and request.url.path.endswith(('/settle', '/send'))): return
     from .commercial import enforce_feature,terms_for
     terms=await terms_for(db,actor.company_id)

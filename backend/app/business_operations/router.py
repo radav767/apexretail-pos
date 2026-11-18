@@ -98,7 +98,7 @@ async def resolve_offline(kind:Literal["drafts","edits","kitchen","kds"],data:Of
         observed_status=data.observed_status,reason=data.reason)
 
 
-@router.post("/batches/stock", dependencies=[Depends(require_operational_writes)])
+@router.post("/batches/stock")
 async def batch_stock(data: BatchStockInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await BatchStockService(db, actor).execute(data)
 
@@ -113,7 +113,7 @@ async def pending_returns(db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await ReturnService(db, actor).pending()
 
 
-@router.post("/batches/returns/inspect", dependencies=[Depends(require_operational_writes)])
+@router.post("/batches/returns/inspect")
 async def inspect_return(data: InspectionInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await ReturnService(db, actor).inspect(data)
 
@@ -128,7 +128,7 @@ async def tip_options(db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await TipService(db, actor).options()
 
 
-@router.post("/tips/entries", dependencies=[Depends(require_operational_writes)])
+@router.post("/tips/entries")
 async def tip_entry(data: TipInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await TipService(db, actor).record(data)
 

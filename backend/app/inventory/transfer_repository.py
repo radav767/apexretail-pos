@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import select, text
 from app.models import AuditEvent, InventoryMovement
+from .command_policy import context, audit_proof, verify_audit
 
 
 class TransferRepository:
@@ -12,6 +13,14 @@ class TransferRepository:
         self.db = db
         self.stock = BranchStockRepository(db)
         self.request_record = None
+
+    async def authorize_command(self, data, actor, *, new=False):
+        from app.printing.service import permit
+        from app.subscriptions.write_policy import require_new_write
+        await context(self.db, actor, data.company_id, data.source_branch_id)
+        permit(actor, "inventory_transfer")
+        if new:
+            await require_new_write(self.db, data.company_id, features=('variants',) if any(row.variant_id for row in data.items) else ())
 
     async def prepare_request(self, data, actor=None):
         self.request_record = None
@@ -29,7 +38,9 @@ class TransferRepository:
         receipt = (await self.db.execute(select(AuditEvent).where(AuditEvent.company_id==data.company_id,
             AuditEvent.action=="inventory_transfer_committed_v1",
             AuditEvent.details["request_id"].as_string()==str(data.request_id)))).scalar_one_or_none()
+        proof = await context(self.db, actor, data.company_id, data.source_branch_id)
         if receipt:
+            verify_audit(receipt, proof)
             if receipt.details["payload_hash"] != fingerprint:
                 raise HTTPException(409,"Transfer request identity reused with different values; original transfer retained")
             ids = [UUID(value) for value in receipt.details["movement_ids"]]
@@ -44,7 +55,7 @@ class TransferRepository:
             actor_user_id=actor.user.id if actor and actor.actor_type=="user" else None,
             device_id=actor.pos_session.device_id if actor and actor.pos_session else None,
             action="inventory_transfer_committed_v1",reason="Stock transfer",
-            details={"request_id":str(data.request_id),"payload_hash":fingerprint,"request":payload})
+            details={**audit_proof(proof), "request_id":str(data.request_id),"payload_hash":fingerprint,"request":payload})
         return None
 
     async def resolve_branch(
