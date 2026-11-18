@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import (
@@ -46,11 +46,12 @@ def get_service(
 @router.get("/{company_id}", response_model=SubscriptionPageOut)
 async def get_subscription_page(
     company_id: UUID,
+    lease_nonce: str | None = Query(default=None, pattern=r"^[A-Za-z0-9_-]{32,64}$"),
     service: SubscriptionService = Depends(get_service),
     actor: AuthActor = Depends(get_auth_actor),
 ):
     ensure_company_access(actor, company_id)
-    return await service.page(company_id)
+    return await service.page(company_id, lease_nonce=lease_nonce)
 
 
 @router.post("/activate", response_model=SubscriptionActivateOut)

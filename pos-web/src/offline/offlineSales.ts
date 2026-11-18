@@ -1,3 +1,4 @@
+import { requireOfflineAccess } from "./lease";
 import { Capacitor } from "@capacitor/core";
 import { Network } from "@capacitor/network";
 import {
@@ -323,6 +324,8 @@ export async function queueOfflineSale(
       "Offline sale storage is available only inside the Android app",
     );
   }
+
+  await requireOfflineAccess(payload.company_id);
 
   const timestamp = new Date().toISOString();
 

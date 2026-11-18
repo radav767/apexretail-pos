@@ -55,7 +55,11 @@ const database = {
   },
 };
 
+let leaseAllowed = true;
 globalThis.__offlineMocks = {
+  // Test-only print-intent sink: no bridge, device or physical output.
+  rememberPrintIntent: () => {}, flushPrintIntents: async () => {},
+  requireOfflineAccess: async () => { if (!leaseAllowed) throw new Error("Synthetic expired offline lease"); },
   Capacitor: { getPlatform: () => "android" },
   Network: { getStatus: async () => ({ connected: true }), addListener: async () => ({ remove: async () => {} }) },
   CapacitorSQLite: {},
@@ -77,7 +81,7 @@ globalThis.__offlineMocks = {
 
 let source = readFileSync(new URL("../src/offline/offlineSales.ts", import.meta.url), "utf8");
 source = source.replace(/import[\s\S]*?from ["'][^"']+["'];/g, "");
-source = "const { Capacitor, Network, CapacitorSQLite, SQLiteConnection, api } = globalThis.__offlineMocks;\n" + source;
+source = "const { Capacitor, Network, CapacitorSQLite, SQLiteConnection, api, requireOfflineAccess, rememberPrintIntent, flushPrintIntents } = globalThis.__offlineMocks;\n" + source;
 const js = ts.transpileModule(source, {
   compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext },
 }).outputText;
@@ -102,6 +106,10 @@ const payload = {
   assignment_revision: 2, payment_method: "cash",
   items: [{ product_id: "product-1", quantity: "1" }],
 };
+leaseAllowed = false;
+await assert.rejects(first.queueOfflineSale(payload), /expired offline lease/);
+assert.equal(rows.size, 0);
+leaseAllowed = true;
 await first.queueOfflineSale(payload);
 await first.queueOfflineSale({ ...payload, branch_id: "must-not-overwrite" });
 nextError = {

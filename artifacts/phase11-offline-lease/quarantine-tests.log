@@ -1,0 +1,1 @@
+PASS: explicit quarantine classification, persistence, no auto-retry, evidence export, payload preservation, and idempotent client IDs

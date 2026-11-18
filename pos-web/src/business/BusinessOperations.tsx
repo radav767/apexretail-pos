@@ -45,6 +45,7 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [splitQuantities, setSplitQuantities] = useState<Record<string, string>>({});
   const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [busy, setBusy] = useState(false);
+  const offlineQueueLock = useRef(false);
   const [recoveryReady, setRecoveryReady] = useState(true);
   const [online, setOnline] = useState(navigator.onLine);
   const [branch, setBranch] = useState(branchId); const [device, setDevice] = useState(deviceId);
@@ -71,17 +72,20 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
     try{const saved=JSON.parse(localStorage.getItem(kitchenCacheKey)||"null");if(Array.isArray(saved?.tickets))setTickets(saved.tickets);}
     catch{setError("Cached kitchen data needs review. No commands were deleted.");}
   },[online,profile,deviceId,kitchenCacheKey,allowed]);
-  function queueOperation(kind:"kitchen"|"kds",payload:Record<string,unknown>){
+  async function queueOperation(kind:"kitchen"|"kds",payload:Record<string,unknown>){
+    if (offlineQueueLock.current) return;
+    offlineQueueLock.current = true;
     try{
       if(!profile?.employee_id||!deviceId)throw new Error("Use the authenticated employee/register");
       const outbox=new OfflineOrderOutbox(localStorage,{company:companyId,employee:profile.employee_id,device:deviceId});
       const endpoint=kind==="kitchen"?"/operations/offline/kitchen":"/operations/offline/kds";
       if(outbox.list().some(entry=>entry.status!=="acknowledged"&&entry.endpoint===endpoint&&
         (kind==="kitchen"?(entry.payload as any).order_id===payload.order_id:(entry.payload as any).ticket_id===payload.ticket_id)))throw new Error("An original request is already saved. Review its confirmation before another action.");
-      const id=crypto.randomUUID();outbox.enqueue({id,endpoint,payload:{...payload,request_id:id,
-        employee_id:profile.employee_id,device_id:deviceId,captured_at:new Date().toISOString()}});
+      const id=crypto.randomUUID();await outbox.enqueueLicensed({id,endpoint,payload:{...payload,request_id:id,
+        employee_id:profile.employee_id,device_id:deviceId,captured_at:new Date().toISOString()}},companyId);
       setNotice("Request saved. Not sent or confirmed until synchronization.");
     }catch(error){setError(errorMessage(error));}
+    finally { offlineQueueLock.current = false; }
   }
   function navigate(next: View) { setView(next); setSelectedOrder(null); setError(""); const url = new URL(location.href); url.searchParams.set("business_view", next); history.pushState({}, "", url); }
   useEffect(() => {

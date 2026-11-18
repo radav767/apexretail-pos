@@ -1,0 +1,13 @@
+{
+  "synthetic_only": true,
+  "chromium": "153.0.8010.12",
+  "fresh_challenge_enables_capture": true,
+  "other_tab_cannot_restore_cached_lease": true,
+  "broadcast_logout_invalidates_other_tab": true,
+  "identity_change_and_restore_cannot_reanchor": true,
+  "reload_denies_new_capture": true,
+  "original_queue_preserved": true,
+  "unexpected_requests": [],
+  "page_errors": [],
+  "physical_or_provider_actions": false
+}

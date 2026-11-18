@@ -1,0 +1,25 @@
+TAP version 13
+# Subtest: /tmp/apex-phase11-build-xijhpj7t/pos-web/tests/entitlementBuildPolicy.test.mjs
+ok 1 - /tmp/apex-phase11-build-xijhpj7t/pos-web/tests/entitlementBuildPolicy.test.mjs
+  ---
+  duration_ms: 406.221991
+  ...
+# Subtest: /tmp/apex-phase11-build-xijhpj7t/pos-web/tests/entitlementUi.test.mjs
+ok 2 - /tmp/apex-phase11-build-xijhpj7t/pos-web/tests/entitlementUi.test.mjs
+  ---
+  duration_ms: 167.953564
+  ...
+# Subtest: /tmp/apex-phase11-build-xijhpj7t/pos-web/tests/sessionUi.test.mjs
+ok 3 - /tmp/apex-phase11-build-xijhpj7t/pos-web/tests/sessionUi.test.mjs
+  ---
+  duration_ms: 270.871265
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 864.798074

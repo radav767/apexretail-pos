@@ -1,0 +1,6 @@
+Offline order outbox: restart, identity isolation, timeout, conflict retention, immutable retry, acknowledgement, quota and append checks passed
+Pricing: tier increases/decreases, variant base restoration and unconfigured-business compatibility passed
+Weighted cart: repeated additions merge exactly and cannot exceed combined available stock
+Read-only recovery: unknown requests retained, malformed 200 responses rejected, original acknowledgement restored
+KOT/KDS outbox: matching receipt required, conflict retained, explicit resolution survives restart, offline payments rejected
+Signed-feature cart policy: legacy compatibility, permitted standard items, variant/composite rejection and unknown-cache fail-closed checks passed

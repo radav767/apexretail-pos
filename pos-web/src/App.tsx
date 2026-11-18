@@ -1,3 +1,4 @@
+import { offlineLease, invalidateOfflineLease } from "./offline/lease";
 import { requestPosLogout } from "./api/posLogout";
 import BackofficeHandoffDialog from './components/BackofficeHandoffDialog';
 import { applyDiscounts } from "./discounts";
@@ -78,7 +79,6 @@ import {
   entitlementRefreshFailureMessage,
   loadEntitlementSnapshot,
   saveEntitlementSnapshot,
-  verifyEntitlementSnapshotDetailed,
   type CachedEntitlementSnapshot,
 } from "./offline/entitlement";
 import {
@@ -609,6 +609,7 @@ const [loggedIn, setLoggedIn] = useState(
 
   useEffect(() => {
     const onInvalidated = (event: Event) => {
+      invalidateOfflineLease();
       setTerminalReady(false);
       setTerminalChecking(false);
       setAuthenticationRevision((value) => value + 1);
@@ -931,9 +932,11 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
+    const leaseChallenge = offlineLease.beginRefresh(selectedCompanyId);
     try {
       const response = await api.get(
         `/subscriptions/${selectedCompanyId}`,
+        { params: { lease_nonce: leaseChallenge.nonce } },
       );
       if (!isCurrent()) return;
       const subscription =
@@ -953,8 +956,9 @@ const [loggedIn, setLoggedIn] = useState(
         message: snapshot.message || null,
         updated_at: new Date().toISOString(),
       };
-      const verification = await verifyEntitlementSnapshotDetailed(cached);
+      const verification = await offlineLease.acceptOnline(cached, leaseChallenge);
       if (!isCurrent()) return;
+      if (!verification.ok && verification.category === "offline_refresh_stale") return;
       if (verification.ok) {
         // Never replace the last known-good offline authorization until the
         // newly issued snapshot has passed local signature and claim checks.
@@ -970,10 +974,11 @@ const [loggedIn, setLoggedIn] = useState(
         );
       }
     } catch (error) {
-      if (isCurrentAuthenticationFailure(error)) throw error;
+      if (isCurrentAuthenticationFailure(error)) { invalidateOfflineLease(); throw error; }
       if (!isCurrent()) return;
       const refreshFailure = classifyEntitlementRefreshFailure(error);
       if (refreshFailure.category !== "temporary_unavailable") {
+        invalidateOfflineLease();
         setEntitlementSnapshot(null);
         setEntitlementRefreshNotice("");
         setEntitlementVerificationMessage(
@@ -991,7 +996,7 @@ const [loggedIn, setLoggedIn] = useState(
         );
         return;
       }
-      const verification = await verifyEntitlementSnapshotDetailed(cached);
+      const verification = await offlineLease.verify(cached);
       if (!isCurrent()) return;
       if (verification.ok) {
         setEntitlementSnapshot(cached);
@@ -1038,7 +1043,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   async function canCreateOfflineSale() {
-    const verification = await verifyEntitlementSnapshotDetailed(
+    const verification = await offlineLease.verify(
       entitlementSnapshot,
     );
     if (verification.ok) {
@@ -1840,6 +1845,7 @@ const [loggedIn, setLoggedIn] = useState(
       );
     }
 
+    invalidateOfflineLease();
     advanceAuthenticationEpoch();
     setTerminalReady(false);
     setTerminalChecking(true);
@@ -2162,6 +2168,7 @@ const [loggedIn, setLoggedIn] = useState(
 
   function switchCashier() {
     const revocation = requestPosLogout(api, false);
+    invalidateOfflineLease();
     advanceAuthenticationEpoch();
     localStorage.removeItem("employee_id");
     localStorage.removeItem("employee_token");
@@ -2712,7 +2719,7 @@ const [loggedIn, setLoggedIn] = useState(
 
       // New queues retain the signed original shift identity. Installations
       // with older queued rows remain compatible and are never rewritten.
-      const verifiedLicense=await verifyEntitlementSnapshotDetailed(loadEntitlementSnapshot(companyId));
+      const verifiedLicense=await offlineLease.verify(loadEntitlementSnapshot(companyId));
       if(!verifiedLicense.ok)throw new Error('Reconnect to verify the original subscription authorization.');
       const licenseError=offlineCartLicenseError(verifiedLicense.claims.features,cart);
       if(licenseError)throw new Error(licenseError);
@@ -3022,6 +3029,7 @@ const [loggedIn, setLoggedIn] = useState(
 
   function logout() {
     const revocation = requestPosLogout(api, true);
+    invalidateOfflineLease();
     advanceAuthenticationEpoch();
     setTerminalReady(false);
     setTerminalChecking(false);
@@ -3076,7 +3084,7 @@ const [loggedIn, setLoggedIn] = useState(
       setEntitlementVerificationMessage("");
       return;
     }
-    void verifyEntitlementSnapshotDetailed(cached).then((verification) => {
+    void offlineLease.verify(cached).then((verification) => {
       if (cancelled) return;
       if (verification.ok) {
         setEntitlementSnapshot(cached);
@@ -3095,18 +3103,55 @@ const [loggedIn, setLoggedIn] = useState(
   }, [companyId]);
 
   useEffect(() => {
-    if (!loggedIn || !companyId) return;
+    if (!loggedIn || !companyId || !cashier?.access_token) return;
+    const scope = createBootstrapScope();
+    void isDeviceOnline().then(online => {
+      if (online && scope.isCurrent()) return loadSubscriptionSnapshot(companyId, scope.isCurrent);
+    }).catch(() => undefined);
+    return () => scope.cancel();
+  }, [loggedIn, companyId, cashier?.id, cashier?.access_token]);
 
+  useEffect(() => {
+    if (!loggedIn || !companyId) return;
+    const scope = createBootstrapScope();
     const refreshAfterReconnect = () => {
-      void loadSubscriptionSnapshot(companyId).catch((error) => {
+      if (!scope.isCurrent()) return;
+      void loadSubscriptionSnapshot(companyId, scope.isCurrent).catch((error) => {
         console.warn("[entitlement] refresh after reconnect failed", {
           category: classifyEntitlementRefreshFailure(error).category,
         });
       });
     };
     window.addEventListener("online", refreshAfterReconnect);
-    return () => window.removeEventListener("online", refreshAfterReconnect);
-  }, [loggedIn, companyId]);
+    const refreshIfConnected = () => {
+      void isDeviceOnline().then(online => { if (online && scope.isCurrent()) refreshAfterReconnect(); });
+    };
+    const interval = window.setInterval(refreshIfConnected, 15 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === "visible") refreshIfConnected(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      scope.cancel();
+      window.removeEventListener("online", refreshAfterReconnect);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(interval);
+    };
+  }, [loggedIn, companyId, cashier?.id, cashier?.access_token, authenticationRevision]);
+
+  useEffect(() => {
+    if (!entitlementSnapshot) return;
+    let cancelled = false;
+    const scope = createBootstrapScope();
+    const checkLease = () => {
+      void offlineLease.verify(entitlementSnapshot).then(result => {
+        if (!cancelled && scope.isCurrent() && !result.ok) {
+          setEntitlementSnapshot(null);
+          setEntitlementVerificationMessage(entitlementReconnectMessage(result.category));
+        }
+      });
+    };
+    const interval = window.setInterval(checkLease, 30_000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [entitlementSnapshot]);
 
   useEffect(() => {
     if (!loggedIn || !companyId) {

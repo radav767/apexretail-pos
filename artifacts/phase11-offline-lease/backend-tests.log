@@ -1,0 +1,43 @@
+test_signed_current_server_time_and_nonce_cannot_be_substituted (test_phase11_offline_lease.OfflineLeaseApiTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.241 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:95> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.138 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.290 seconds
+ok
+test_suspension_is_signed_non_writable_and_revoked_actor_cannot_renew (test_phase11_offline_lease.OfflineLeaseApiTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.244 seconds
+Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:95> wait_for=<Future pending cb=[Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.282 seconds
+entitlement_verification_failed category=subscription_not_writable kid=active-2026
+ok
+test_expiry_lifetime_grace_company_and_retirement_policies (test_entitlement_key_rotation.EntitlementKeyRotationTest) ... entitlement_verification_failed category=snapshot_expired kid=active-2026
+entitlement_verification_failed category=token_lifetime_exceeded kid=active-2026
+entitlement_verification_failed category=offline_grace_exceeded kid=active-2026
+entitlement_verification_failed category=company_mismatch kid=active-2026
+entitlement_verification_failed category=key_retired kid=legacy-2026
+ok
+test_new_token_has_kid_and_validates (test_entitlement_key_rotation.EntitlementKeyRotationTest) ... ok
+test_original_jose_rsa_token_verifies_with_replacement (test_entitlement_key_rotation.EntitlementKeyRotationTest) ... ok
+test_systemd_credential_loading_uses_protected_test_file (test_entitlement_key_rotation.EntitlementKeyRotationTest) ... ok
+test_unknown_kid_algorithm_confusion_and_tampering_fail_closed (test_entitlement_key_rotation.EntitlementKeyRotationTest) ... entitlement_verification_failed category=unknown_key_id kid=unknown-2026
+/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/jwt/api_jwt.py:149: InsecureKeyLengthWarning: The HMAC key is 21 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+  return self._jws.encode(
+entitlement_verification_failed category=algorithm_mismatch kid=active-2026
+entitlement_verification_failed category=invalid_signature kid=active-2026
+ok
+test_valid_old_kid_and_bounded_no_kid_legacy (test_entitlement_key_rotation.EntitlementKeyRotationTest) ... entitlement_verification_failed category=legacy_key_retired kid=legacy-2026
+ok
+test_cashier_switch_keeps_owner_and_foreign_owner_is_denied (test_phase11_pos_logout.PosLogoutTests) ... Executing <Task pending name='Task-9' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.238 seconds
+ok
+test_employee_logout_revokes_opaque_current_and_legacy_jwt_even_when_expired (test_phase11_pos_logout.PosLogoutTests) ... Executing <Task pending name='Task-13' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.244 seconds
+ok
+test_employee_version_values_are_strict (test_phase11_pos_logout.PosLogoutTests) ... Executing <Task pending name='Task-17' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.238 seconds
+ok
+test_full_employee_logout_can_only_revoke_cached_same_business_owner (test_phase11_pos_logout.PosLogoutTests) ... Executing <Task pending name='Task-21' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.243 seconds
+ok
+test_pos_user_logout_revokes_legacy_and_current_owner_tokens (test_phase11_pos_logout.PosLogoutTests) ... Executing <Task pending name='Task-25' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.263 seconds
+ok
+test_stale_pin_transaction_cannot_resurrect_after_logout_and_new_pin_works (test_phase11_pos_logout.PosLogoutTests) ... Executing <Task pending name='Task-29' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.237 seconds
+Executing <Task pending name='Task-29' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> cb=[WorkerThread.stop()] created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.238 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 5.680s
+
+OK

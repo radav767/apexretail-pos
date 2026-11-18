@@ -1,0 +1,1 @@
+PASS: SQLite queue, duplicate enqueue, network failure, retry, concurrent sync, legacy and separated discount components remain idempotent

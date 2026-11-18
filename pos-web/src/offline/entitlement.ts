@@ -29,6 +29,7 @@ export type EntitlementClaims = {
   limits?: Record<string,number|null>;
   offline_grace_expires_at: string;
   token_type: string;
+  lease_nonce?: string;
   iat?: number;
   exp: number;
   iss?: string;
@@ -43,7 +44,9 @@ export type EntitlementFailureCategory =
   | "invalid_token_type" | "company_mismatch" | "subscription_not_writable"
   | "snapshot_expired" | "offline_grace_expired" | "issued_in_future"
   | "token_lifetime_exceeded" | "offline_grace_exceeded"
-  | "issuer_mismatch" | "audience_mismatch";
+  | "issuer_mismatch" | "audience_mismatch"
+  | "offline_reconnect_required" | "offline_lease_expired" | "offline_clock_changed"
+  | "offline_challenge_mismatch" | "offline_refresh_stale";
 
 export type EntitlementKeyring = {
   version: 1;
@@ -166,6 +169,10 @@ function finiteTimestamp(value: unknown): number | null {
 }
 
 export function entitlementReconnectMessage(category: EntitlementFailureCategory): string {
+  if (category.startsWith("offline_")) {
+    return "Reconnect to renew POS access. Offline access lasts at most four hours in this open window, ends on sign-out, and cannot be restored after reload. Queued sales are retained.";
+  }
+
   if (["unknown_key_id", "key_retired", "legacy_key_retired"].includes(category)) {
     return "This POS authorization key has changed or retired. Reconnect and reload the POS to renew access.";
   }
@@ -216,7 +223,7 @@ export function entitlementRefreshFailureMessage(
     return `Online authorization was rejected (HTTP ${failure.status}). Sign in again before continuing online.`;
   }
   if (failure.category === "temporary_unavailable" && hasVerifiedSnapshot) {
-    return "Connection temporarily unavailable. The saved POS authorization is verified and remains subject to its offline expiry.";
+    return "Connection temporarily unavailable. The saved POS authorization is verified and remains subject to its four-hour open-window lease and signed expiry.";
   }
   if (failure.category === "temporary_unavailable") {
     return "Connection temporarily unavailable and no valid saved POS authorization is available.";

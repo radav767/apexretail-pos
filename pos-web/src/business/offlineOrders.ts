@@ -1,3 +1,4 @@
+import { requireOfflineAccess } from "../offline/lease.ts";
 /** Separate unpaid-order outbox. Never touches the financial sales queue. */
 export type OrderIdentity = { company: string; employee: string; device: string };
 export type OrderCommand = { id: string; endpoint: "/operations/offline/drafts" | "/operations/offline/edits" | "/operations/offline/kitchen" | "/operations/offline/kds"; payload: unknown; status: "pending" | "review" | "acknowledged"; error?: string; result?: unknown };
@@ -23,6 +24,11 @@ export class OfflineOrderOutbox {
       values.push(value);
     }
     return values;
+  }
+  async enqueueLicensed(command: Omit<OrderCommand, "status">, companyId: string): Promise<void> {
+    await requireOfflineAccess(companyId, command.endpoint === "/operations/offline/kitchen"
+      ? ["restaurant", "kitchen_printing"] : ["restaurant"]);
+    this.enqueue(command);
   }
   enqueue(command: Omit<OrderCommand, "status">): void {
     if(!["/operations/offline/drafts","/operations/offline/edits","/operations/offline/kitchen","/operations/offline/kds"].includes(command.endpoint)){

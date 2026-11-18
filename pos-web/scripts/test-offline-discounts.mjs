@@ -16,7 +16,11 @@ const database = {
   },
   query: async (sql) => ({ values: sql.includes("COUNT(*)") ? [{ total: rows.size }] : [...rows.values()] }),
 };
+let leaseAllowed = true;
 globalThis.__offlineMocks = {
+  // Test-only print-intent sink: no bridge, device or physical output.
+  rememberPrintIntent: () => {}, flushPrintIntents: async () => {},
+  requireOfflineAccess: async () => { if (!leaseAllowed) throw new Error("Synthetic expired offline lease"); },
   Capacitor: { getPlatform: () => "android" },
   Network: { getStatus: async () => ({ connected: true }) },
   CapacitorSQLite: {},
@@ -33,7 +37,7 @@ globalThis.__offlineMocks = {
 };
 let source = readFileSync(new URL("../src/offline/offlineSales.ts", import.meta.url), "utf8");
 source = source.replace(/import[\s\S]*?from ["'][^"']+["'];/g, "");
-source = "const { Capacitor, Network, CapacitorSQLite, SQLiteConnection, api } = globalThis.__offlineMocks;\n" + source;
+source = "const { Capacitor, Network, CapacitorSQLite, SQLiteConnection, api, requireOfflineAccess, rememberPrintIntent, flushPrintIntents } = globalThis.__offlineMocks;\n" + source;
 const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext } }).outputText;
 const { queueOfflineSale, syncPendingOfflineSales } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 for (const discount of [undefined, null, "0.00", "0.30"]) {
@@ -47,6 +51,10 @@ for (const discount of [undefined, null, "0.00", "0.30"]) {
   };
   if (discount !== undefined) payload.discount_amount = discount;
   if (discount === "0.30") payload.sale_discount_amount = "0.10";
+  leaseAllowed = false;
+  await assert.rejects(queueOfflineSale(payload), /expired offline lease/);
+  assert.equal(rows.size, 0);
+  leaseAllowed = true;
   await queueOfflineSale(payload);
   await queueOfflineSale({ ...payload, discount_amount: "99.00" });
   failures = 1;

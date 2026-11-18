@@ -36,11 +36,12 @@ export default function OfflineDraftPanel({company,employee,device,branch,produc
       {variants.some(v=>v.product_id===product)&&<label>Variant<select required value={variant} onChange={e=>setVariant(e.target.value)}><option value="">Select variant</option>{variants.filter(v=>v.product_id===product).map(v=><option key={v.id} value={v.id}>{v.name}</option>)}</select></label>}
       <label>Quantity<input required type="number" min="0.001" step="0.001" value={quantity} onChange={e=>setQuantity(e.target.value)}/></label><button disabled={!product||busy}>Add draft item</button>
     </form>{lines.map((line,i)=><p key={i}>{products.find(p=>p.id===line.product_id)?.name} × {line.quantity}</p>)}
-    <button disabled={!lines.length||!branch||busy} onClick={()=>{
-      try{const request=crypto.randomUUID();outbox().enqueue({id:request,endpoint:"/operations/offline/drafts",payload:{
+    <button disabled={!lines.length||!branch||busy} onClick={async()=>{
+      if(lock.current)return;lock.current=true;setBusy(true);
+      try{const request=crypto.randomUUID();await outbox().enqueueLicensed({id:request,endpoint:"/operations/offline/drafts",payload:{
         request_id:request,employee_id:employee,captured_at:new Date().toISOString(),
         order:{request_id:crypto.randomUUID(),branch_id:branch,device_id:device,kind:"restaurant",waiter_id:employee},items:lines,
-      }});setLines([]);setMessage("Draft saved on this device. Not sent to the kitchen.");reload();}catch(e){setMessage(String(e));}
+      }},company);setLines([]);setMessage("Draft saved on this device. Not sent to the kitchen.");reload();}catch(e){setMessage(String(e));}finally{lock.current=false;setBusy(false);}
     }}>Save unpaid draft</button></>}
     <button disabled={!online||busy} onClick={()=>void run(()=>outbox().synchronize(send))}>Review & synchronize drafts</button>
     <button disabled={!online||busy} onClick={()=>void run(()=>outbox().recover(send))}>Check server confirmation</button>

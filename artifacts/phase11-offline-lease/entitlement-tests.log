@@ -1,0 +1,56 @@
+TAP version 13
+# Subtest: accepts valid active and old kid signatures
+ok 1 - accepts valid active and old kid signatures
+  ---
+  duration_ms: 37.128431
+  ...
+[entitlement] verification failed { category: 'legacy_key_retired', kid: 'legacy-2026' }
+[entitlement] verification failed { category: 'unknown_key_id', kid: 'unknown-2026' }
+[entitlement] verification failed { category: 'algorithm_mismatch', kid: 'active-2026' }
+# Subtest: legacy no-kid snapshots use only the designated key and deadline
+ok 2 - legacy no-kid snapshots use only the designated key and deadline
+  ---
+  duration_ms: 5.979723
+  ...
+[entitlement] verification failed { category: 'invalid_signature', kid: 'active-2026' }
+# Subtest: unknown kid, algorithm confusion and tampering fail closed
+ok 3 - unknown kid, algorithm confusion and tampering fail closed
+  ---
+  duration_ms: 14.799238
+  ...
+[entitlement] verification failed { category: 'snapshot_expired', kid: 'active-2026' }
+[entitlement] verification failed { category: 'token_lifetime_exceeded', kid: 'active-2026' }
+[entitlement] verification failed { category: 'offline_grace_exceeded', kid: 'active-2026' }
+[entitlement] verification failed { category: 'offline_grace_expired', kid: 'active-2026' }
+[entitlement] verification failed { category: 'company_mismatch', kid: 'active-2026' }
+# Subtest: expiry, offline grace, long-lived claims and company mismatch fail
+ok 4 - expiry, offline grace, long-lived claims and company mismatch fail
+  ---
+  duration_ms: 43.444367
+  ...
+[entitlement] verification failed { category: 'offline_grace_exceeded', kid: 'active-2026' }
+[entitlement] verification failed { category: 'key_retired', kid: 'active-2026' }
+# Subtest: fractional grace beyond the signed maximum fails closed
+ok 5 - fractional grace beyond the signed maximum fails closed
+  ---
+  duration_ms: 8.723534
+  ...
+# Subtest: retired key and refresh/reconnect guidance are explicit
+ok 6 - retired key and refresh/reconnect guidance are explicit
+  ---
+  duration_ms: 2.357957
+  ...
+# Subtest: refresh failures distinguish rejected credentials from temporary outages
+ok 7 - refresh failures distinguish rejected credentials from temporary outages
+  ---
+  duration_ms: 1.068527
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 120.911292

@@ -18,7 +18,7 @@ const viteConfig = readFileSync(
 
 test("refresh and offline fallback reverify cached snapshots", () => {
   assert.match(app, /loadEntitlementSnapshot\(selectedCompanyId\)/);
-  assert.match(app, /verifyEntitlementSnapshotDetailed\(cached\)/);
+  assert.match(app, /offlineLease\.verify\(cached\)/);
   assert.match(app, /entitlementReconnectMessage\(verification\.category\)/);
   assert.match(app, /classifyEntitlementRefreshFailure\(error\)/);
   assert.match(app, /refreshFailure\.category !== "temporary_unavailable"/);
@@ -26,7 +26,7 @@ test("refresh and offline fallback reverify cached snapshots", () => {
   assert.match(app, /role="alert"/);
 });
 
-test("restart restores verified cache and reconnection refreshes it", () => {
+test("restart requires a fresh lease and reconnection refreshes it", () => {
   assert.match(app, /loadEntitlementSnapshot\(companyId\)/);
   assert.match(app, /window\.addEventListener\("online", refreshAfterReconnect\)/);
   assert.match(app, /setEntitlementRefreshNotice\(""\)/);
