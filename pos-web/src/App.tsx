@@ -38,6 +38,7 @@ import {
   rememberDeviceIdentity,
 } from "./deviceIdentity";
 import { registerCurrentDevice } from "./device";
+import { advanceAuthenticationEpoch, createBootstrapScope, isCurrentAuthenticationFailure, runBootstrapSteps } from "./api/authLifecycle.ts";
 import {
   authenticateOfflineCashier,
   cacheOfflineCashier,
@@ -345,6 +346,9 @@ const [loggedIn, setLoggedIn] = useState(
   const [registrationCurrenciesLoading, setRegistrationCurrenciesLoading] = useState(false);
   const [registrationCurrenciesError, setRegistrationCurrenciesError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [authenticationRevision, setAuthenticationRevision] = useState(0);
+  const [terminalReady, setTerminalReady] = useState(false);
+  const [terminalChecking, setTerminalChecking] = useState(() => Boolean(localStorage.getItem("token")));
 
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -601,7 +605,14 @@ const [loggedIn, setLoggedIn] = useState(
   }, [authMode, loggedIn, registrationCurrencies.length]);
 
   useEffect(() => {
-    const onInvalidated = () => {
+    const onInvalidated = (event: Event) => {
+      setTerminalReady(false);
+      setTerminalChecking(false);
+      setAuthenticationRevision((value) => value + 1);
+      if ((event as CustomEvent<{ kind?: string }>).detail?.kind === "owner") {
+        setLoggedIn(false);
+        setMessage("Your business session has expired. Please sign in again.");
+      }
       setCashier(null);
       setPinMessage("This POS session was ended on another device. Please sign in again.");
       setCart([]);
@@ -876,8 +887,9 @@ const [loggedIn, setLoggedIn] = useState(
 
   async function loadBusinessSettings(
     selectedCompanyId: string,
+    isCurrent = createBootstrapScope().isCurrent,
   ) {
-    if (!selectedCompanyId) {
+    if (!selectedCompanyId || !isCurrent()) {
       return;
     }
 
@@ -885,6 +897,7 @@ const [loggedIn, setLoggedIn] = useState(
       `/settings/${selectedCompanyId}`,
     );
 
+    if (!isCurrent()) return;
     const loadedSettings =
       response.data as BusinessSettings;
 
@@ -909,8 +922,9 @@ const [loggedIn, setLoggedIn] = useState(
 
   async function loadSubscriptionSnapshot(
     selectedCompanyId: string,
+    isCurrent = createBootstrapScope().isCurrent,
   ) {
-    if (!selectedCompanyId) {
+    if (!selectedCompanyId || !isCurrent()) {
       return;
     }
 
@@ -918,6 +932,7 @@ const [loggedIn, setLoggedIn] = useState(
       const response = await api.get(
         `/subscriptions/${selectedCompanyId}`,
       );
+      if (!isCurrent()) return;
       const subscription =
         response.data as SubscriptionPage;
       const snapshot = subscription.current.snapshot;
@@ -936,6 +951,7 @@ const [loggedIn, setLoggedIn] = useState(
         updated_at: new Date().toISOString(),
       };
       const verification = await verifyEntitlementSnapshotDetailed(cached);
+      if (!isCurrent()) return;
       if (verification.ok) {
         // Never replace the last known-good offline authorization until the
         // newly issued snapshot has passed local signature and claim checks.
@@ -951,6 +967,8 @@ const [loggedIn, setLoggedIn] = useState(
         );
       }
     } catch (error) {
+      if (isCurrentAuthenticationFailure(error)) throw error;
+      if (!isCurrent()) return;
       const refreshFailure = classifyEntitlementRefreshFailure(error);
       if (refreshFailure.category !== "temporary_unavailable") {
         setEntitlementSnapshot(null);
@@ -971,6 +989,7 @@ const [loggedIn, setLoggedIn] = useState(
         return;
       }
       const verification = await verifyEntitlementSnapshotDetailed(cached);
+      if (!isCurrent()) return;
       if (verification.ok) {
         setEntitlementSnapshot(cached);
         setEntitlementVerificationMessage("");
@@ -1635,12 +1654,15 @@ const [loggedIn, setLoggedIn] = useState(
   async function loadProducts(
     id = companyId,
     selectedBranchId = branchId,
+    isCurrent = createBootstrapScope().isCurrent,
+    propagateError = false,
   ) {
-    if (!id) return;
+    if (!id || !isCurrent()) return;
 
     try {
       const [productResponse,variantResponse,priceResponse]=await Promise.all([api.get(`/products/${id}`),api.get(`/products/variants/${id}`,{params:{branch_id:selectedBranchId||undefined}}),api.get(`/products/price-levels/${id}`)]);
 
+      if (!isCurrent()) return;
       let loadedProducts = productResponse.data.map((product:Product)=>{const variants=variantResponse.data.filter((v:any)=>v.product_id===product.id&&v.active),price_levels=priceResponse.data.filter((v:any)=>v.product_id===product.id&&v.active);return {...product,variants,price_levels,stock_qty:variants.length?String(variants.reduce((n:number,v:any)=>n+Number(v.stock_qty||0),0)):product.stock_qty};});
 
       if (selectedBranchId) {
@@ -1653,6 +1675,7 @@ const [loggedIn, setLoggedIn] = useState(
           },
         );
 
+        if (!isCurrent()) return;
         const balances = new Map<string, string>(
           balanceResponse.data.map((balance: any) => [
             balance.product_id,
@@ -1671,10 +1694,17 @@ const [loggedIn, setLoggedIn] = useState(
         );
       }
 
+      if (!isCurrent()) return;
       setProducts(loadedProducts);
     } catch (error) {
+      if (isCurrentAuthenticationFailure(error)) {
+        if (propagateError) throw error;
+        return;
+      }
+      if (!isCurrent()) return;
       console.error(error);
       setMessage("Failed to load branch products");
+      if (propagateError) throw error;
     }
   }
 
@@ -1807,6 +1837,10 @@ const [loggedIn, setLoggedIn] = useState(
       );
     }
 
+    advanceAuthenticationEpoch();
+    setTerminalReady(false);
+    setTerminalChecking(true);
+    setAuthenticationRevision((value) => value + 1);
     setCompanyId(nextCompanyId);
     setBranchId(nextBranchId);
     setLoggedIn(true);
@@ -1826,13 +1860,8 @@ const [loggedIn, setLoggedIn] = useState(
       setCashier(null);
     }
 
-    await loadProducts(
-      nextCompanyId,
-      nextBranchId || undefined,
-    );
-
-    await loadBusinessSettings(nextCompanyId);
-    await loadSubscriptionSnapshot(nextCompanyId);
+    // The scoped startup effect below owns registration, data loading and readiness.
+    // Starting a second chain here lets requests continue after logout or PIN login.
   }
 
   async function login() {
@@ -1891,6 +1920,11 @@ const [loggedIn, setLoggedIn] = useState(
   async function loginWithEmployeePin(selection?: {shop_id: string; device_id: string; takeover?: boolean}) {
     if (!companyId) {
       setPinMessage("Business session is not available");
+      return;
+    }
+
+    if (terminalChecking && await isDeviceOnline()) {
+      setPinMessage("Wait for the terminal connection check to finish before signing in.");
       return;
     }
 
@@ -2125,6 +2159,7 @@ const [loggedIn, setLoggedIn] = useState(
 
   function switchCashier() {
     void api.post("/employees/session/logout").catch(() => undefined);
+    advanceAuthenticationEpoch();
     localStorage.removeItem("employee_id");
     localStorage.removeItem("employee_token");
     setCashier(null);
@@ -2965,6 +3000,9 @@ const [loggedIn, setLoggedIn] = useState(
 
   function logout() {
     void api.post("/employees/session/logout").catch(() => undefined);
+    advanceAuthenticationEpoch();
+    setTerminalReady(false);
+    setTerminalChecking(false);
     clearAuthenticationPreservingDeviceIdentity();
 
     setBranchId("");
@@ -3049,12 +3087,15 @@ const [loggedIn, setLoggedIn] = useState(
       return;
     }
 
-    let cancelled = false;
+    setTerminalReady(false);
+    setTerminalChecking(true);
+    const scope = createBootstrapScope();
 
     async function synchronizeDevice() {
       try {
         const response =
-          await registerCurrentDevice(companyId);
+          await registerCurrentDevice(companyId, scope.isCurrent);
+        if (!scope.isCurrent()) return;
 
         const device =
           response?.device || response || {};
@@ -3083,7 +3124,7 @@ const [loggedIn, setLoggedIn] = useState(
           );
         }
 
-        if (cancelled) {
+        if (!scope.isCurrent()) {
           return;
         }
 
@@ -3134,35 +3175,32 @@ const [loggedIn, setLoggedIn] = useState(
 
         setBranchId(synchronizedBranchId);
 
-        await loadProducts(
-          companyId,
-          synchronizedBranchId,
-        );
-
-        await loadBusinessSettings(companyId);
-        await loadSubscriptionSnapshot(companyId);
-
-        if (!cancelled) {
+        const loaded = await runBootstrapSteps(scope.isCurrent, [
+          () => loadProducts(companyId, synchronizedBranchId, scope.isCurrent, true),
+          () => loadBusinessSettings(companyId, scope.isCurrent),
+          () => loadSubscriptionSnapshot(companyId, scope.isCurrent),
+        ]);
+        if (loaded) {
+          setTerminalReady(true);
           setMessage("");
         }
       } catch (error: any) {
-        if (!cancelled) {
-          setMessage(
-            getApiErrorMessage(
-              error,
-              "POS device synchronization failed",
-            ),
-          );
+        if (scope.isCurrent()) {
+          const detail = getApiErrorMessage(error, "POS device synchronization failed");
+          setMessage(detail);
+          setPinMessage(detail);
         }
+      } finally {
+        if (scope.isCurrent()) setTerminalChecking(false);
       }
     }
 
     void synchronizeDevice();
 
     return () => {
-      cancelled = true;
+      scope.cancel();
     };
-  }, [loggedIn, companyId]);
+  }, [loggedIn, companyId, authenticationRevision]);
 
   useEffect(() => {
     if (!cashier || !companyId) {
@@ -3204,11 +3242,13 @@ const [loggedIn, setLoggedIn] = useState(
   }, [cashier, companyId]);
 
   useEffect(() => {
-    if (!loggedIn || !companyId) {
+    if (!loggedIn || !companyId || !terminalReady) {
       return;
     }
 
+    const scope = createBootstrapScope();
     async function sendHeartbeat() {
+      if (!scope.isCurrent()) return;
       try {
         await api.post("/devices/heartbeat", {
           company_id: companyId,
@@ -3230,9 +3270,10 @@ const [loggedIn, setLoggedIn] = useState(
     }, 60000);
 
     return () => {
+      scope.cancel();
       window.clearInterval(intervalId);
     };
-  }, [loggedIn, companyId]);
+  }, [loggedIn, companyId, terminalReady, cashier]);
 
   if (!loggedIn) {
     return (

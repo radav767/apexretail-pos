@@ -6,7 +6,7 @@ import {
 
 export { getOrCreateDeviceKey } from "./deviceIdentity.ts";
 
-export async function registerCurrentDevice(companyId: string) {
+export async function registerCurrentDevice(companyId: string, isCurrent = () => true) {
   const response = await api.post("/devices/register", {
     company_id: companyId,
     device_key: getOrCreateDeviceKey(companyId),
@@ -16,6 +16,8 @@ export async function registerCurrentDevice(companyId: string) {
   });
 
   const result = response.data?.device || response.data;
+  // A previous company's response must not replace the active terminal identity.
+  if (!isCurrent()) return undefined;
 
   if (result?.device_key) {
     rememberDeviceIdentity(

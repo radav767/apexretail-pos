@@ -1,4 +1,9 @@
 import axios from "axios";
+import { advanceAuthenticationEpoch, authorizationFor, captureAuthentication, shouldInvalidateAuthentication } from "./authLifecycle.ts";
+import type { AuthenticationSnapshot } from "./authLifecycle.ts";
+
+// Keep credential snapshots out of serializable Axios configs/error reports.
+const authenticationByRequest = new WeakMap<object, AuthenticationSnapshot>();
 
 type ApiFieldError = {
   field?: unknown;
@@ -89,23 +94,17 @@ export function getApiErrorMessage(
 
 export const api = axios.create({
   baseURL:
-    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env?.VITE_API_BASE_URL ||
     "https://api.apexpos.cloud/api",
   headers: { "Content-Type": "application/json" },
 });
 
 api.interceptors.request.use((config) => {
-  const employeeToken =
-    localStorage.getItem("employee_token");
-  const employeeId =
-    localStorage.getItem("employee_id");
-  const ownerToken =
-    localStorage.getItem("token");
-
-  if (employeeToken) {
-    config.headers.Authorization = `Bearer ${employeeToken}`;
-  } else if (!employeeId && ownerToken) {
-    config.headers.Authorization = `Bearer ${ownerToken}`;
+  const snapshot = captureAuthentication();
+  authenticationByRequest.set(config, snapshot);
+  const authorization = authorizationFor(snapshot);
+  if (authorization) {
+    config.headers.Authorization = authorization;
   } else if (config.headers.Authorization) {
     delete config.headers.Authorization;
   }
@@ -114,14 +113,24 @@ api.interceptors.request.use((config) => {
 }, undefined, { synchronous: true });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    authenticationByRequest.delete(response.config);
+    return response;
+  },
   (error) => {
-    // A late best-effort logout belongs to the previous cashier. Its rejection
-    // must never invalidate a new cashier who has already authenticated.
-    if (error?.response?.status === 401 && error?.config?.url !== "/employees/session/logout" && typeof window !== "undefined") {
-      localStorage.removeItem("employee_token");
-      localStorage.removeItem("employee_id");
-      window.dispatchEvent(new CustomEvent("apex-session-invalidated"));
+    const sent = error?.config ? authenticationByRequest.get(error.config) : undefined;
+    if (error?.config) authenticationByRequest.delete(error.config);
+    if (typeof window !== "undefined" && shouldInvalidateAuthentication(error?.response?.status, error?.config?.url, sent)) {
+      error.apexInvalidatedAuthentication = true;
+      const kind = sent?.employee ? "employee" : "owner";
+      if (kind === "employee") {
+        localStorage.removeItem("employee_token");
+        localStorage.removeItem("employee_id");
+      } else {
+        localStorage.removeItem("token");
+      }
+      advanceAuthenticationEpoch();
+      window.dispatchEvent(new CustomEvent("apex-session-invalidated", { detail: { kind } }));
     }
     if (error && typeof error === "object") {
       (
