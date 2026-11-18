@@ -10,7 +10,7 @@ from app.models import Sale, SaleCommandReceipt, Device, Product
 from app.financial_access import enforce_actor_branch
 from app.subscriptions.write_policy import require_new_write
 
-CREDENTIAL_FIELDS = {'device_key', 'discount_authorization_token', 'price_override_authorization_token', 'offline_shift_token'}
+CREDENTIAL_FIELDS = {'device_key', 'discount_authorization_token', 'price_override_authorization_token', 'offline_shift_token', 'manager_authorization_token'}
 
 
 def normalized(value):
@@ -92,5 +92,8 @@ async def begin(db, data, actor):
 
 def record(db, data, proof, sale, device):
     if data.client_sale_id:
+        # Audited manager resolution may use historical register attribution.
+        # Never invent its current assignment revision. Normal POS POST replay
+        # then fails closed; the distinct manager-resolution receipt is exact.
         db.add(SaleCommandReceipt(client_sale_id=data.client_sale_id, company_id=data.company_id, sale_id=sale.id,
-            branch_id=sale.branch_id, device_id=sale.device_id, assignment_revision=device.assignment_revision if device else None, **proof))
+            branch_id=sale.branch_id, device_id=sale.device_id, assignment_revision=getattr(device, 'assignment_revision', None) if device else None, **proof))

@@ -104,6 +104,7 @@ class SalesService:
         resolved_employee=None,
         resolved_device=None,
         resolution_record=None,
+        resolution_command_receipt=None,
     ):
         data = data.model_copy(deep=True)
         command_data = data.model_copy(deep=True)
@@ -902,6 +903,9 @@ class SalesService:
                     "payload_sha256": resolution_record.payload_sha256,
                 },
             )])
+
+            if resolution_command_receipt is not None:
+                self.repo.db.add(resolution_command_receipt)
 
         if payment_method == "credit" and customer is not None:
             receivable_id = uuid.uuid4()

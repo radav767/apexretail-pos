@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.currencies.service import quantize_currency
@@ -149,8 +149,15 @@ class ShiftService:
         session = self.require_pos_actor(actor)
         if not has_permission(normalize_permissions(actor.role, actor.permissions), "shifts_open"):
             raise HTTPException(403, "Shift opening permission denied")
+        command_proof = None
+        if hasattr(self.repo, 'begin_command'):
+            committed, command_proof = await self.repo.begin_command(data, actor, 'open')
+            if committed:
+                return await self.view(await self.repo.by_id(actor.company_id, committed.shift_id), include_offline_token=True)
         existing_key = await self.repo.by_open_key(actor.company_id, data.idempotency_key.strip())
         if existing_key:
+            if command_proof is not None:
+                raise HTTPException(409, 'Historical shift opening has no complete replay proof; retrieve the original shift')
             if existing_key.employee_id != actor.employee.id or existing_key.device_id != session.device_id:
                 raise HTTPException(409, "Shift idempotency key is already in use")
             return await self.view(existing_key, include_offline_token=True)
@@ -205,6 +212,8 @@ class ShiftService:
             action="cashier_shift_opened", details={"shift_id": str(shift.id), "shift_number": shift.shift_number},
         )
         self.repo.db.add_all([shift, *snapshots, audit])
+        if command_proof is not None:
+            self.repo.record_command(command_proof, shift.id)
         try:
             await self.repo.db.commit()
         except IntegrityError as exc:
@@ -288,7 +297,13 @@ class ShiftService:
             raise HTTPException(404, "Shift not found")
         if shift.employee_id != actor.employee.id or shift.device_id != session.device_id:
             raise HTTPException(403, "Only the shift cashier on this register may close the shift")
+        command_proof = None
+        if hasattr(self.repo, 'begin_command'):
+            committed, command_proof = await self.repo.begin_command(data, actor, 'close', shift)
+            if committed: return await self.view(shift, detailed=True)
         if shift.status == "closed":
+            if command_proof is not None:
+                raise HTTPException(409, 'Historical shift closure has no complete replay proof; retrieve the original shift')
             if shift.close_idempotency_key == data.idempotency_key.strip():
                 return await self.view(shift, detailed=True)
             raise HTTPException(409, "Shift is already closed")
@@ -331,6 +346,8 @@ class ShiftService:
             company_id=shift.company_id, actor_employee_id=shift.employee_id, device_id=shift.device_id,
             action="cashier_shift_closed", details={"shift_id": str(shift.id), "shift_number": shift.shift_number},
         ))
+        if command_proof is not None:
+            self.repo.record_command(command_proof, shift.id)
         await self.repo.db.commit()
         return await self.view(shift, detailed=True)
 
@@ -351,7 +368,13 @@ class ShiftService:
             raise HTTPException(404, "Shift not found")
         if actor.actor_type == "employee":
             enforce_actor_branch(actor, shift.branch_id)
+        command_proof = None
+        if hasattr(self.repo, 'begin_command'):
+            committed, command_proof = await self.repo.begin_command(data, actor, 'manager_close', shift)
+            if committed: return await self.view(shift, detailed=True)
         if shift.status == "closed":
+            if command_proof is not None:
+                raise HTTPException(409, 'Historical shift closure has no complete replay proof; retrieve the original shift')
             if shift.close_idempotency_key == data.idempotency_key.strip():
                 return await self.view(shift, detailed=True)
             raise HTTPException(409, "Shift is already closed")
@@ -391,6 +414,8 @@ class ShiftService:
             action="cashier_shift_manager_closed", reason=data.exception_reason.strip(),
             details={"shift_id": str(shift.id), "shift_number": shift.shift_number},
         ))
+        if command_proof is not None:
+            self.repo.record_command(command_proof, shift.id)
         await self.repo.db.commit()
         return await self.view(shift, detailed=True)
 
@@ -421,29 +446,34 @@ class ShiftService:
     async def create_cash_movement(self, shift_id, data: CashMovementCreate, actor):
         session = self.require_pos_actor(actor)
         key = data.idempotency_key
+        if key.startswith('tip:'):
+            raise HTTPException(422, 'Tip command identities are reserved for the original tip ledger')
+        shift = await self.repo.by_id(actor.company_id, shift_id, for_update=True)
+        if shift is None: raise HTTPException(404, 'Shift not found')
+        if shift.employee_id != actor.employee.id or shift.device_id != session.device_id or shift.branch_id != session.branch_id:
+            raise HTTPException(403, 'Only the cashier on this register may record shift cash movements')
+        command_proof = None
+        if hasattr(self.repo, 'begin_command'):
+            committed, command_proof = await self.repo.begin_command(data, actor, 'cash', shift)
+            if committed:
+                existing = await self.repo.cash_movement_by_key(actor.company_id, key)
+                if existing is None or existing.id != committed.movement_id:
+                    raise HTTPException(409, 'Original cash movement requires review')
+                return self._movement_output(existing, actor.employee.name)
         existing = await self.repo.cash_movement_by_key(actor.company_id, key)
         if existing is not None:
-            shift = await self.repo.by_id(actor.company_id, existing.shift_id)
-            if shift is not None and self._movement_matches(existing, shift, actor, data):
+            if command_proof is None and self._movement_matches(existing, shift, actor, data):
                 return self._movement_output(existing, actor.employee.name)
-            raise HTTPException(409, "Cash movement idempotency key is already in use")
-
-        if not has_permission(normalize_permissions(actor.role, actor.permissions), "cash_movements_manage"):
+            raise HTTPException(409, 'Historical cash command has no complete replay proof; retrieve the original movement')
+        if shift.status != 'open':
+            raise HTTPException(409, 'Cash movements can only be recorded during an open shift')
+        if not has_permission(normalize_permissions(actor.role, actor.permissions), 'cash_movements_manage'):
             await consume_manager_authorization(
-                self.repo.db, actor, data.manager_authorization_token,
-                "cash_movement", {
-                    "shift_id": str(shift_id), "movement_type": data.movement_type,
-                    "currency_code": data.currency_code, "amount": str(data.amount),
+                self.repo.db, actor, data.manager_authorization_token, 'cash_movement', {
+                    'shift_id':str(shift_id), 'movement_type':data.movement_type,
+                    'currency_code':data.currency_code, 'amount':str(data.amount),
                 },
             )
-
-        shift = await self.repo.by_id(actor.company_id, shift_id, for_update=True)
-        if shift is None:
-            raise HTTPException(404, "Shift not found")
-        if shift.employee_id != actor.employee.id or shift.device_id != session.device_id or shift.branch_id != session.branch_id:
-            raise HTTPException(403, "Only the cashier on this register may record shift cash movements")
-        if shift.status != "open":
-            raise HTTPException(409, "Cash movements can only be recorded during an open shift")
 
         snapshots = await self.repo.snapshots(shift.id, for_update=True)
         snapshot = next((row for row in snapshots if row.currency_code == data.currency_code), None)
@@ -474,6 +504,7 @@ class ShiftService:
             rate = Decimal(rate_row.foreign_units_per_base) if rate_row is not None else None
 
         movement = CashierShiftCashMovement(
+            id=uuid.uuid4(),
             company_id=shift.company_id, shift_id=shift.id, branch_id=shift.branch_id,
             device_id=shift.device_id, employee_id=actor.employee.id,
             movement_type=data.movement_type, currency_code=data.currency_code,
@@ -488,10 +519,14 @@ class ShiftService:
             device_id=shift.device_id, action=f"cashier_shift_{data.movement_type}",
             details={"shift_id": str(shift.id), "movement_id": str(movement.id), "currency_code": data.currency_code, "amount": str(normalized_amount)},
         ))
+        if command_proof is not None:
+            self.repo.record_command(command_proof, shift.id, movement_id=movement.id)
         try:
             await self.repo.db.commit()
         except IntegrityError as exc:
             await self.repo.db.rollback()
+            if command_proof is not None:
+                raise HTTPException(409, 'Cash movement identity conflict; retrieve the original movement') from exc
             existing = await self.repo.cash_movement_by_key(actor.company_id, key)
             if existing is not None:
                 shift = await self.repo.by_id(actor.company_id, existing.shift_id)
@@ -503,6 +538,11 @@ class ShiftService:
 
     async def add_movement(self, data: CashMovementCreate, actor):
         session = self.require_pos_actor(actor)
+        if hasattr(self.repo, 'begin_command'):
+            original = await self.repo.cash_movement_by_key(actor.company_id, data.idempotency_key)
+            if original is not None:
+                result = await self.create_cash_movement(original.shift_id, data, actor)
+                return SimpleNamespace(**result) if isinstance(result, dict) else result
         shift = await self.repo.current(actor.employee.id, session.device_id, company_id=actor.company_id)
         if shift is None:
             raise HTTPException(409, "An active shift for this cashier and register is required")
@@ -643,6 +683,10 @@ class ShiftService:
     async def resolve_offline_sale(self, data, actor):
         if not self._can_manage_shifts(actor):
             raise HTTPException(403, "Shift management permission denied")
+        from app.sales.commands import actor_identity
+        actor_identity(actor, actor.company_id)
+        data = data.model_copy(deep=True)
+        if len(data.reason.strip()) < 3: raise HTTPException(422, 'A review reason is required')
         sale_data = data.sale
         if sale_data.company_id != actor.company_id:
             raise HTTPException(403, "Offline sale company mismatch")
@@ -652,14 +696,11 @@ class ShiftService:
             raise HTTPException(400, "Original offline transaction timestamp is required")
         if sale_data.payment_method.strip().lower() == "credit":
             raise HTTPException(409, "Offline credit sales cannot be resolved")
-        existing = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
-        if existing:
-            return self._resolution_view(existing)
-        if await SalesRepository(self.repo.db).get_by_client_sale_id(actor.company_id, sale_data.client_sale_id):
-            raise HTTPException(409, "Offline sale is already recorded and cannot be reviewed as quarantined")
-        keyed = await self.repo.offline_resolution(actor.company_id, idempotency_key=data.idempotency_key.strip())
-        if keyed:
-            raise HTTPException(409, "Offline resolution idempotency key is already in use")
+        if hasattr(self.repo, 'begin_command'):
+            # Same global sale-identity lock as normal sale submission, BEFORE
+            # the original shift lock; never invert sale->shift lock ordering.
+            await self.repo.db.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))'),
+                {'key':'phase11-sale:'+str(sale_data.client_sale_id)})
         try:
             # Expiry limits automatic sync, not audited manager review of an
             # already quarantined transaction. Signature and identity remain mandatory.
@@ -691,6 +732,22 @@ class ShiftService:
                 raise HTTPException(409, f"Offline sale {label} does not match the original shift")
         if actor.actor_type == "employee":
             enforce_actor_branch(actor, shift.branch_id)
+        command_proof = None
+        if hasattr(self.repo, 'begin_command'):
+            committed, command_proof = await self.repo.begin_command(data, actor, 'resolution', shift)
+            if committed:
+                original = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
+                if not original or original.id != committed.resolution_id:
+                    raise HTTPException(409, 'Original resolution requires review')
+                return self._resolution_view(original)
+        existing = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
+        if existing:
+            if command_proof is None: return self._resolution_view(existing)
+            raise HTTPException(409, 'Historical resolution has no complete replay proof; retrieve original evidence')
+        if await SalesRepository(self.repo.db).get_by_client_sale_id(actor.company_id, sale_data.client_sale_id):
+            raise HTTPException(409, 'Offline sale is already recorded and cannot be reviewed as quarantined')
+        if await self.repo.offline_resolution(actor.company_id, idempotency_key=data.idempotency_key.strip()):
+            raise HTTPException(409, 'Offline resolution idempotency key is already in use')
         payload = sale_data.model_dump(mode="json")
         payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
@@ -719,13 +776,17 @@ class ShiftService:
                 "original_shift_id": str(shift.id), "payload_sha256": digest,
             },
         )
+        resolution_receipt = self.repo.record_command(command_proof, shift.id, resolution_id=resolution.id, stage=False) if command_proof is not None else None
         if data.action == "retain_quarantined":
             self.repo.db.add_all([resolution, audit])
+            if resolution_receipt is not None: self.repo.db.add(resolution_receipt)
             try:
                 await self.repo.db.commit()
                 await self.repo.db.refresh(resolution)
             except IntegrityError as exc:
                 await self.repo.db.rollback()
+                if command_proof is not None:
+                    raise HTTPException(409, 'Resolution identity conflict; retrieve original evidence') from exc
                 retry = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
                 if retry:
                     return self._resolution_view(retry)
@@ -751,9 +812,12 @@ class ShiftService:
                 sale_data, actor=actor, resolved_shift=shift,
                 resolved_employee=employee, resolved_device=device,
                 resolution_record=resolution,
+                resolution_command_receipt=resolution_receipt,
             )
         except IntegrityError as exc:
             await self.repo.db.rollback()
+            if command_proof is not None:
+                raise HTTPException(409, 'Resolution identity conflict; retrieve original evidence') from exc
             retry = await self.repo.offline_resolution(actor.company_id, client_sale_id=sale_data.client_sale_id)
             if retry:
                 return self._resolution_view(retry)

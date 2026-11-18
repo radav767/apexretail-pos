@@ -15,6 +15,16 @@ class ShiftRepository:
     def __init__(self, db):
         self.db = db
 
+    async def begin_command(self, data, actor, kind, shift=None):
+        from .commands import begin
+        return await begin(self.db, data, actor, kind, shift)
+
+    def record_command(self, proof, shift_id, *, movement_id=None, resolution_id=None, stage=True):
+        from .commands import receipt
+        result = receipt(proof, shift_id, movement_id=movement_id, resolution_id=resolution_id)
+        if stage: self.db.add(result)
+        return result
+
     async def current(self, employee_id, device_id, *, company_id=None, for_update=False):
         query = select(CashierShift).where(
             CashierShift.employee_id == employee_id,

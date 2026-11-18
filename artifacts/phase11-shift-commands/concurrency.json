@@ -1,0 +1,26 @@
+{
+  "synthetic_only": true,
+  "three_equal_open_cash_close_resolution_requests_one_result_each": true,
+  "cash_conflicting_payload_statuses": [
+    200,
+    409
+  ],
+  "closure_allowed_after_expiry": true,
+  "new_open_and_post_denied_after_expiry": true,
+  "committed_resolution_replay_after_suspension": true,
+  "normal_upload_vs_manager_resolution_statuses": [
+    200,
+    403
+  ],
+  "counts": {
+    "shifts": 1,
+    "cash": 2,
+    "resolutions": 2,
+    "sales": 2,
+    "stock_movements": 2,
+    "command_receipts": 6
+  },
+  "stock": "96.000",
+  "closed_shift_summary_preserved": true,
+  "provider_or_drawer_hardware_actions": false
+}

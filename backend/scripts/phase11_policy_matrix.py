@@ -24,7 +24,7 @@ DOMAINS = {
     'devices': ('Register identity, activation, tombstones, tenant/reassignment authority', 'devices/service.py;devices/authority.py'),
     'employees': ('Current permissions/device restrictions; legacy JWT and opaque epoch revocation; same-business revocation-only POS logout', 'employees/service.py;employees/admin_service.py;employees/logout.py;auth/dependencies.py'),
     'settings': ('Company management permissions; receipt/shop preferences', 'business_settings/router.py;business_settings/service.py'),
-    'shifts': ('Cashier/register binding, shift manager authority, immutable closes and offline resolutions', 'shifts/service.py;financial_context.py'),
+    'shifts': ('Current cashier/register/epoch and full shift command proof; licensed opens/drawer writes; evidence-only close/quarantine exceptions', 'shifts/service.py;shifts/commands.py;financial_context.py'),
     'printing': ('Tenant/branch/register/station access; original sale and queue identity preserved', 'printing/service.py'),
     'operations': ('Transaction-service current write/module policy; durable actor/payload/context proofs for committed replay', 'business_operations/router.py;business_operations/service.py;business_operations/offline.py;business_operations/batch_stock.py;business_operations/returns.py;business_operations/tips.py'),
     'fiscal': ('Owner-only preparation/configuration; tenant/branch sale-status reads; no commissioned connector', 'fiscal/router.py;fiscal/service.py'),
@@ -63,6 +63,12 @@ def assess(row):
     elif '/recover' in path or path.endswith('/review'):
         policy = 'committed_command_recovery'
         replay = 'Read/acknowledge exact original command identity; no new stock/payment movement'
+    elif domain == 'shifts' and method == 'POST' and path.endswith(('/close', '/manager-close')):
+        policy = 'shift_evidence_finalization'
+        replay = 'Expired-account closure allowed with current scope/permission and complete original closing proof; no new drawer/payment/stock effect'
+    elif domain == 'shifts' and path.endswith('/offline-resolutions'):
+        policy = 'quarantine_evidence_or_new_sale_resolution'
+        replay = 'Retaining quarantine is evidence-only; posting requires current write license. Full resolver/action/reason/payload proof and original signed shift identity required'
     elif domain == 'devices' and any(x in path for x in ('heartbeat', 'decommission')):
         policy = 'device_security_or_health'
         replay = 'Identity/status validation; decommission must remain possible without subscription renewal'
@@ -80,8 +86,10 @@ def assess(row):
         path in {'/api/sales', '/api/expenses', '/api/credit/settlements', '/api/inventory/stock-take',
                  '/api/inventory/transfers', '/api/operations/orders', '/api/operations/offline/drafts',
                  '/api/operations/offline/edits', '/api/operations/offline/kitchen', '/api/operations/offline/kds',
-                 '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries'}
-        or path.startswith('/api/operations/orders/') and path.endswith('/settle'))
+                 '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries',
+                 '/api/shifts/open', '/api/shifts/current/cash-movements', '/api/shifts/offline-resolutions'}
+        or path.startswith('/api/operations/orders/') and path.endswith('/settle')
+        or domain == 'shifts' and path.endswith(('/cash-movements','/close','/manager-close')))
     if exact:
         observed = 'transaction_service_replay_policy'
         gap = 'transaction_policy_implemented_evidence_scope_in_progress_report_full_acceptance_pending'
@@ -89,6 +97,10 @@ def assess(row):
                   'current server license/modules for pending/new commands. Legacy incomplete proofs conflict; '
                   'optional legacy command IDs have no deduplication guarantee. No stock/payment re-execution.')
         if domain == 'inventory': sources += ';inventory/command_policy.py;inventory/count_requests.py;inventory/transfer_repository.py'
+        if policy == 'shift_evidence_finalization':
+            replay = 'Closure freezes existing evidence after current actor/permission/register checks even when expired; exact full-request replay only, no new drawer/payment/stock effect'
+        elif policy == 'quarantine_evidence_or_new_sale_resolution':
+            replay = 'Current resolver/branch/signed original shift plus full review proof; expired quarantine retention allowed; new sale posting needs current license; original summaries remain frozen'
     elif policy == 'new_business_write' and domain in {'currencies', 'expenses', 'credit', 'customers', 'settings'}:
         observed = 'service_new_write_policy'
         gap = 'write_guard_subset_verified_no_general_idempotency_contract'
