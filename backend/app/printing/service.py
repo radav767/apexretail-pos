@@ -18,6 +18,8 @@ def digest(value):
 
 
 def permit(actor, permission):
+    if actor.actor_type == 'user' and actor.role not in {'owner', 'administrator'}:
+        raise HTTPException(403, 'Permission denied')
     if actor.actor_type == "employee" and not has_permission(actor.permissions or {}, permission):
         raise HTTPException(403, "Permission denied")
 
@@ -201,7 +203,7 @@ class PrintingService:
         return {k: getattr(job, k) for k in ("id", "station_id", "sale_id", "kind", "payload", "payload_hash", "status", "attempts", "last_error", "created_at", "claimed_at", "completed_at")}
 
     async def list_jobs(self, station_id):
-        manager = self.actor.actor_type != "employee" or has_permission(self.actor.permissions or {}, "printers_manage")
+        manager = self.actor.role in {"owner", "administrator"} or has_permission(self.actor.permissions or {}, "printers_manage")
         await self.station(station_id, management=manager)
         if not manager:
             if not has_permission(self.actor.permissions or {}, "orders_send"):

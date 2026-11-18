@@ -73,7 +73,7 @@ def ensure_catalog_access(actor: AuthActor, company_id: UUID) -> None:
 
 
 def can_view_product_cost(actor: AuthActor) -> bool:
-    if actor.actor_type == "user" or actor.role in {"owner", "administrator"}:
+    if actor.role in {"owner", "administrator"}:
         return True
     permissions = actor.permissions or {}
     return has_permission(permissions, "product_costs_view")

@@ -49,7 +49,7 @@ class BusinessService(PrintingService):
             "separate_tips": tips is not None,
             "legacy_business_type": company.business_type, "tip_product_id": profile.tip_product_id if profile else None,
             "service_product_id": profile.service_product_id if profile else None,
-            "permissions": self.actor.permissions or {}, "administrator": self.actor.actor_type == "user" or self.actor.role in {"owner", "administrator"}}
+            "permissions": self.actor.permissions or {}, "administrator": self.actor.role in {"owner", "administrator"} or self.actor.role in {"owner", "administrator"}}
 
     async def feature(self, name):
         from app.subscriptions.commercial import enforce_feature
@@ -107,7 +107,7 @@ class BusinessService(PrintingService):
         return [row_dict(r, ("id", "branch_id", "name", "floor", "seats", "x", "y", "active")) for r in rows]
 
     def manager(self):
-        return self.actor.actor_type == "user" or has_permission(self.actor.permissions or {}, "restaurant_manage")
+        return self.actor.role in {"owner", "administrator"} or has_permission(self.actor.permissions or {}, "restaurant_manage")
 
     async def save_table(self, data, table_id=None):
         permit(self.actor, "restaurant_manage")
@@ -214,7 +214,7 @@ class BusinessService(PrintingService):
             item.price = level.price if level else variant.selling_price if variant and variant.selling_price is not None else product.selling_price
 
     async def list_orders(self, kind=None):
-        allowed = self.actor.actor_type == "user" or any(has_permission(self.actor.permissions or {}, p) for p in ("orders_manage", "orders_settle", "restaurant_manage", "quotations_manage", "hospitality_manage"))
+        allowed = self.actor.role in {"owner", "administrator"} or any(has_permission(self.actor.permissions or {}, p) for p in ("orders_manage", "orders_settle", "restaurant_manage", "quotations_manage", "hospitality_manage"))
         if not allowed: raise HTTPException(403, "Permission denied")
         q = select(CommerceOrder).where(CommerceOrder.company_id == self.actor.company_id)
         if kind: q = q.where(CommerceOrder.kind == kind)
@@ -449,7 +449,7 @@ class BusinessService(PrintingService):
         return {"sale_id": sale.id, "receipt_number": sale.receipt_number, "order": await self.order_out(row), "already_settled": False}
 
     async def kitchen(self):
-        allowed = [purpose for purpose, permission in (("kitchen", "kitchen_view"), ("bar", "bar_view")) if self.actor.actor_type == "user" or has_permission(self.actor.permissions or {}, permission)]
+        allowed = [purpose for purpose, permission in (("kitchen", "kitchen_view"), ("bar", "bar_view")) if self.actor.role in {"owner", "administrator"} or has_permission(self.actor.permissions or {}, permission)]
         if not allowed: raise HTTPException(403, "Permission denied")
         q = select(KitchenTicket, PrintJob, CommerceOrder, PrinterStation).join(PrintJob, PrintJob.id == KitchenTicket.print_job_id).join(CommerceOrder, CommerceOrder.id == KitchenTicket.order_id).join(PrinterStation, PrinterStation.id == KitchenTicket.station_id).where(KitchenTicket.company_id == self.actor.company_id, PrinterStation.purpose.in_(allowed))
         if self.actor.employee and self.actor.role not in {"owner", "administrator"}: q = q.where(CommerceOrder.branch_id == self.actor.employee.branch_id)

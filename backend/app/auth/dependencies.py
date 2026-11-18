@@ -187,6 +187,11 @@ async def resolve_auth_actor(
             "User session is no longer valid",
         )
 
+    # Business User has no persisted branch/permission assignment. Cashiers and
+    # scoped roles must use the existing Employee identity, never owner shortcuts.
+    if user.role not in {'owner', 'administrator'}:
+        raise HTTPException(403, 'This business user role is not provisioned for application access')
+
     session_version = payload.get('session_version', 0)
     if type(session_version) is not int or session_version != user.session_version:
         raise HTTPException(401, "User session is no longer valid")

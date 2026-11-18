@@ -85,3 +85,28 @@ class IdentityBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.user.active = False
         await self.db.commit()
         self.assertEqual((await self.request('owner', token)).status_code, 401)
+
+    async def test_unsupported_user_cannot_reach_domain_shortcuts(self):
+        from app.main import app
+        from app.products.router import can_view_product_cost
+        from app.customers.service import CustomerService
+        from app.printing.service import permit
+        from app.financial_access import enforce_actor_branch
+        from app.auth.dependencies import AuthActor
+        from fastapi import HTTPException
+        self.user.role = 'accountant'
+        await self.db.commit()
+        actor = AuthActor('user', self.company.id, 'accountant', user=self.user)
+        self.assertFalse(can_view_product_cost(actor))
+        self.assertFalse(CustomerService.can_manage_credit(actor))
+        for guard in (lambda: permit(actor, 'printers_manage'), lambda: enforce_actor_branch(actor, self.branch.id)):
+            with self.assertRaises(HTTPException): guard()
+        async def override(): yield self.db
+        app.dependency_overrides[get_db] = override
+        try:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://isolated.test') as client:
+                for path in (f'/api/products/{self.company.id}', f'/api/dashboard/summary/{self.company.id}',
+                             '/api/operations/profile', f'/api/customers/{self.company.id}'):
+                    response = await client.get(path, headers={'Authorization': 'Bearer ' + create_access_token(str(self.user.id), self.user.email)})
+                    self.assertEqual(response.status_code, 403, path)
+        finally: app.dependency_overrides.clear()

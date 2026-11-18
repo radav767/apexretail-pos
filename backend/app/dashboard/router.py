@@ -34,8 +34,6 @@ async def require_dashboard_reports_access(
     actor: AuthActor = Depends(get_auth_actor),
 ) -> AuthActor:
     ensure_company_access(actor, company_id)
-    if actor.actor_type == "user":
-        return actor
     if actor.role in {"owner", "administrator"}:
         return actor
     if has_permission(actor.permissions, "profits_view"):

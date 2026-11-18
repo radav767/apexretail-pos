@@ -39,7 +39,7 @@ def get_service(
 
 
 def movement_response(movement, actor):
-    if actor.actor_type == "user" or actor.role in {"owner", "administrator"} or has_permission(actor.permissions, "product_costs_view"):
+    if actor.role in {"owner", "administrator"} or has_permission(actor.permissions, "product_costs_view"):
         return movement
     return InventoryMovementOut.model_validate(movement).model_copy(update={"unit_cost": None})
 

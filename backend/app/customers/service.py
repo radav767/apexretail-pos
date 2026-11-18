@@ -18,8 +18,7 @@ class CustomerService:
     @staticmethod
     def can_manage_credit(actor):
         return (
-            actor.actor_type == "user"
-            or actor.role in {"owner", "administrator"}
+            actor.role in {"owner", "administrator"}
             or bool((actor.permissions or {}).get("customers_manage"))
         )
 

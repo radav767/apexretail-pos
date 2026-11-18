@@ -243,6 +243,8 @@ class AuthService:
         if not user or not verify_password(data.password, user.password_hash):
             raise HTTPException(401, "Invalid email or password")
 
+        if user.role not in {"owner", "administrator"}:
+            raise HTTPException(403, "This business user role is not provisioned for application access")
         token = create_access_token(str(user.id), user.email, session_version=user.session_version)
 
         return {
