@@ -12,10 +12,11 @@ from app.auth.entitlement_keys import (
     load_signing_key,
     safe_kid,
 )
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_jwt_secret
 
+# Legacy terminal identity hashing depends on these exact bytes. This constant
+# is not an authentication signing fallback; changing it needs a data plan.
 SECRET_KEY = "CHANGE_THIS_TO_A_LONG_RANDOM_SECRET"
-ALGORITHM = "HS256"
 ACCESS_TOKEN_MINUTES = 60 * 24
 EMPLOYEE_ACCESS_TOKEN_MINUTES = 60 * 24 * 30
 OFFLINE_SHIFT_TOKEN_MINUTES = 60 * 24 * 30
@@ -98,8 +99,8 @@ def _create_token(payload: dict, expires_in_minutes: int) -> str:
     }
     return jwt.encode(
         token_payload,
-        settings.jwt_secret or SECRET_KEY,
-        algorithm=settings.jwt_algorithm or ALGORITHM,
+        validate_jwt_secret(settings.jwt_secret, settings.jwt_algorithm),
+        algorithm=settings.jwt_algorithm,
     )
 
 
@@ -158,8 +159,8 @@ def decode_offline_shift_token(token: str, *, verify_expiration: bool = True) ->
     settings = get_settings()
     payload = jwt.decode(
         token,
-        settings.jwt_secret or SECRET_KEY,
-        algorithms=[settings.jwt_algorithm or ALGORITHM],
+        validate_jwt_secret(settings.jwt_secret, settings.jwt_algorithm),
+        algorithms=[settings.jwt_algorithm],
         options={"verify_exp": verify_expiration},
     )
     if payload.get("token_type") != "offline_shift":
@@ -249,8 +250,8 @@ def decode_access_token(token: str) -> dict:
     settings = get_settings()
     return jwt.decode(
         token,
-        settings.jwt_secret or SECRET_KEY,
-        algorithms=[settings.jwt_algorithm or ALGORITHM],
+        validate_jwt_secret(settings.jwt_secret, settings.jwt_algorithm),
+        algorithms=[settings.jwt_algorithm],
     )
 
 

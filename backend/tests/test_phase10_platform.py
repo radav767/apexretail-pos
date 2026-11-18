@@ -98,7 +98,7 @@ class PlatformTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await client.post('/api/platform/mfa',json={'challenge':response.json()['challenge'],'code':'١٢٣٤٥٦'})).status_code,422)
         from app.subscriptions.platform_mfa import cipher
         from app.core.config import Settings
-        configured=Settings(database_url='postgresql://postgres@/isolated_test',jwt_secret='synthetic',platform_mfa_key=self.key,_env_file=None)
+        configured=Settings(database_url='postgresql://postgres@/isolated_test',jwt_secret='synthetic-phase11-config-test-secret-123456789',platform_mfa_key=self.key,_env_file=None)
         self.assertNotIn(self.key,repr(configured))
         with patch.dict('os.environ',{},clear=True),patch('app.core.config.get_settings',return_value=configured):
             self.assertEqual(cipher().decrypt(cipher().encrypt(b'test')),b'test')

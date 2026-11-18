@@ -2,10 +2,22 @@ from dataclasses import dataclass
 from functools import lru_cache
 from os import environ
 
-from pydantic import ValidationError,SecretStr
+from pydantic import ValidationError,SecretStr,model_validator
 from pydantic_settings import BaseSettings
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+
+
+def validate_jwt_secret(value: str, algorithm: str = 'HS256') -> str:
+    # A length floor is not an entropy estimate. Operators must still supply
+    # independently generated random keys; never silently substitute a key.
+    if (not isinstance(value, str) or not value.strip()
+            or len(value.encode('utf-8')) < {'HS384': 48, 'HS512': 64}.get(algorithm, 32)
+            or value.strip() == 'CHANGE_THIS_TO_A_LONG_RANDOM_SECRET'):
+        raise ValueError('JWT_SECRET must meet the signing algorithm key length floor (at least 32 bytes) and must not use the default placeholder')
+    if not algorithm or algorithm.lower() == 'none':
+        raise ValueError('JWT_ALGORITHM must specify a signed token algorithm')
+    return value
 
 
 class Settings(BaseSettings):
@@ -39,8 +51,14 @@ class Settings(BaseSettings):
     product_image_max_bytes: int = 5242880
     platform_mfa_key: SecretStr | None = None
 
+    @model_validator(mode='after')
+    def validate_jwt_configuration(self):
+        validate_jwt_secret(self.jwt_secret, self.jwt_algorithm)
+        return self
+
     class Config:
         env_file = ".env"
+        hide_input_in_errors = True
 
 
 @dataclass(frozen=True)

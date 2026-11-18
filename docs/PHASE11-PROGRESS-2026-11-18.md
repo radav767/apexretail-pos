@@ -43,3 +43,19 @@ Frontend commands used `env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp`, plu
 Baseline source/dependency reconciliation and focused isolated verification are complete within the scope above. Broader endpoint policy, tenant/permission/finance coverage, populated upgrade/backfill, backup/independent restore and operator/device acceptance remain required. The synthetic clone is not a restored customer database and cannot certify historical customer compatibility. No production OpenAPI semantic comparison was performed.
 
 Proceed with audit step 2 (11A/11M security), then finance/selector foundations. Offline clock/lease trust, revocable business sessions/reset/remember me, same-account handoff and endpoint policy remain incomplete. Super Admin remains **NO-GO**, with its existing security, recovery and protected migration gates. No deployment, service/configuration changes, credential rotation, real messages/payments/providers, or APK publication is authorized. Original checkout, dirty Phase 10 worktree, frozen hotfix, offline queues and Android identity/signing remain preserved.
+
+## Security increment 1 — fail-closed JWT configuration
+
+Baseline commit: `e9acf7d`. Commit succeeded locally. `git push origin phase11/baseline-reconciliation` failed: `could not read Username for 'https://github.com': No such device or address`. No HTTPS credential helper or gh executable is configured. Push is externally blocked; local development continues. Git writes require execution permission because this linked worktree's index is under `/root/apexretail-pos/.git/worktrees/apexpos-phase11`.
+
+Removed business JWT signing/verification fallback to the known placeholder. Settings and signing/decoding reject empty, whitespace-only, short and placeholder keys; HMAC floors are HS256=32, HS384=48, HS512=64 UTF-8 bytes. Empty/unsigned algorithm configuration is rejected. Settings validation hides supplied input in formatted errors. These are minimum length checks, not proof of randomness. Existing configured valid key bytes and algorithms remain unchanged; no credentials were inspected or rotated.
+
+The legacy SECRET_KEY constant is still required by device activation/identity hashing. Its bytes are deliberately preserved so existing tombstones/activation identities remain usable. It is no longer a JWT fallback. Device hashing redesign needs a separate compatibility/migration plan.
+
+Updated the platform test's short synthetic Settings key. No platform recovery/MFA bypass was introduced. Tests use only the clean environments described above:
+
+- `python -m unittest test_phase11_jwt_configuration test_final_jwt_dependency_guards test_entitlement_key_rotation -v`: **15 passed** after final configuration changes, including four new configuration tests and the original 11 compatibility tests.
+- `python -m unittest test_phase10_platform test_phase9_fiscal test_phase4b_devices -v`: **40 passed, no skips** in the disposable database, after fallback removal and initial settings validation. The final algorithm-specific validation then passed the focused 15-test suite. Platform tests include synthetic recovery; their printed recovery message refers only to the private cluster. No installed platform state changed.
+- `git diff --check`: passed.
+
+Retained logs: `artifacts/phase11-security-20261118/`. Before a future release, operators must separately verify the installed secret meets the new requirements without exposing it. A failing production preflight is a release blocker, never authorization to rotate keys or deploy. This increment does not implement revocable business sessions/reset/remember me or handoff.
