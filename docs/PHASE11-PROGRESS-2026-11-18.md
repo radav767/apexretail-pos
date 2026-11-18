@@ -103,3 +103,18 @@ Artifacts and exact rehearsal scripts: `artifacts/phase11-user-sessions-20261118
 Continue audit step 2: finish the per-operation subscription/service/replay policy matrix; address remaining non-owner User helper shortcuts; design bounded offline trust with explicit queued-sale/reconnect policy; add revocable per-device remembered sessions, one-use reset/outbox with sink acceptance, and same-account single-use Backoffice handoff. Then follow the audit's finance/selector→procurement→documents sequence. No external provider success or official branding has been fabricated.
 
 Push remains blocked by missing HTTPS GitHub credentials. Email sender/domain, fiscal/provider/accounting/airtime sandbox acceptance, real printer/device acceptance, official artwork provenance and protected Super Admin recovery/restore commissioning remain external gates. These do not authorize production operations or prevent independent development. No full Phase 11, whole-system QA or production-readiness completion is claimed.
+
+## Development checkpoint and retained state
+
+Completed implementation commits (newest first):
+
+- `efd9b384c055c02ab54d1efd1340d305f34cdb34` — Add audited business-user token revocation foundation.
+- `fe2a5220c6f2f0af35154c5ce9e2d999829025b1` — Enforce shared user role and token-purpose boundaries.
+- `e4eec3c446c8a7cffc34c8546c92f9966e83450b` — Fail closed on unsafe business JWT signing configuration.
+- `e9acf7dcc7e9eb7f97ebdb5babdaac6b44f56a45` — Reconcile Phase 11 baseline with isolated build and schema evidence.
+
+All four commits are local; the only push attempt failed for missing HTTPS credentials. Exact attempted command: `git push origin phase11/baseline-reconciliation`. No production deployment was attempted. The final documentation-only commit is discoverable in branch history.
+
+Disposable PostgreSQL cluster stopped successfully with `sudo -u postgres /usr/lib/postgresql/14/bin/pg_ctl -D /tmp/apex-phase11-postgres-auOybQ/data -m fast -w stop`. No installed PostgreSQL/API/nginx/systemd service was stopped or restarted. Temporary build copies, virtual environment and synthetic database files remain under the recorded /tmp paths for inspection. backend/.env is absent; generic tests used scrubbed environments from /tmp.
+
+Final frozen seven-file hash comparison and `git diff --check` passed. Development changes require additive p11a migration before running this candidate; production schema identity was inspected only at p10a and remains untouched. Super Admin and production release remain NO-GO. Next engineering work is listed above; no claim is made that the full audit implementation sequence is finished.
