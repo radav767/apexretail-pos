@@ -52,3 +52,18 @@ class BusinessAuthThrottle(Base):
     bucket = Column(String(64), primary_key=True)
     attempts = Column(Integer, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class BackofficeHandoff(Base):
+    __tablename__ = 'business_backoffice_handoffs'
+    token_hash = Column(String(64), primary_key=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey('companies.id'), nullable=False)
+    branch_id = Column(UUID(as_uuid=True), ForeignKey('branches.id'), nullable=False)
+    source_session_id = Column(UUID(as_uuid=True), ForeignKey('business_sessions.id'))
+    session_version = Column(Integer, nullable=False)
+    role = Column(String(40), nullable=False)
+    audience = Column(String(30), nullable=False, default='backoffice')
+    receiver_hash = Column(String(64))
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    consumed_at = Column(DateTime(timezone=True))

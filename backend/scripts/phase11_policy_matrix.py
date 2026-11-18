@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 DOMAINS = {
-    'auth': ('Business authentication, revocation and recovery', 'auth/service.py;auth/dependencies.py;auth/sessions.py'),
+    'auth': ('Business authentication, revocation and recovery', 'auth/service.py;auth/dependencies.py;auth/sessions.py;auth/remembered.py;auth/recovery.py;auth/handoff.py'),
     'products': ('Catalog permission, tenant and branch checks; explicit write dependencies where listed', 'products/router.py;products/service.py'),
     'inventory': ('Branch/variant/batch scopes; optimistic counts; transaction-specific movement idempotency', 'inventory/router.py;inventory/service.py'),
     'branches': ('Tenant and branch management', 'inventory/branch_router.py;inventory/branch_repository.py'),
@@ -90,7 +90,9 @@ def main():
     result = subprocess.run([sys.executable, str(script)], check=True, text=True, capture_output=True)
     rows = list(csv.DictReader(io.StringIO(result.stdout)))
     fields = ['domain', 'policy', 'service_policy', 'replay_policy', 'service_sources', 'observed_and_gap']
-    for row in rows: row.update(zip(fields, assess(row)))
+    for row in rows:
+        row.update(zip(fields, assess(row)))
+        row['review'] = 'policy_assessed_acceptance_gaps_explicit'
     writer = csv.DictWriter(sys.stdout, fieldnames=list(rows[0]), lineterminator='\n')
     writer.writeheader(); writer.writerows(rows)
     print(result.stderr.strip(), file=sys.stderr)

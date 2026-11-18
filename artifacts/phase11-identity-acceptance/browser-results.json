@@ -1,0 +1,16 @@
+{
+  "synthetic_only": true,
+  "playwright": "1.65.1",
+  "browser": "153.0.8010.12",
+  "checks": [
+    "unchecked default, persistent HttpOnly cookie, refresh restoration and rotation",
+    "two-owner handoff retires prior account and requires visible identity confirmation",
+    "invalid handoff and reload never restore prior browser context",
+    "sink-issued recovery fragment, actual browser reset and old password/token denial",
+    "cashier fresh owner proof; real POS dialog focus, masked input, cross-business denial, secret clearing and offline storage preservation"
+  ],
+  "page_errors": [],
+  "external_requests_blocked": [],
+  "api_requests_to_loopback_only": 17,
+  "real_provider_actions": false
+}

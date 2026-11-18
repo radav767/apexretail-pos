@@ -15,6 +15,11 @@ from app.core.config import Settings
 class JwtConfigurationTests(unittest.TestCase):
     secret = 'synthetic-configuration-test-key-0123456789'
 
+    def test_invalid_sink_key_fails_at_configuration_for_all_accounts(self):
+        with self.assertRaises(ValidationError):
+            Settings(database_url='postgresql://synthetic@localhost/unreachable', jwt_secret=self.secret,
+                     app_env='test', business_email_mode='sink', business_email_key='invalid-test-key', _env_file=None)
+
     def settings(self, secret):
         return Settings(database_url='postgresql://synthetic@localhost/unreachable',
                         jwt_secret=secret, _env_file=None)

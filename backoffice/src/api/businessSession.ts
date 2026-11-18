@@ -1,7 +1,10 @@
 export type BusinessContext = { token: string; company_id: string; user: { id: string } };
 let generation = 0;
+const channel = typeof BroadcastChannel === 'function' && typeof window.location !== 'undefined' ? new BroadcastChannel('apex-business-context') : null;
+if (channel) channel.onmessage = event => { if (event.data === 'clear') clearBusinessContext(false); };
 export const contextGeneration = () => generation;
-export function clearBusinessContext() {
+export function clearBusinessContext(notify = true) {
+  if (notify) channel?.postMessage('clear');
   generation += 1;
   for (const store of [localStorage, sessionStorage]) {
     store.removeItem('backoffice_token'); store.removeItem('backoffice_company_id'); store.removeItem('backoffice_user_id');

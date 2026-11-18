@@ -1,0 +1,9 @@
+vite v8.1.6 building client environment for production...
+[2K
+transforming...✓ 15 modules transformed.
+rendering chunks...
+computing gzip size...
+../../apex-phase11-browser-dialog-dist/index.html                  0.21 kB │ gzip:  0.17 kB
+../../apex-phase11-browser-dialog-dist/assets/index-IGtQr0rk.js  192.44 kB │ gzip: 60.85 kB
+
+✓ built in 549ms

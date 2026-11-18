@@ -1,0 +1,24 @@
+{
+  "fresh_owner_concurrent_statuses": [
+    200,
+    200
+  ],
+  "fresh_owner_lock_order_no_deadlock": true,
+  "synthetic_only": true,
+  "refresh_concurrent_statuses": [
+    200,
+    401
+  ],
+  "refresh_family_revoked": true,
+  "reset_concurrent_statuses": [
+    200,
+    400
+  ],
+  "final_user_version": 1,
+  "handoff_concurrent_statuses": [
+    200,
+    401
+  ],
+  "single_reset_audit": true,
+  "single_handoff_audit": true
+}

@@ -64,6 +64,10 @@ class Settings(BaseSettings):
             raise ValueError('BACKOFFICE_ORIGIN must be an HTTPS origin without path or credentials')
         if self.business_email_mode == 'sink' and (self.app_env != 'test' or not self.business_email_key):
             raise ValueError('Business email sink requires APP_ENV=test and an explicit encryption key')
+        if self.business_email_mode == 'sink':
+            from cryptography.fernet import Fernet
+            try: Fernet(self.business_email_key.get_secret_value().encode())
+            except (ValueError, TypeError): raise ValueError('BUSINESS_EMAIL_KEY must be a valid Fernet key') from None
         return self
 
     class Config:

@@ -240,7 +240,11 @@ class AuthService:
     async def login(self, data):
         user = await self.repo.get_user_by_email(data.email.lower())
 
-        if not user or not verify_password(data.password, user.password_hash):
+        try:
+            valid_password = user is not None and verify_password(data.password, user.password_hash)
+        except (ValueError, TypeError):
+            valid_password = False
+        if not valid_password:
             raise HTTPException(401, "Invalid email or password")
 
         if user.role not in {"owner", "administrator"}:

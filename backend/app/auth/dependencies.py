@@ -30,6 +30,7 @@ class AuthActor:
     permissions: dict[str, bool] | None = None
     pos_session: PosSession | None = None
     business_session_id: UUID | None = None
+    authenticated_session_version: int | None = None
 
 
 async def get_auth_actor(
@@ -217,6 +218,7 @@ async def resolve_auth_actor(
         user=user,
         permissions=None,
         business_session_id=session_id if 'sid' in payload else None,
+        authenticated_session_version=session_version,
     )
 
 

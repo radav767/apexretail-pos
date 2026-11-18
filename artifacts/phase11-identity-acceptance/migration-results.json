@@ -1,0 +1,16 @@
+{
+  "synthetic_only": true,
+  "populated_before": {
+    "users": 2,
+    "sha256": "74a873400e8a2c55e85b7c1204a4d81934af96b306048511c20283b6f3e9b486",
+    "head": "p11a_user_session_revocation"
+  },
+  "populated_after": {
+    "users": 2,
+    "sha256": "74a873400e8a2c55e85b7c1204a4d81934af96b306048511c20283b6f3e9b486",
+    "head": "p11d_backoffice_handoff"
+  },
+  "fresh_head": "p11d_backoffice_handoff",
+  "all_existing_user_fields_preserved": true,
+  "rollback": "Every new migration refuses downgrade; compatible application must retain p11a epoch and p11b session enforcement"
+}

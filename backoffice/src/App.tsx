@@ -1,5 +1,5 @@
 import { readAuthEntry } from './api/authEntry';
-import { clearBusinessContext, installBusinessContext } from './api/businessSession';
+import { clearBusinessContext, installBusinessContext, contextGeneration } from './api/businessSession';
 import { refreshBusinessSession, beginBusinessLogin } from './api/client';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
@@ -61,15 +61,18 @@ function localDateValue(date: Date): string {
   return adjusted.toISOString().slice(0, 10);
 }
 
-const authEntry = readAuthEntry(window.location, window.history);
+const initialAuthEntry = readAuthEntry(window.location, window.history);
 
 function App() {
+  const [authEntry, setAuthEntry] = useState(initialAuthEntry);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'forgot' | 'reset'>(authEntry.reset !== null ? 'reset' : 'login');
+  const [authMode, setAuthMode] = useState<'login' | 'forgot' | 'reset' | 'handoff'>(authEntry.handoff !== null ? 'handoff' : authEntry.reset !== null ? 'reset' : 'login');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const handoffReceiver = useRef(crypto.randomUUID());
+  const [handoffIdentity, setHandoffIdentity] = useState<{ email: string; company_id: string; branch_id: string; role: string; company_name: string; branch_name: string } | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loggedIn, setLoggedIn] = useState(
@@ -113,11 +116,42 @@ function App() {
       setDashboardSummary(null); setDashboardShops([]); setDrilldownData(null);
     };
     window.addEventListener('business-context-changed', update);
-    if (authEntry.reset !== null || authEntry.handoff !== null) {
-      void beginBusinessLogin().catch(() => setMessage('Connect to the server before continuing.'));
-    } else void refreshBusinessSession();
-    return () => window.removeEventListener('business-context-changed', update);
+    const receiveEntry = () => {
+      const entry = readAuthEntry(window.location, window.history);
+      if (entry.reset === null && entry.handoff === null) return;
+      clearBusinessContext(); setHandoffIdentity(null); setMessage('');
+      setAuthMode(entry.handoff !== null ? 'handoff' : 'reset'); setAuthEntry(entry);
+    };
+    window.addEventListener('hashchange', receiveEntry);
+    return () => { window.removeEventListener('business-context-changed', update); window.removeEventListener('hashchange', receiveEntry); };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (authEntry.reset !== null || authEntry.handoff !== null) {
+      void beginBusinessLogin().then(async epoch => {
+        if (cancelled || epoch !== contextGeneration()) return;
+        if (authEntry.handoff !== null) {
+          const { data } = await api.post('/auth/handoff/inspect', { code: authEntry.handoff, receiver: handoffReceiver.current });
+          if (!cancelled && epoch === contextGeneration()) setHandoffIdentity(data);
+        }
+      }).catch(() => { if (!cancelled) setMessage('This entry link is invalid or expired, or the server is unavailable. Return to POS or request a new recovery link.'); });
+    } else void refreshBusinessSession();
+    return () => { cancelled = true; };
+  }, [authEntry]);
+
+  async function acceptHandoff() {
+    if (!handoffIdentity) return;
+    setLoading(true); setMessage('');
+    const epoch = contextGeneration();
+    try {
+      const { data } = await api.post('/auth/handoff/consume', { code: authEntry.handoff, receiver: handoffReceiver.current,
+        company_id: handoffIdentity.company_id, branch_id: handoffIdentity.branch_id, role: handoffIdentity.role });
+      if (!installBusinessContext(data, epoch)) return;
+      setHandoffIdentity(null); setPassword('');
+    } catch { clearBusinessContext(); setHandoffIdentity(null); setMessage('Handoff expired or was already used. Return to POS and open Backoffice again.'); }
+    finally { setLoading(false); }
+  }
 
   async function recoverPassword() {
     setLoading(true); setMessage('');
@@ -488,6 +522,13 @@ function App() {
           </button>
 
           <button onClick={() => { setAuthMode('forgot'); setMessage(''); }}>Forgot password?</button>
+          </> : authMode === 'handoff' ? <>
+            <h2>Confirm your Backoffice account</h2>
+            {handoffIdentity ? <>
+              <p>Continue as {handoffIdentity.email} ({handoffIdentity.role}) for {handoffIdentity.company_name}, {handoffIdentity.branch_name}.</p>
+              <button className="primary-button" disabled={loading} onClick={acceptHandoff}>{loading ? 'Opening...' : 'Continue with this account'}</button>
+            </> : <p>Return to POS if this link has expired.</p>}
+            <button onClick={() => { clearBusinessContext(); setHandoffIdentity(null); setAuthMode('login'); }}>Use password login instead</button>
           </> : <>
             <h2>{authMode === 'forgot' ? 'Recover your account' : 'Choose a new password'}</h2>
             {authMode === 'forgot' ? <label>Email<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label> : <>

@@ -84,3 +84,9 @@ class PasswordRecoveryTests(fixtures.UserSessionTests):
         with self.assertRaises(ValueError):
             Settings(database_url='postgresql://synthetic@localhost/unreachable', jwt_secret='synthetic-key-at-least-32-bytes-long',
                      app_env='production', business_email_mode='sink', business_email_key=Fernet.generate_key().decode(), _env_file=None)
+
+    async def test_oversized_login_password_never_discloses_account_with_server_error(self):
+        for email in (self.user.email, 'absent@example.com'):
+            result = await self.client.post('/api/auth/login', json={'email': email, 'password': 'x' * 100})
+            self.assertEqual(result.status_code, 401)
+            self.assertEqual(result.json()['detail'], 'Invalid email or password')

@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 
 from app.auth.registration_currencies import REGISTRATION_CURRENCY_BY_CODE
 from typing import Literal
+from uuid import UUID
 
 
 class RegisterRequest(BaseModel):
@@ -70,6 +71,8 @@ class RegisterRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_supported_base_currency(self):
+        if len(self.password.encode('utf-8')) > 72 or len(self.confirm_password.encode('utf-8')) > 72:
+            raise ValueError('Passwords must use at most 72 UTF-8 bytes')
         definition = REGISTRATION_CURRENCY_BY_CODE.get(self.base_currency_code)
         if definition is None:
             raise ValueError("Select a supported base currency")
@@ -87,7 +90,7 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(max_length=200)
     client: Literal['pos', 'backoffice'] = 'pos'
     remember_me: bool = False
 
@@ -106,3 +109,21 @@ class ResetPasswordRequest(BaseModel):
         if self.password != self.confirm_password or len(self.password.encode('utf-8')) > 72:
             raise ValueError('Passwords must match and use at most 72 UTF-8 bytes')
         return self
+
+
+class HandoffCreate(BaseModel):
+    company_id: UUID
+    branch_id: UUID
+    owner_email: EmailStr | None = None
+    owner_password: str | None = Field(default=None, max_length=200)
+
+
+class HandoffInspect(BaseModel):
+    code: str = Field(min_length=32, max_length=200)
+    receiver: str = Field(min_length=32, max_length=100)
+
+
+class HandoffConsume(HandoffInspect):
+    company_id: UUID
+    branch_id: UUID
+    role: Literal['owner', 'administrator']

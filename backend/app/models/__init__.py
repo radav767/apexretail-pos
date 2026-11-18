@@ -48,3 +48,4 @@ from app.models.fiscal import FiscalConfiguration, FiscalPreparation, FiscalAudi
 from app.models.fiscal_protocol import FiscalProtocolState, FiscalDocument, FiscalProtocolEvent
 from app.models.business_auth import BusinessSession, BusinessRefreshCredential
 from app.models.business_auth import PasswordResetGrant, BusinessEmailOutbox, BusinessAuthThrottle
+from app.models.business_auth import BackofficeHandoff

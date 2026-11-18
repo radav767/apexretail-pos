@@ -1,3 +1,4 @@
+import BackofficeHandoffDialog from './components/BackofficeHandoffDialog';
 import { applyDiscounts } from "./discounts";
 import { hasActiveCashierShift, saleShiftError } from "./shiftPolicy";
 import { checkoutPrice, accumulatedWeightedQuantity } from "./business/pricing";
@@ -442,6 +443,7 @@ const [loggedIn, setLoggedIn] = useState(
   const [shiftLoading, setShiftLoading] = useState(false);
   const [shiftPromptDismissed, setShiftPromptDismissed] = useState(false);
   const [cashierPin, setCashierPin] = useState("");
+  const [handoffAuthOpen, setHandoffAuthOpen] = useState(false);
   const [pinLoading, setPinLoading] = useState(false);
   const [pinMessage, setPinMessage] = useState("");
   const [pinSelection, setPinSelection] = useState<{shops: Array<{id:string;name:string}>; terminals: Array<{id:string;shop_id:string;branch_id:string;name:string;pos_number?:number|null}>; pin:string} | null>(null);
@@ -2986,16 +2988,31 @@ const [loggedIn, setLoggedIn] = useState(
     setMessage("");
   }
 
-  function openBackoffice() {
-    if (!window.matchMedia("(min-width: 1024px)").matches) {
-      setMenuOpen(false);
-    }
+  useEffect(() => { setHandoffAuthOpen(false); }, [companyId, cashier?.id, loggedIn]);
 
-    window.open(
-      import.meta.env.VITE_BACKOFFICE_URL || "https://backoffice.apexpos.cloud",
-      "_blank",
-      "noopener,noreferrer",
-    );
+  function openBackoffice() { void performBackofficeHandoff(); }
+
+  async function performBackofficeHandoff(credentials?: { owner_email: string; owner_password: string }): Promise<boolean> {
+    const scope = createBootstrapScope();
+    const sourceBranch = localStorage.getItem('branch_id');
+    if (!window.matchMedia("(min-width: 1024px)").matches) setMenuOpen(false);
+    try {
+      const { data } = await api.post('/auth/handoff', { company_id: companyId, branch_id: branchId, ...credentials });
+      if (!scope.isCurrent() || localStorage.getItem('branch_id') !== sourceBranch) return false;
+      const target = new URL(data.url);
+      const expected = new URL(import.meta.env.VITE_BACKOFFICE_URL || 'https://backoffice.apexpos.cloud');
+      if (target.origin !== expected.origin || target.protocol !== 'https:' || !target.hash.startsWith('#handoff=')) {
+        throw new Error('Backoffice destination mismatch');
+      }
+      window.open(target.toString(), '_blank', 'noopener,noreferrer');
+      setMessage('Backoffice handoff opened. Allow pop-ups if no tab appeared; the link expires in one minute.');
+      return true;
+    } catch (error) {
+      if (!scope.isCurrent()) return false;
+      if (!credentials && (error as { response?: { status?: number } })?.response?.status === 403) setHandoffAuthOpen(true);
+      setMessage(getApiErrorMessage(error, 'Sign in as this business owner or administrator to open Backoffice.'));
+      return false;
+    }
   }
 
   function logout() {
@@ -4306,6 +4323,7 @@ const [loggedIn, setLoggedIn] = useState(
         </div>
       )}
 
+      <BackofficeHandoffDialog open={handoffAuthOpen} onClose={() => setHandoffAuthOpen(false)} authenticate={(email, password) => performBackofficeHandoff({ owner_email: email, owner_password: password })} />
       {managerApproval && <ManagerApprovalDialog companyId={companyId} request={managerApproval} onCancel={() => setManagerApproval(null)} onApproved={(token) => { setDiscountAuthorizationToken(token); setManagerApproval(null); setMessage("Manager approval confirmed. Confirm payment to complete the sale."); }}/>}
 
       {variantProduct&&<div style={overlay}><div style={modalCard} className="pos-variant-dialog" role="dialog"><h2>Choose {variantProduct.name}</h2><div className="pos-variant-options">{variantProduct.variants?.map(variant=><button key={variant.id} disabled={Number(variant.stock_qty)<=0} onClick={()=>addVariant(variantProduct,variant)}><strong>{variant.name}</strong><span>{formatMoney(variant.selling_price??variantProduct.selling_price)} · {variant.stock_qty} available</span></button>)}</div><button style={secondaryButton} onClick={()=>setVariantProduct(null)}>Cancel</button></div></div>}

@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.auth.schema import RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.auth.schema import RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest, HandoffCreate, HandoffInspect, HandoffConsume
 from app.auth.repository import AuthRepository
 from app.auth.service import AuthService
 from app.auth.registration_currencies import serialize_registration_currencies
@@ -111,3 +111,40 @@ async def reset_password_endpoint(data: ResetPasswordRequest, response: Response
 @router.get("/test")
 async def auth_test():
     return {"ok": True, "message": "ApexRetail POS Auth ready"}
+
+
+@router.post('/handoff')
+async def issue_handoff(data: HandoffCreate, response: Response, actor: AuthActor = Depends(get_auth_actor), db: AsyncSession = Depends(get_db)):
+    from app.auth.handoff import issue
+    response.headers['Cache-Control'] = 'no-store'
+    if actor.actor_type == 'employee' and data.owner_email and data.owner_password:
+        from app.auth.handoff import reauthenticate_owner
+        actor = await reauthenticate_owner(db, actor, data)
+    return await issue(db, actor, data.company_id, data.branch_id)
+
+
+async def replace_handoff_context(request, response, db):
+    check_origin(request)
+    await retire_browser_session(db, request.cookies.get(COOKIE))
+    await db.commit()
+    clear_cookie(response)
+
+
+@router.post('/handoff/inspect')
+async def inspect_handoff(data: HandoffInspect, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    from app.auth.handoff import inspect
+    await replace_handoff_context(request, response, db)
+    try: return await inspect(db, data.code, data.receiver)
+    except HTTPException as error:
+        result = JSONResponse({'detail': error.detail}, status_code=error.status_code); clear_cookie(result); return result
+
+
+@router.post('/handoff/consume')
+async def consume_handoff(data: HandoffConsume, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    from app.auth.handoff import consume
+    await replace_handoff_context(request, response, db)
+    try: result, session, secret = await consume(db, data)
+    except HTTPException as error:
+        result = JSONResponse({'detail': error.detail}, status_code=error.status_code); clear_cookie(result); return result
+    set_cookie(response, secret, session)
+    return result
