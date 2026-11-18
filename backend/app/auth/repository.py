@@ -21,7 +21,8 @@ class AuthRepository:
 
     async def get_user_by_email(self, email: str):
         result = await self.db.execute(
-            select(User).where(User.email == email, User.active == True, User.deleted == False)
+            select(User).where(User.email == email, User.active == True, User.deleted == False).with_for_update()
+            .execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 

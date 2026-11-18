@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.auth.registration_currencies import REGISTRATION_CURRENCY_BY_CODE
+from typing import Literal
 
 
 class RegisterRequest(BaseModel):
@@ -87,3 +88,5 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    client: Literal['pos', 'backoffice'] = 'pos'
+    remember_me: bool = False

@@ -29,6 +29,7 @@ class AuthActor:
     employee: Employee | None = None
     permissions: dict[str, bool] | None = None
     pos_session: PosSession | None = None
+    business_session_id: UUID | None = None
 
 
 async def get_auth_actor(
@@ -196,12 +197,26 @@ async def resolve_auth_actor(
     if type(session_version) is not int or session_version != user.session_version:
         raise HTTPException(401, "User session is no longer valid")
 
+    if 'sid' in payload:
+        from app.models import BusinessSession
+        try: session_id = UUID(payload['sid'])
+        except (ValueError, TypeError, AttributeError): raise HTTPException(401, 'Invalid business session')
+        managed = (await db.execute(select(BusinessSession).where(
+            BusinessSession.id == session_id, BusinessSession.user_id == user.id,
+            BusinessSession.company_id == user.company_id, BusinessSession.session_version == user.session_version,
+            BusinessSession.audience == 'backoffice', BusinessSession.revoked_at.is_(None),
+            BusinessSession.expires_at > datetime.now(timezone.utc),
+        ))).scalar_one_or_none()
+        if managed is None or payload.get('client') != 'backoffice':
+            raise HTTPException(401, 'Business session is no longer valid')
+
     return AuthActor(
         actor_type="user",
         company_id=user.company_id,
         role=user.role,
         user=user,
         permissions=None,
+        business_session_id=session_id if 'sid' in payload else None,
     )
 
 

@@ -46,3 +46,4 @@ from app.models.batch_returns import BatchReturnHold, BatchReturnInspection, Bat
 from app.models.commercial import PlatformAdmin, PlatformSession, PlatformAudit, BillingPlan, BillingInvoice, BillingPayment, BillingNotice
 from app.models.fiscal import FiscalConfiguration, FiscalPreparation, FiscalAudit
 from app.models.fiscal_protocol import FiscalProtocolState, FiscalDocument, FiscalProtocolEvent
+from app.models.business_auth import BusinessSession, BusinessRefreshCredential

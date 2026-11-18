@@ -1,3 +1,5 @@
+import { clearBusinessContext, installBusinessContext } from './api/businessSession';
+import { refreshBusinessSession, beginBusinessLogin } from './api/client';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import "./App.css";
@@ -61,13 +63,14 @@ function localDateValue(date: Date): string {
 function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loggedIn, setLoggedIn] = useState(
-    Boolean(localStorage.getItem("backoffice_token")),
+    false,
   );
   const [companyId, setCompanyId] = useState(
-    localStorage.getItem("backoffice_company_id") || "",
+    "",
   );
   const [dashboardSummary, setDashboardSummary] =
     useState<DashboardPhase3Summary | null>(null);
@@ -96,25 +99,27 @@ function App() {
   const [drilldownLoading, setDrilldownLoading] = useState(false);
   const [drilldownError, setDrilldownError] = useState("");
 
+  useEffect(() => {
+    const update = () => {
+      dashboardRequest.current += 1;
+      setCompanyId(sessionStorage.getItem('backoffice_company_id') || '');
+      setLoggedIn(Boolean(sessionStorage.getItem('backoffice_token')));
+      setDashboardSummary(null); setDashboardShops([]); setDrilldownData(null);
+    };
+    window.addEventListener('business-context-changed', update);
+    void refreshBusinessSession();
+    return () => window.removeEventListener('business-context-changed', update);
+  }, []);
+
   async function login() {
     try {
       setLoading(true);
       setMessage("");
 
-      const response = await api.post("/auth/login", {
-        email,
-        password,
-      });
-
-      localStorage.setItem(
-        "backoffice_token",
-        response.data.token,
-      );
-
-      localStorage.setItem(
-        "backoffice_company_id",
-        response.data.company_id,
-      );
+      const epoch = await beginBusinessLogin();
+      const response = await api.post("/auth/login", { email, password, client: 'backoffice', remember_me: rememberMe });
+      if (!installBusinessContext(response.data, epoch)) return;
+      setPassword('');
 
       setCompanyId(response.data.company_id);
       setLoggedIn(true);
@@ -361,9 +366,14 @@ function App() {
     [loadDashboardSummary],
   );
 
-  function logout() {
-    localStorage.removeItem("backoffice_token");
-    localStorage.removeItem("backoffice_company_id");
+  async function logout() {
+    try {
+      await api.post('/auth/logout', {}, { headers: { Authorization: `Bearer ${sessionStorage.getItem('backoffice_token') || ''}` } });
+    } catch {
+      try { await api.post('/auth/logout-browser'); }
+      catch { setMessage('Server logout failed. Reconnect and retry to revoke this session.'); return; }
+    }
+    clearBusinessContext();
 
     dashboardRequest.current += 1;
     setDashboardLoading(false);
@@ -444,6 +454,7 @@ function App() {
             }}
           />
 
+          <label><input type="checkbox" checked={rememberMe} onChange={event => setRememberMe(event.target.checked)} /> Remember Me (30 days)</label>
           <button
             className="primary-button"
             onClick={login}

@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     product_image_root: str = "/var/lib/apexretail/product-images"
     product_image_max_bytes: int = 5242880
     platform_mfa_key: SecretStr | None = None
+    backoffice_origin: str = 'https://backoffice.apexpos.cloud'
 
     @model_validator(mode='after')
     def validate_jwt_configuration(self):

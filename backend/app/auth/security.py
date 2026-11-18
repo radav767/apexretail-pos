@@ -109,6 +109,7 @@ def create_access_token(
     email: str,
     *,
     session_version: int = 0,
+    session_id: str | None = None,
 ) -> str:
     if type(session_version) is not int or session_version < 0:
         raise ValueError('Invalid user session version')
@@ -118,8 +119,9 @@ def create_access_token(
             "email": email,
             "token_type": "user",
             "session_version": session_version,
+            **({'sid': session_id, 'client': 'backoffice'} if session_id else {}),
         },
-        ACCESS_TOKEN_MINUTES,
+        15 if session_id else ACCESS_TOKEN_MINUTES,
     )
 
 
