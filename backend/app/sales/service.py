@@ -959,6 +959,11 @@ class SalesService:
         *,
         actor: AuthActor | None,
     ):
+        if hasattr(self.repo, "begin_command"):
+            from app.sales.commands import actor_identity
+            from app.subscriptions.write_policy import require_new_write
+            actor_identity(actor, data.company_id)
+            await require_new_write(self.repo.db, data.company_id)
         if actor is not None:
             if actor.company_id != data.company_id:
                 raise HTTPException(403, "Forbidden")
@@ -980,6 +985,10 @@ class SalesService:
         )
         if original_sale is None:
             raise HTTPException(404, "Original sale not found")
+
+        if actor is not None:
+            enforce_actor_branch(actor, original_sale.branch_id)
+            enforce_actor_branch(actor, data.branch_id or original_sale.branch_id)
 
         sale_items = {
             item.id: item

@@ -2,6 +2,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
+from app.printing.service import permit
+from app import financial_commands
+from app.subscriptions.write_policy import require_new_write
 
 from app.expenses.repository import ExpenseRepository
 from app.expenses.schema import ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCreate
@@ -34,7 +37,9 @@ class ExpenseService:
         return expense
 
     async def create_category(self, data: ExpenseCategoryCreate, actor):
+        permit(actor, "expenses_manage")
         enforce_actor_company(actor, data.company_id)
+        await require_new_write(self.repo.db, data.company_id)
         name = data.name.strip()
         if await self.repo.find_category_name(data.company_id, name):
             raise HTTPException(409, "Expense category already exists")
@@ -47,7 +52,9 @@ class ExpenseService:
         return await self.repo.list_categories(company_id, active)
 
     async def update_category(self, company_id, category_id, data: ExpenseCategoryUpdate, actor):
+        permit(actor, "expenses_manage")
         enforce_actor_company(actor, company_id)
+        await require_new_write(self.repo.db, company_id)
         category = await self.repo.get_category(company_id, category_id, active_only=False)
         if not category:
             raise HTTPException(404, "Expense category not found")
@@ -65,7 +72,9 @@ class ExpenseService:
         return await self.repo.save(category, audit)
 
     async def delete_category(self, company_id, category_id, actor):
+        permit(actor, "expenses_manage")
         enforce_actor_company(actor, company_id)
+        await require_new_write(self.repo.db, company_id)
         category = await self.repo.get_category(company_id, category_id, active_only=False)
         if not category:
             raise HTTPException(404, "Expense category not found")
@@ -75,22 +84,17 @@ class ExpenseService:
         await self.repo.delete_category(category, audit)
 
     async def create_expense(self, data: ExpenseCreate, actor):
+        permit(actor, "expenses_create")
         enforce_actor_company(actor, data.company_id)
         enforce_actor_branch(actor, data.branch_id)
+        data = data.model_copy()
+        command_hash = await financial_commands.lock_command(self.repo.db, "expenses", data, actor)
         existing = await self.repo.get_by_key(data.company_id, data.idempotency_key)
         if existing:
-            if (
-                existing.category_id != data.category_id
-                or existing.branch_id != data.branch_id
-                or (data.amount is not None and existing.amount != data.amount)
-                or (data.original_amount is not None and existing.original_amount != data.original_amount)
-                or (data.currency_code is not None and existing.currency_code != data.currency_code.strip().upper())
-                or (data.exchange_rate_id is not None and existing.exchange_rate_id != data.exchange_rate_id)
-                or (data.shift_id is not None and existing.shift_id != data.shift_id)
-                or existing.payment_method != data.payment_method
-            ):
-                raise HTTPException(409, "Idempotency key was already used for a different expense")
+            await financial_commands.verify_replay(self.repo.db, existing, data, actor, command_hash)
             return await self.attach_actor(existing)
+        await require_new_write(self.repo.db, data.company_id)
+
         branch = await self.repo.get_branch(data.company_id, data.branch_id)
         if not branch:
             raise HTTPException(404, "Branch not found")
@@ -135,6 +139,7 @@ class ExpenseService:
             idempotency_key=data.idempotency_key.strip(),
         )
         audit = AuditEvent(company_id=data.company_id, actor_user_id=expense.actor_user_id, actor_employee_id=expense.employee_id, device_id=expense.device_id, action="expense_posted", details={"amount": str(base_amount), "original_amount": str(expense.original_amount), "currency": expense.currency_code, "rate": str(expense.exchange_rate_snapshot), "payment_method": data.payment_method, "category_id": str(category.id), "shift_id": str(expense.shift_id) if expense.shift_id else None})
+        await financial_commands.stamp(self.repo.db, expense, actor, command_hash)
         return await self.attach_actor(await self.repo.save(expense, audit))
 
     async def list_expenses(self, company_id, actor, **filters):

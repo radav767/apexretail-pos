@@ -34,7 +34,7 @@ async def get_receivable(company_id: UUID, receivable_id: UUID, service: CreditS
 
 
 @router.post("/settlements", response_model=SettlementOut)
-async def create_settlement(data: SettlementCreate, service: CreditService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("credit_settlements")), _entitlement: None = Depends(require_billable_body_company)):
+async def create_settlement(data: SettlementCreate, service: CreditService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("credit_settlements"))):
     return await service.create_settlement(data, actor)
 
 

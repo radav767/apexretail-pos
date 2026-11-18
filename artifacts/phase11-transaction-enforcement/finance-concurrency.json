@@ -1,0 +1,26 @@
+{
+  "synthetic_only": true,
+  "equal_expense_and_collection_retries_one_result": true,
+  "conflicting_payload_statuses": {
+    "expense": [
+      200,
+      409
+    ],
+    "collection": [
+      200,
+      409
+    ]
+  },
+  "different_collection_keys_serialized_balance": true,
+  "counts": {
+    "expenses": 2,
+    "collections": 4,
+    "sales": 1,
+    "movements": 1
+  },
+  "outstanding": "4.00",
+  "stock": "98.000",
+  "committed_replay_after_suspension": true,
+  "new_writes_denied": true,
+  "provider_actions": false
+}

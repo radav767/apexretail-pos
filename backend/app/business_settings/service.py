@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.business_settings.schema import CompanySettingsUpdate
+from app.subscriptions.write_policy import require_new_write
 from app.models.company import Company
 from app.models.company_settings import CompanySetting
 from app.models.shop import Shop
@@ -188,8 +189,9 @@ class BusinessSettingsService:
         company_id: UUID,
         data: CompanySettingsUpdate,
     ) -> dict:
+        await require_new_write(self.db, company_id)
         company = await self.get_company(company_id)
-        setting = await self.get_or_create_setting(company_id)
+        setting = await self.get_or_create_setting(company_id, commit=False)
         values = data.model_dump(exclude_unset=True)
 
         if setting.base_currency_id is not None and any(
@@ -295,8 +297,9 @@ class BusinessSettingsService:
         company_id: UUID,
         data,
     ) -> dict:
+        await require_new_write(self.db, company_id)
         company = await self.get_company(company_id)
-        setting = await self.get_or_create_setting(company_id)
+        setting = await self.get_or_create_setting(company_id, commit=False)
         values = data.model_dump(exclude_unset=True)
 
         for field in {
@@ -341,8 +344,9 @@ class BusinessSettingsService:
         company_id: UUID,
         data,
     ) -> dict:
+        await require_new_write(self.db, company_id)
         await self.get_company(company_id)
-        setting = await self.get_or_create_setting(company_id)
+        setting = await self.get_or_create_setting(company_id, commit=False)
         values = data.model_dump(exclude_unset=True)
 
         for field in values:
@@ -390,6 +394,7 @@ class BusinessSettingsService:
         shop_id: UUID,
         data,
     ) -> dict:
+        await require_new_write(self.db, company_id)
         await self.get_company(company_id)
         result = await self.db.execute(
             select(Shop).where(

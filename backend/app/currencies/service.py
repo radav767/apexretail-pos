@@ -5,6 +5,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
+from app.subscriptions.write_policy import require_new_write
+
 from app.currencies.repository import CurrencyRepository
 from app.currencies.schema import CurrencyCreate, CurrencyUpdate, ExchangeRateCreate
 from app.financial_access import enforce_actor_company
@@ -108,6 +110,7 @@ class CurrencyService:
     async def create(self, data: CurrencyCreate, actor):
         enforce_actor_company(actor, data.company_id)
         self.enforce_currency_admin(actor)
+        await require_new_write(self.repo.db, data.company_id)
         settings = await self.repo.settings(data.company_id, for_update=True)
         if settings is None:
             raise HTTPException(404, "Company settings not found")
@@ -133,6 +136,7 @@ class CurrencyService:
     async def set_multi_currency(self, company_id, enabled, actor):
         enforce_actor_company(actor, company_id)
         self.enforce_currency_admin(actor)
+        await require_new_write(self.repo.db, company_id)
         settings = await self.repo.settings(company_id, for_update=True)
         if settings is None:
             raise HTTPException(404, "Company settings not found")
@@ -151,6 +155,7 @@ class CurrencyService:
     async def update(self, company_id, currency_id, data: CurrencyUpdate, actor):
         enforce_actor_company(actor, company_id)
         self.enforce_currency_admin(actor)
+        await require_new_write(self.repo.db, company_id)
         currency = await self.repo.get(company_id, currency_id, for_update=True)
         settings = await self.repo.settings(company_id, for_update=True)
         if currency is None or settings is None:
@@ -181,6 +186,7 @@ class CurrencyService:
     async def set_base(self, company_id, currency_id, actor):
         enforce_actor_company(actor, company_id)
         self.enforce_currency_admin(actor)
+        await require_new_write(self.repo.db, company_id)
         settings = await self.repo.settings(company_id, for_update=True)
         currencies = await self.repo.list(company_id, for_update=True)
         selected = next((row for row in currencies if row.id == currency_id), None)
@@ -231,6 +237,7 @@ class CurrencyService:
     async def create_rate(self, data: ExchangeRateCreate, actor):
         enforce_actor_company(actor, data.company_id)
         self.enforce_currency_admin(actor)
+        await require_new_write(self.repo.db, data.company_id)
         if data.effective_at.tzinfo is None or data.effective_at.utcoffset() is None:
             raise HTTPException(400, "effective_at must include a timezone")
         currency = await self.repo.get(data.company_id, data.currency_id, for_update=True)

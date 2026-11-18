@@ -1,9 +1,12 @@
 from decimal import Decimal
 
 from fastapi import HTTPException
+from app.printing.service import permit
 
 from app.customers.repository import CustomerRepository
 from app.customers.schema import CreditPolicy, CustomerCreate, CustomerUpdate
+from app.financial_access import enforce_actor_company
+from app.subscriptions.write_policy import require_new_write
 from app.models import AuditEvent, Customer
 
 
@@ -55,6 +58,9 @@ class CustomerService:
         return {column.name: getattr(customer, column.name) for column in customer.__table__.columns if column.name not in {"deleted", "created_at", "updated_at"}} | {"outstanding_balance": balance, "available_credit": available}
 
     async def create(self, data: CustomerCreate, actor):
+        permit(actor, "customers_view")
+        enforce_actor_company(actor, data.company_id)
+        await require_new_write(self.repo.db, data.company_id)
         self.enforce_cashier_create_policy(data, actor)
         code = data.customer_code.strip().upper()
         if await self.repo.code_exists(data.company_id, code):
@@ -85,6 +91,9 @@ class CustomerService:
         return [self.view(customer, balance) for customer, balance in result]
 
     async def update(self, company_id, customer_id, data: CustomerUpdate, actor):
+        permit(actor, "customers_view")
+        enforce_actor_company(actor, company_id)
+        await require_new_write(self.repo.db, company_id)
         customer = await self.repo.get(company_id, customer_id, for_update=True)
         if not customer:
             raise HTTPException(404, "Customer not found")

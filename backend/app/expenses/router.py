@@ -41,7 +41,7 @@ async def delete_category(company_id: UUID, category_id: UUID, service: ExpenseS
 
 
 @router.post("", response_model=ExpenseOut)
-async def create_expense(data: ExpenseCreate, service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("expenses_create")), _entitlement: None = Depends(require_billable_body_company)):
+async def create_expense(data: ExpenseCreate, service: ExpenseService = Depends(get_service), actor: AuthActor = Depends(require_body_permission("expenses_create"))):
     return await service.create_expense(data, actor)
 
 

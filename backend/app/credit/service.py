@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
+from app.printing.service import permit
+from app import financial_commands
+from app.subscriptions.write_policy import require_new_write
 
 from app.credit.repository import CreditRepository
 from app.credit.schema import SettlementCreate
@@ -73,14 +76,18 @@ class CreditService:
         return receivable
 
     async def create_settlement(self, data: SettlementCreate, actor):
+        permit(actor, "credit_settlements")
         enforce_actor_company(actor, data.company_id)
         enforce_actor_branch(actor, data.branch_id)
+        data = data.model_copy()
+        command_hash = await financial_commands.lock_command(self.repo.db, "credit", data, actor)
         existing = await self.repo.get_settlement_by_key(data.company_id, data.idempotency_key)
         if existing:
-            self.ensure_same_request(existing, data)
+            await financial_commands.verify_replay(self.repo.db, existing, data, actor, command_hash)
             receivable = await self.repo.get_receivable(data.company_id, existing.receivable_id)
             actor_id, actor_name = await self.repo.actor_identity(data.company_id, existing.cashier_employee_id, existing.actor_user_id)
             return self.settlement_view(existing, receivable.outstanding_balance if receivable else None, actor_id, actor_name)
+        await require_new_write(self.repo.db, data.company_id)
 
         branch = await self.repo.get_branch(data.company_id, data.branch_id)
         if not branch:
@@ -93,11 +100,6 @@ class CreditService:
         if not receivable:
             raise HTTPException(404, "Receivable not found")
         enforce_actor_branch(actor, receivable.branch_id)
-        existing = await self.repo.get_settlement_by_key(data.company_id, data.idempotency_key)
-        if existing:
-            self.ensure_same_request(existing, data)
-            actor_id, actor_name = await self.repo.actor_identity(data.company_id, existing.cashier_employee_id, existing.actor_user_id)
-            return self.settlement_view(existing, receivable.outstanding_balance, actor_id, actor_name)
         outstanding = Decimal(receivable.outstanding_balance)
         currency_repository = CurrencyRepository(self.repo.db)
         currency_service = CurrencyService(currency_repository)
@@ -179,6 +181,7 @@ class CreditService:
             device_id=settlement.device_id,
             details={"settlement_id": str(settlement.id), "receivable_id": str(receivable.id), "amount": str(amount), "original_amount": str(settlement.original_amount), "tendered_amount_original": str(settlement.tendered_amount_original), "change_amount_original": str(settlement.change_amount_original), "currency": settlement.payment_currency_code, "rate": str(settlement.exchange_rate_snapshot), "payment_method": data.payment_method, "shift_id": str(settlement.shift_id) if settlement.shift_id else None},
         )
+        await financial_commands.stamp(self.repo.db, settlement, actor, command_hash)
         saved = await self.repo.save_settlement(receivable, settlement, audit)
         actor_id, actor_name = await self.repo.actor_identity(data.company_id, saved.cashier_employee_id, saved.actor_user_id)
         return self.settlement_view(saved, new_outstanding, actor_id, actor_name)
