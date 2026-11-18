@@ -552,8 +552,8 @@ class EmployeeService:
                 if getattr(employee, "device_restricted", False) and not await self.repo.device_allowed(employee.id, device.id):
                     raise HTTPException(403, "This employee is not authorized for this POS device")
                 now = datetime.now(timezone.utc)
-                existing = (await self.repo.db.execute(select(PosSession).where(PosSession.employee_id == employee.id, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update())).scalars().first()
-                terminal_existing = (await self.repo.db.execute(select(PosSession).where(PosSession.device_id == device.id, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update())).scalars().first()
+                existing = (await self.repo.db.execute(select(PosSession).where(PosSession.employee_id == employee.id, PosSession.session_version == employee.session_version, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update())).scalars().first()
+                terminal_existing = (await self.repo.db.execute(select(PosSession).join(Employee, Employee.id == PosSession.employee_id).where(PosSession.device_id == device.id, PosSession.session_version == Employee.session_version, PosSession.revoked_at.is_(None), PosSession.expires_at > now).with_for_update(of=PosSession))).scalars().first()
                 same_device_identity = bool(
                     data.device_key
                     and hmac.compare_digest(
@@ -574,6 +574,7 @@ class EmployeeService:
                             select(PosSession)
                             .where(
                                 PosSession.employee_id == employee.id,
+                                PosSession.session_version == employee.session_version,
                                 PosSession.device_id == device.id,
                                 PosSession.revoked_at.is_(None),
                             )
@@ -646,11 +647,12 @@ class EmployeeService:
                     if prior_key_owner and prior_key_owner.id != device.id:
                         source_terminal_existing = (
                             await self.repo.db.execute(
-                                select(PosSession).where(
+                                select(PosSession).join(Employee, Employee.id == PosSession.employee_id).where(
+                                    PosSession.session_version == Employee.session_version,
                                     PosSession.device_id == prior_key_owner.id,
                                     PosSession.revoked_at.is_(None),
                                     PosSession.expires_at > now,
-                                ).with_for_update()
+                                ).with_for_update(of=PosSession)
                             )
                         ).scalars().first()
                         prior_key_owner.device_key = f"released-{uuid.uuid4()}"
@@ -703,7 +705,7 @@ class EmployeeService:
                         },
                     ))
                 token = create_session_token()
-                self.repo.db.add(PosSession(id=uuid.uuid4(), company_id=data.company_id, employee_id=employee.id, device_id=device.id, shop_id=device.shop_id, branch_id=device.branch_id, token_hash=hash_session_token(token), expires_at=now + timedelta(hours=12), last_authenticated_at=now))
+                self.repo.db.add(PosSession(id=uuid.uuid4(), session_version=employee.session_version, company_id=data.company_id, employee_id=employee.id, device_id=device.id, shop_id=device.shop_id, branch_id=device.branch_id, token_hash=hash_session_token(token), expires_at=now + timedelta(hours=12), last_authenticated_at=now))
                 self.repo.db.add(AuditEvent(
                     company_id=data.company_id, actor_employee_id=employee.id,
                     device_id=device.id, action="employee_login",

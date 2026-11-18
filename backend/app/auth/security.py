@@ -130,12 +130,16 @@ def create_employee_access_token(
     employee_id: str,
     company_id: str,
     role: str,
+    session_version: int = 0,
 ) -> str:
+    if type(session_version) is not int or session_version < 0:
+        raise ValueError('Invalid employee session version')
     return _create_token(
         {
             "sub": employee_id,
             "company_id": company_id,
             "role": role,
+            "session_version": session_version,
             "token_type": "employee",
         },
         EMPLOYEE_ACCESS_TOKEN_MINUTES,

@@ -39,6 +39,12 @@ def actor_identity(actor, company_id):
     if actor.actor_type == 'user' and entity.role not in {'owner', 'administrator'}: raise HTTPException(403, 'Permission denied')
     if actor.actor_type == 'user' and actor.authenticated_session_version is not None and actor.authenticated_session_version != entity.session_version:
         raise HTTPException(401, 'User session is no longer valid')
+    if actor.actor_type == 'employee':
+        version = actor.authenticated_session_version
+        if version is not None and version != entity.session_version:
+            raise HTTPException(401, 'Employee session is no longer valid')
+        if actor.pos_session and (actor.pos_session.revoked_at or actor.pos_session.session_version != entity.session_version):
+            raise HTTPException(401, 'Employee session is no longer valid')
     return entity.id
 
 

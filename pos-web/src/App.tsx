@@ -1,3 +1,4 @@
+import { requestPosLogout } from "./api/posLogout";
 import BackofficeHandoffDialog from './components/BackofficeHandoffDialog';
 import { applyDiscounts } from "./discounts";
 import { hasActiveCashierShift, saleShiftError } from "./shiftPolicy";
@@ -2160,7 +2161,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   function switchCashier() {
-    void api.post("/employees/session/logout").catch(() => undefined);
+    const revocation = requestPosLogout(api, false);
     advanceAuthenticationEpoch();
     localStorage.removeItem("employee_id");
     localStorage.removeItem("employee_token");
@@ -2180,6 +2181,10 @@ const [loggedIn, setLoggedIn] = useState(
     setReceiptItems([]);
     setMessage("");
     nonCreditSaleIdentityRef.current = null;
+    const signedOutScope = createBootstrapScope();
+    void revocation.catch(() => {
+      if (signedOutScope.isCurrent()) setMessage("Signed out on this POS. Server logout could not be confirmed. Reconnect and sign in to revoke sessions.");
+    });
   }
 
 
@@ -3016,7 +3021,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   function logout() {
-    void api.post("/employees/session/logout").catch(() => undefined);
+    const revocation = requestPosLogout(api, true);
     advanceAuthenticationEpoch();
     setTerminalReady(false);
     setTerminalChecking(false);
@@ -3049,6 +3054,10 @@ const [loggedIn, setLoggedIn] = useState(
     nonCreditSaleIdentityRef.current = null;
     setAmountReceived("");
     setAuthMode("login");
+    const signedOutScope = createBootstrapScope();
+    void revocation.catch(() => {
+      if (signedOutScope.isCurrent()) setMessage("Signed out on this POS. Server logout could not be confirmed. Reconnect and sign in to revoke sessions.");
+    });
   }
 
   useEffect(() => {

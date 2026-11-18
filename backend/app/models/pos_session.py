@@ -1,11 +1,12 @@
 import uuid
-from sqlalchemy import Column, DateTime, ForeignKey, String, func
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 
 class PosSession(Base):
     __tablename__ = "pos_sessions"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_version = Column(Integer, nullable=False, default=0, server_default="0")
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
     employee_id = Column(UUID(as_uuid=True), ForeignKey("employees.id", ondelete="CASCADE"), nullable=False, index=True)
     device_id = Column(UUID(as_uuid=True), ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)

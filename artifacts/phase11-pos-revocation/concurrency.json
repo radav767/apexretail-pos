@@ -1,0 +1,8 @@
+{
+  "synthetic_only": true,
+  "pin_read_before_logout_cannot_resurrect": true,
+  "fresh_pin_after_logout_works": true,
+  "concurrent_revocations_atomic_final_epoch": 3,
+  "previous_opaque_and_jwt_invalid": true,
+  "real_provider_actions": false
+}

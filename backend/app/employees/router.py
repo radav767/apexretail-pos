@@ -15,6 +15,7 @@ from app.auth.dependencies import (
 from app.models import AuditEvent, Device, PosSession
 from datetime import datetime, timezone
 from app.db.session import get_db
+from app.employees.logout import LogoutContext, logout_context
 from app.employees.repository import EmployeeRepository
 from app.employees.schema import (
     EmployeeCreate,
@@ -59,16 +60,8 @@ async def employee_pin_login(
     return await service.pin_login(data)
 
 @router.post("/session/logout")
-async def employee_session_logout(actor: AuthActor = Depends(get_auth_actor), db: AsyncSession = Depends(get_db)):
-    if actor.actor_type != "employee":
-        return {"ok": True}
-    rows = await db.execute(__import__('sqlalchemy').select(PosSession).where(PosSession.employee_id == actor.employee.id, PosSession.revoked_at.is_(None)))
-    now = datetime.now(timezone.utc)
-    for session in rows.scalars().all():
-        session.revoked_at = now; session.revoke_reason = "logout"
-    db.add(AuditEvent(company_id=actor.company_id, actor_employee_id=actor.employee.id, device_id=actor.pos_session.device_id if actor.pos_session else None, action="employee_logout"))
-    await db.commit()
-    return {"ok": True}
+async def employee_session_logout(data: LogoutContext | None = None, actor: AuthActor = Depends(get_auth_actor), db: AsyncSession = Depends(get_db)):
+    return await logout_context(db, actor, data)
 
 
 @router.get("/permissions/catalog")

@@ -1,3 +1,4 @@
+import { requestPosLogout } from "../src/api/posLogout.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AxiosError } from "axios";
@@ -127,4 +128,28 @@ test("re-login with an identical JWT still invalidates old startup generations",
   reset(); const scope = createBootstrapScope(); const previous = captureAuthentication();
   advanceAuthenticationEpoch();
   assert.equal(scope.isCurrent(), false); assert.notEqual(captureAuthentication().epoch, previous.epoch);
+});
+
+
+test("POS logout snapshots employee auth before local clear and uses owner only as revocation proof", async () => {
+  reset(); storage.setItem("employee_token", "employee-A"); storage.setItem("employee_id", "employee-A");
+  const reply = deferred<void>(); let calls = 0;
+  api.defaults.adapter = async config => {
+    calls += 1;
+    assert.equal(config.url, "/employees/session/logout");
+    assert.equal(config.headers.Authorization, "Bearer employee-A");
+    assert.deepEqual(JSON.parse(String(config.data)), { cached_user_token: "owner-A" });
+    await reply.promise; throw unauthorized(config);
+  };
+  const pending = requestPosLogout(api, true);
+  storage.removeItem("employee_token"); storage.removeItem("employee_id"); storage.removeItem("token"); advanceAuthenticationEpoch();
+  storage.setItem("token", "owner-B"); reply.resolve();
+  await assert.rejects(pending); assert.equal(calls, 1); assert.equal(events.length, 0);
+  assert.equal(storage.getItem("token"), "owner-B");
+  reset(); storage.setItem("employee_token", "employee-A"); storage.setItem("employee_id", "employee-A");
+  api.defaults.adapter = async config => {
+    assert.equal(config.headers.Authorization, "Bearer employee-A");
+    assert.deepEqual(JSON.parse(String(config.data)), {}); return ok(config);
+  };
+  await requestPosLogout(api, false); assert.equal(storage.getItem("token"), "owner-A");
 });

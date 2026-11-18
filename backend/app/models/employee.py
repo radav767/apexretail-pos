@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -9,6 +9,8 @@ from app.db.base import Base, BaseModel
 
 class Employee(Base, BaseModel):
     __tablename__ = "employees"
+
+    session_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     company_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

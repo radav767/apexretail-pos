@@ -90,6 +90,8 @@ async def resolve_auth_actor(
         employee = result.scalar_one_or_none()
         if not employee:
             session.revoked_at = datetime.now(timezone.utc); session.revoke_reason = "employee_inactive"; await db.commit(); return None
+        if session.company_id != employee.company_id or session.session_version != employee.session_version:
+            return None
         if getattr(employee, "device_restricted", False):
             allowed = (await db.execute(select(EmployeeDeviceAccess.id).where(
                 EmployeeDeviceAccess.employee_id == employee.id,
@@ -109,6 +111,7 @@ async def resolve_auth_actor(
             employee=employee,
             permissions=await EmployeeService.effective_permissions(employee, db),
             pos_session=session,
+            authenticated_session_version=session.session_version,
         )
         await db.commit()
         return actor
@@ -159,6 +162,10 @@ async def resolve_auth_actor(
                 "Employee session is no longer valid",
             )
 
+        session_version = payload.get('session_version', 0)
+        if type(session_version) is not int or session_version != employee.session_version:
+            raise HTTPException(401, 'Employee session is no longer valid')
+
         if getattr(employee, "device_restricted", False):
             # Legacy JWTs do not bind a register. Restricted employees must
             # authenticate through the existing device-bound POS session.
@@ -172,6 +179,7 @@ async def resolve_auth_actor(
             role=employee.role,
             employee=employee,
             permissions=permissions,
+            authenticated_session_version=session_version,
         )
 
     result = await db.execute(
