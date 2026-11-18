@@ -1,0 +1,50 @@
+test_disabled_user_is_denied_with_previously_issued_token (test_phase11_identity_boundaries.IdentityBoundaryTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.240 seconds
+ok
+test_employee_permissions_remain_effective_without_owner_escalation (test_phase11_identity_boundaries.IdentityBoundaryTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.242 seconds
+ok
+test_other_signed_token_purposes_never_become_user_sessions (test_phase11_identity_boundaries.IdentityBoundaryTests) ... Executing <Task pending name='Task-9' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.303 seconds
+ok
+test_user_role_is_checked_on_every_request_and_tenant_gate_remains (test_phase11_identity_boundaries.IdentityBoundaryTests) ... Executing <Task pending name='Task-13' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.277 seconds
+Executing <Task pending name='Task-13' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.122 seconds
+ok
+test_cashier_and_manager_presets_remain_backwards_compatible (test_phase7b_permissions.Phase7BPermissionTests) ... ok
+test_every_granular_permission_rejects_explicit_denial (test_phase7b_permissions.Phase7BPermissionTests) ... ok
+test_existing_expense_recording_permission_is_preserved (test_phase7b_permissions.Phase7BPermissionTests) ... ok
+test_explicit_granular_denial_overrides_legacy_permission (test_phase7b_permissions.Phase7BPermissionTests) ... ok
+test_manager_authorization_is_context_bound_and_single_use (test_phase7b_permissions.Phase7BPermissionTests) ... ok
+test_manager_authorization_rejects_different_context (test_phase7b_permissions.Phase7BPermissionTests) ... ok
+test_product_edit_permission_does_not_reveal_restricted_cost (test_phase7b_permissions.Phase7BPermissionTests) ... ok
+test_authenticated_api_owner_and_cross_tenant_rejection (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-38' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.295 seconds
+Executing <Task pending name='Task-38' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.444 seconds
+ok
+test_configuration_optimistic_lock_and_audit (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-42' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.313 seconds
+ok
+test_credential_references_masked_tenant_scoped_and_not_accidentally_cleared (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-46' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.271 seconds
+ok
+test_default_is_uncommissioned_no_submission_and_no_invented_rates (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-50' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.247 seconds
+ok
+test_owner_only_business_and_register_isolation (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-54' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.241 seconds
+ok
+test_populated_downgrade_refuses_data_loss (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-58' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.239 seconds
+Executing <Task pending name='Task-58' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.197 seconds
+ok
+test_refund_review_keeps_original_link_no_fabricated_fiscal_reference (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-62' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.242 seconds
+ok
+test_runtime_role_has_no_mutation_rights_on_fiscal_evidence (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-66' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.243 seconds
+ok
+test_snapshot_integrity_detects_unexpected_tampering (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-70' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.244 seconds
+ok
+test_snapshots_and_audits_immutable_in_postgresql (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-74' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.248 seconds
+ok
+test_source_snapshot_exactly_once_preserves_dates_identity_and_finances (test_phase9_fiscal.FiscalTests) ... Executing <Task pending name='Task-78' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.240 seconds
+ok
+test_expired_future_and_exempt_mapping_mismatch (test_phase9_fiscal.FiscalValidationTests) ... ok
+test_explicit_synthetic_tax_rates_and_exempt (test_phase9_fiscal.FiscalValidationTests) ... ok
+test_malformed_totals_quantities_and_payment_signs_are_rejected (test_phase9_fiscal.FiscalValidationTests) ... ok
+test_tax_validity_and_no_secret_fields (test_phase9_fiscal.FiscalValidationTests) ... ok
+test_totals_preflight_cash_card_mobile_and_credit_note (test_phase9_fiscal.FiscalValidationTests) ... ok
+
+----------------------------------------------------------------------
+Ran 27 tests in 6.868s
+
+OK

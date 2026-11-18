@@ -116,9 +116,10 @@ async def resolve_auth_actor(
     except JWTError:
         return None
 
-    token_type = str(
-        payload.get("token_type") or "user"
-    ).strip()
+    # Missing purpose is retained only for pre-purpose legacy user tokens.
+    token_type = payload.get("token_type", "user")
+    if not isinstance(token_type, str) or token_type not in {"user", "employee"}:
+        return None
     subject = payload.get("sub")
 
     if not subject:
@@ -207,9 +208,6 @@ def require_permission(permission_key: str):
     async def dependency(
         actor: AuthActor = Depends(get_auth_actor),
     ) -> AuthActor:
-        if actor.actor_type == "user":
-            return actor
-
         if actor.role in {"owner", "administrator"}:
             return actor
 
@@ -277,8 +275,6 @@ def require_path_permission(permission_key: str):
 
 
 def require_owner(actor: AuthActor):
-    if actor.actor_type == "user":
-        return actor
     if actor.role == "owner":
         return actor
     raise HTTPException(403, "Owner access required")

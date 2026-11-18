@@ -59,3 +59,19 @@ Updated the platform test's short synthetic Settings key. No platform recovery/M
 - `git diff --check`: passed.
 
 Retained logs: `artifacts/phase11-security-20261118/`. Before a future release, operators must separately verify the installed secret meets the new requirements without exposing it. A failing production preflight is a release blocker, never authorization to rotate keys or deploy. This increment does not implement revocable business sessions/reset/remember me or handoff.
+
+## Security increment 2 — shared identity boundaries and endpoint inventory
+
+Previous security commit: `e4eec3c`.
+
+Shared `require_permission` no longer grants every business User unrestricted access solely because actor_type=user. It uses the existing owner/administrator role exemption or explicit permission check. `require_owner` now actually requires owner role, including for User actors. User role is read from the database on each request; this change creates no new non-owner business-user grants.
+
+Authentication now accepts only explicit user/employee token purposes. Missing token_type remains compatible with legacy user tokens; null, blank, non-string and other token purposes fail closed. Employee authorization continues to use current database role/permissions rather than signed role claims.
+
+Direct ASGI API tests use the existing rollback-only synthetic fixture chain: owner/administrator/accountant/cashier/unknown user roles with one previously issued token; cross-tenant denial; cashier explicit allow/deny; stale signed employee owner role; disabled user; signed offline_shift/entitlement/platform/handoff/reset/unknown/null/blank/list/dict purposes; legacy purpose-less token compatibility. They exercise the shared dependencies through small test routes, not every product endpoint.
+
+`python -m unittest test_phase11_identity_boundaries test_phase7b_permissions test_phase9_fiscal -v` in the clean private-cluster environment: **27 passed, no skips** after final token-purpose changes. This includes four new API tests, seven existing permission tests and 16 fiscal tests. Log retained as `identity-permission-fiscal-tests.log`.
+
+Added `backend/scripts/phase11_endpoint_inventory.py`. It refuses to import app settings unless APP_ENV=test and DATABASE_URL points at `127.0.0.1:1/phase11_unreachable`. It dispatches no requests and opens no database. Exact invocation uses the unreachable synthetic environment from the baseline section and redirects stdout to `artifacts/phase11-security-20261118/endpoint-inventory.csv`. Inventory matches all OpenAPI operations without duplicates: **242 operations, 126 mutating; 35 mutating operations expose a billable dependency**. Every row retains source location and the full registered dependency chain, including captured permission names. The remaining operations are **review obligations**, not automatic proof of a missing subscription check: service-level guards, platform/provider endpoints, logout, committed replay/recovery and historical/fiscal actions need explicit policy assessment.
+
+Other service/domain helpers still contain actor_type=user shortcuts (including product cost visibility, financial access and business operations). These are outstanding audit findings; tightening the shared guards is not full non-owner User authorization certification. Subscription/historical-read policy, offline lease limits and service-level replay checks remain open. No migration was added in this increment.
