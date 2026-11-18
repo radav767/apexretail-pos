@@ -90,3 +90,19 @@ class LoginRequest(BaseModel):
     password: str
     client: Literal['pos', 'backoffice'] = 'pos'
     remember_me: bool = False
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=200)
+    password: str = Field(min_length=12, max_length=72)
+    confirm_password: str = Field(min_length=12, max_length=72)
+
+    @model_validator(mode='after')
+    def validate_password(self):
+        if self.password != self.confirm_password or len(self.password.encode('utf-8')) > 72:
+            raise ValueError('Passwords must match and use at most 72 UTF-8 bytes')
+        return self

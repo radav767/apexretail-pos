@@ -1,3 +1,4 @@
+import { readAuthEntry } from './api/authEntry';
 import { clearBusinessContext, installBusinessContext } from './api/businessSession';
 import { refreshBusinessSession, beginBusinessLogin } from './api/client';
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -60,10 +61,15 @@ function localDateValue(date: Date): string {
   return adjusted.toISOString().slice(0, 10);
 }
 
+const authEntry = readAuthEntry(window.location, window.history);
+
 function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'forgot' | 'reset'>(authEntry.reset !== null ? 'reset' : 'login');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loggedIn, setLoggedIn] = useState(
@@ -107,9 +113,26 @@ function App() {
       setDashboardSummary(null); setDashboardShops([]); setDrilldownData(null);
     };
     window.addEventListener('business-context-changed', update);
-    void refreshBusinessSession();
+    if (authEntry.reset !== null || authEntry.handoff !== null) {
+      void beginBusinessLogin().catch(() => setMessage('Connect to the server before continuing.'));
+    } else void refreshBusinessSession();
     return () => window.removeEventListener('business-context-changed', update);
   }, []);
+
+  async function recoverPassword() {
+    setLoading(true); setMessage('');
+    try {
+      if (authMode === 'forgot') {
+        const { data } = await api.post('/auth/forgot-password', { email });
+        setMessage(data.message);
+      } else {
+        const { data } = await api.post('/auth/reset-password', { token: authEntry.reset, password: newPassword, confirm_password: confirmPassword });
+        clearBusinessContext(); setPassword(''); setNewPassword(''); setConfirmPassword(''); setRememberMe(false);
+        setAuthMode('login'); setMessage(data.message);
+      }
+    } catch { setMessage(authMode === 'forgot' ? 'Recovery request failed. Try again when connected.' : 'Recovery link is invalid or expired, or passwords do not meet the requirements.'); }
+    finally { setLoading(false); }
+  }
 
   async function login() {
     try {
@@ -435,6 +458,7 @@ function App() {
           <h1>ApexRetail Backoffice</h1>
           <p>Remote business management</p>
 
+          {authMode === 'login' ? <>
           <label>Email</label>
           <input
             type="email"
@@ -463,6 +487,16 @@ function App() {
             {loading ? "Signing in..." : "Login"}
           </button>
 
+          <button onClick={() => { setAuthMode('forgot'); setMessage(''); }}>Forgot password?</button>
+          </> : <>
+            <h2>{authMode === 'forgot' ? 'Recover your account' : 'Choose a new password'}</h2>
+            {authMode === 'forgot' ? <label>Email<input type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} /></label> : <>
+              <label>New password (12 characters minimum)<input type="password" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value)} /></label>
+              <label>Confirm password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} /></label>
+            </>}
+            <button className="primary-button" disabled={loading} onClick={recoverPassword}>{loading ? 'Please wait...' : authMode === 'forgot' ? 'Request recovery' : 'Reset password'}</button>
+            <button onClick={() => { setAuthMode('login'); setMessage(''); }}>Back to login</button>
+          </>}
           <p className="error-message">{message}</p>
         </div>
       </div>

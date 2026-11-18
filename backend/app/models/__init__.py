@@ -47,3 +47,4 @@ from app.models.commercial import PlatformAdmin, PlatformSession, PlatformAudit,
 from app.models.fiscal import FiscalConfiguration, FiscalPreparation, FiscalAudit
 from app.models.fiscal_protocol import FiscalProtocolState, FiscalDocument, FiscalProtocolEvent
 from app.models.business_auth import BusinessSession, BusinessRefreshCredential
+from app.models.business_auth import PasswordResetGrant, BusinessEmailOutbox, BusinessAuthThrottle

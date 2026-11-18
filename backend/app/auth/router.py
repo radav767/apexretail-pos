@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.auth.schema import RegisterRequest, LoginRequest
+from app.auth.schema import RegisterRequest, LoginRequest, ForgotPasswordRequest, ResetPasswordRequest
 from app.auth.repository import AuthRepository
 from app.auth.service import AuthService
 from app.auth.registration_currencies import serialize_registration_currencies
@@ -91,6 +91,21 @@ async def logout(request: Request, response: Response, actor: AuthActor = Depend
 async def logout_all(actor: AuthActor = Depends(get_auth_actor), db: AsyncSession = Depends(get_db)):
     await revoke_user_sessions(db, actor)
     return {'ok': True, 'scope': 'all_user_sessions'}
+
+
+@router.post('/forgot-password', status_code=202)
+async def forgot_password(data: ForgotPasswordRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    from app.auth.recovery import request_reset
+    response.headers['Cache-Control'] = 'no-store'
+    return await request_reset(db, data.email, request.client.host if request.client else 'unknown')
+
+
+@router.post('/reset-password')
+async def reset_password_endpoint(data: ResetPasswordRequest, response: Response, db: AsyncSession = Depends(get_db)):
+    from app.auth.recovery import reset_password
+    result = await reset_password(db, data.token, data.password)
+    clear_cookie(response)
+    return result
 
 
 @router.get("/test")

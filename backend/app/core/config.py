@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from functools import lru_cache
 from os import environ
+from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import ValidationError,SecretStr,model_validator
 from pydantic_settings import BaseSettings
@@ -51,10 +53,17 @@ class Settings(BaseSettings):
     product_image_max_bytes: int = 5242880
     platform_mfa_key: SecretStr | None = None
     backoffice_origin: str = 'https://backoffice.apexpos.cloud'
+    business_email_mode: Literal['disabled', 'sink'] = 'disabled'
+    business_email_key: SecretStr | None = None
 
     @model_validator(mode='after')
     def validate_jwt_configuration(self):
         validate_jwt_secret(self.jwt_secret, self.jwt_algorithm)
+        origin = urlsplit(self.backoffice_origin)
+        if origin.scheme != 'https' or not origin.hostname or origin.username or origin.password or origin.path or origin.query or origin.fragment:
+            raise ValueError('BACKOFFICE_ORIGIN must be an HTTPS origin without path or credentials')
+        if self.business_email_mode == 'sink' and (self.app_env != 'test' or not self.business_email_key):
+            raise ValueError('Business email sink requires APP_ENV=test and an explicit encryption key')
         return self
 
     class Config:
