@@ -83,7 +83,8 @@ class UserSessionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.read(other_token)).status_code, 403)
 
     async def test_expired_subscription_can_still_revoke_and_versions_are_strict(self):
-        self.db.add(CompanySubscription(company_id=self.company.id, status='expired'))
+        subscription = (await self.db.execute(select(CompanySubscription).where(CompanySubscription.company_id==self.company.id))).scalar_one()
+        subscription.status = 'expired'
         await self.db.commit()
         settings = get_settings()
         for value in (None, True, False, '0', -1, 0.0):

@@ -7,7 +7,7 @@ rechecked using the current authenticated session, never cached client grants.
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.models import Device, CommerceOrder, KitchenTicket, PrinterStation
 from app.models.business_operations import OrderSyncReceipt
 from app.printing.service import digest, permit
@@ -125,6 +125,8 @@ class OfflineOrderService(BusinessService):
             raise HTTPException(403, "Reconnect as the original employee on the original register; retain this offline order")
         captured = data.captured_at
         self.validate_capture(captured)
+        if action == 'draft':
+            await self.db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {'key': 'phase11-order:' + str(self.actor.company_id) + ':' + str(data.order.request_id)})
         # Every sync and normal order-create locks this same register. This
         # serializes retries before checking the unique command receipt.
         device = (await self.db.execute(select(Device).where(Device.id == device_id,
@@ -141,6 +143,7 @@ class OfflineOrderService(BusinessService):
                     or receipt.payload_hash != fingerprint):
                 raise HTTPException(409, "Offline command identity or payload mismatch; review without deleting the command")
             return self.acknowledgement(receipt)
+        await self.require_write('restaurant')
         try:
             if action=="kitchen":
                 row=await self.order(data.order_id,version=data.version,edit=True)

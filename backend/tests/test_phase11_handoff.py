@@ -90,7 +90,8 @@ class HandoffTests(fixtures.UserSessionTests):
         self.assertEqual((await self.inspect(code, str(uuid4()))).status_code, 401)
         result = await self.client.post('/api/auth/handoff/inspect', headers={'Origin': 'https://attacker.invalid'}, json={'code': code, 'receiver': str(uuid4())})
         self.assertEqual(result.status_code, 403)
-        self.db.add(CompanySubscription(company_id=self.company.id, status='expired')); await self.db.commit()
+        subscription = (await self.db.execute(select(CompanySubscription).where(CompanySubscription.company_id==self.company.id))).scalar_one()
+        subscription.status = 'expired'; await self.db.commit()
         self.assertEqual((await self.issue()).status_code, 200)
 
     async def test_cashier_requires_fresh_same_business_owner_password(self):

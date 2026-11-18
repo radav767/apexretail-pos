@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, text
 from app.financial_access import enforce_actor_branch
 from app.employees.permissions import has_permission
 from app.models import (Company, BusinessProfile, Branch, Device, Employee, Customer, Product, ProductVariant,
@@ -18,6 +18,10 @@ def row_dict(row, fields):
 
 
 class BusinessService(PrintingService):
+    async def require_write(self, *features):
+        from app.subscriptions.write_policy import require_new_write
+        await require_new_write(self.db, self.actor.company_id, features=features)
+
     async def commit_operation(self):
         await self.db.commit()
 
@@ -58,6 +62,7 @@ class BusinessService(PrintingService):
             raise HTTPException(409, "Enable the appropriate business profile in Settings first")
 
     async def save_profile(self, data):
+        await self.require_write()
         permit(self.actor, "business_settings_manage")
         for product_id in (data.tip_product_id, data.service_product_id):
             if product_id:
@@ -110,6 +115,7 @@ class BusinessService(PrintingService):
         return self.actor.role in {"owner", "administrator"} or has_permission(self.actor.permissions or {}, "restaurant_manage")
 
     async def save_table(self, data, table_id=None):
+        await self.require_write('restaurant')
         permit(self.actor, "restaurant_manage")
         await self.feature("restaurant"); await self.branch(data.branch_id)
         table = await self.db.get(DiningTable, table_id) if table_id else DiningTable(company_id=self.actor.company_id)
@@ -145,19 +151,27 @@ class BusinessService(PrintingService):
 
     async def create_order(self, data):
         permit(self.actor, "quotations_manage" if data.kind == "quotation" else "orders_manage")
-        await self.feature("wholesale" if data.kind == "quotation" else "hospitality" if data.kind == "room_service" else "restaurant")
         await self.branch(data.branch_id)
+        await self.db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {'key': 'phase11-order:' + str(self.actor.company_id) + ':' + str(data.request_id)})
         # A register lock serializes repeated create requests before uniqueness.
         device = (await self.db.execute(select(Device).where(Device.id == data.device_id, Device.company_id == self.actor.company_id).with_for_update())).scalar_one_or_none()
         if not device or device.branch_id != data.branch_id or device.removed_at or device.deactivated_at or not device.active or device.deleted:
             raise HTTPException(400, "Register is not active in this branch")
         if self.actor.actor_type == "employee" and (not self.actor.pos_session or self.actor.pos_session.device_id != device.id):
             raise HTTPException(403, "Use the authenticated register")
+        from app.sales.commands import fingerprint, actor_identity
+        command_hash, command_actor = fingerprint(data), actor_identity(self.actor, self.actor.company_id)
         existing = (await self.db.execute(select(CommerceOrder).where(CommerceOrder.company_id == self.actor.company_id, CommerceOrder.request_id == data.request_id))).scalar_one_or_none()
         if existing:
             if (existing.branch_id, existing.device_id, existing.kind) != (data.branch_id, data.device_id, data.kind): raise HTTPException(409, "Order request identity is already bound to another register or type")
             await self.order(existing.id)
+            if not existing.creation_payload_hash: raise HTTPException(409, 'Existing order has no complete creation proof; retrieve its current state')
+            if (existing.creation_actor_type, existing.creation_actor_id) != (self.actor.actor_type, command_actor): raise HTTPException(403, 'Original order belongs to another actor')
+            if existing.creation_payload_hash != command_hash: raise HTTPException(409, 'Order creation payload differs')
             return await self.order_out(existing)
+        module = 'wholesale' if data.kind == 'quotation' else 'hospitality' if data.kind == 'room_service' else 'restaurant'
+        await self.require_write(module)
+        await self.feature(module)
         waiter_id = data.waiter_id or (self.actor.employee.id if self.actor.employee else None)
         if not self.manager() and self.actor.employee and waiter_id != self.actor.employee.id:
             raise HTTPException(403, "Only a restaurant manager can assign another waiter")
@@ -169,6 +183,7 @@ class BusinessService(PrintingService):
         row = CommerceOrder(company_id=self.actor.company_id, branch_id=data.branch_id, device_id=device.id, waiter_id=waiter_id,
             table_id=data.table_id, guest_id=data.guest_id, customer_id=data.customer_id, kind=data.kind, request_id=data.request_id,
             number=f"O-{uuid.uuid4().hex[:16].upper()}", status="open", version=1, notes=data.notes)
+        row.creation_payload_hash = command_hash; row.creation_actor_type = self.actor.actor_type; row.creation_actor_id = command_actor
         self.db.add(row); await self.db.flush()
         self.audit("commerce_order_opened", order_id=row.id, kind=row.kind); await self.commit_operation()
         return await self.order_out(row)
@@ -180,6 +195,7 @@ class BusinessService(PrintingService):
         permit(self.actor, "orders_settle" if settle else "quotations_manage" if row.kind == "quotation" else "orders_manage")
         if self.actor.employee and not self.manager() and not settle and row.waiter_id != self.actor.employee.id:
             raise HTTPException(403, "Order belongs to another employee")
+        if edit: await self.require_write('wholesale' if row.kind == 'quotation' else 'hospitality' if row.kind == 'room_service' else 'restaurant')
         if edit and row.status != "open": raise HTTPException(409, "Order is locked")
         if version is not None and row.version != version: raise HTTPException(409, "Order changed. Reload before retrying")
         return row
@@ -226,6 +242,7 @@ class BusinessService(PrintingService):
         return [await self.order_out(row) for row in rows]
 
     async def add_item(self, order_id, data):
+        await self.require_write()
         row = await self.order(order_id, version=data.version, edit=True)
         product = await self.db.get(Product, data.product_id)
         if not product or product.company_id != self.actor.company_id or not product.active or product.deleted: raise HTTPException(400, "Product is not active")
@@ -248,6 +265,7 @@ class BusinessService(PrintingService):
         return await self.order_out(row)
 
     async def edit_item(self, order_id, item_id, data):
+        await self.require_write()
         row = await self.order(order_id, version=data.version, edit=True)
         item = next((i for i in await self.order_items(row) if i.id == item_id), None)
         if not item: raise HTTPException(404, "Order item not found")
@@ -266,8 +284,8 @@ class BusinessService(PrintingService):
 
     async def send_kitchen(self, order_id, version):
         from app.subscriptions.commercial import enforce_feature
-        await enforce_feature(self.db,self.actor.company_id,'kitchen_printing')
-        row = await self.order(order_id, version=version, edit=True)
+        row = await self.order(order_id, version=version)
+        if row.status != "open": raise HTTPException(409, "Order is locked")
         permit(self.actor, "orders_send")
         if row.kind == "quotation": raise HTTPException(400, "Quotations cannot be sent to kitchens")
         items = await self.order_items(row)
@@ -279,6 +297,8 @@ class BusinessService(PrintingService):
         charges = {profile.tip_product_id, profile.service_product_id} if profile else set()
         changed = [i for i in items if i.quantity != i.sent_quantity]
         if not changed and not changed_context: return {"jobs": [], "order": await self.order_out(row)}
+        await self.require_write('hospitality' if row.kind == 'room_service' else 'restaurant', 'kitchen_printing')
+        await enforce_feature(self.db,self.actor.company_id,'kitchen_printing')
         stations = (await self.db.execute(select(PrinterStation).where(PrinterStation.company_id == row.company_id,
             PrinterStation.branch_id == row.branch_id, PrinterStation.device_id == row.device_id, PrinterStation.active == True,
             PrinterStation.purpose.in_(["kitchen", "bar"])).order_by(PrinterStation.id).with_for_update())).scalars().all()
@@ -320,6 +340,7 @@ class BusinessService(PrintingService):
         return {"jobs": jobs, "order": await self.order_out(row)}
 
     async def move(self, order_id, data):
+        await self.require_write()
         row = await self.order(order_id, version=data.version, edit=True)
         permit(self.actor, "restaurant_manage")
         items = await self.order_items(row)
@@ -340,6 +361,7 @@ class BusinessService(PrintingService):
         return {**await self.order_out(row), "print_jobs": []}
 
     async def split(self, order_id, data):
+        await self.require_write()
         row = await self.order(order_id, version=data.version, edit=True)
         permit(self.actor, "restaurant_manage")
         items = [i for i in await self.order_items(row) if i.quantity > 0]
@@ -383,6 +405,7 @@ class BusinessService(PrintingService):
         return {"source": await self.order_out(row), "target": await self.order_out(child)}
 
     async def merge(self, order_id, data):
+        await self.require_write()
         if order_id == data.source_id: raise HTTPException(400, "Choose different orders")
         permit(self.actor, "restaurant_manage")
         # Stable lock order avoids opposite-direction merge deadlocks.
@@ -399,6 +422,7 @@ class BusinessService(PrintingService):
         return await self.order_out(target)
 
     async def cancel(self, order_id, version):
+        await self.require_write()
         row = await self.order(order_id, version=version, edit=True)
         permit(self.actor, "restaurant_manage")
         items = await self.order_items(row)
@@ -411,8 +435,16 @@ class BusinessService(PrintingService):
 
     async def settle(self, order_id, data):
         row = await self.order(order_id, settle=True)
+        from app.sales.commands import fingerprint, actor_identity
+        command_hash, command_actor = fingerprint(data), actor_identity(self.actor, self.actor.company_id)
+        if self.actor.employee and (not self.actor.pos_session or self.actor.pos_session.device_id != row.device_id): raise HTTPException(403, 'Settle on the assigned register')
+        if data.payment.company_id != row.company_id: raise HTTPException(403, 'Forbidden')
         if row.status == "settled":
+            if not row.settlement_payload_hash: raise HTTPException(409, 'Existing settlement has no complete replay proof; retrieve the original sale')
+            if (row.settlement_actor_type, row.settlement_actor_id) != (self.actor.actor_type, command_actor): raise HTTPException(403, 'Original settlement belongs to another actor')
+            if row.settlement_payload_hash != command_hash: raise HTTPException(409, 'Settlement payload differs')
             return {"sale_id": row.sale_id, "order": await self.order_out(row), "already_settled": True}
+        await self.require_write('wholesale' if row.kind == 'quotation' else 'hospitality' if row.kind == 'room_service' else 'restaurant')
         if row.status != "open" or row.version != data.version: raise HTTPException(409, "Order changed or locked")
         permit(self.actor, "sales_process")
         if self.actor.employee and (not self.actor.pos_session or self.actor.pos_session.device_id != row.device_id): raise HTTPException(403, "Settle on the assigned register")
@@ -442,6 +474,7 @@ class BusinessService(PrintingService):
         try:
             sale = await SalesService(SalesRepository(self.db, commit_on_save=False)).create_sale(payment, actor=self.actor)
             row.sale_id = sale.id; row.status = "settled"; row.version += 1
+            row.settlement_payload_hash = command_hash; row.settlement_actor_type = self.actor.actor_type; row.settlement_actor_id = command_actor
             self.audit("order_settled", order_id=row.id, sale_id=sale.id, guest_id=row.guest_id, room_charge=data.charge_to_room)
             await self.db.commit()
         except Exception:
@@ -470,6 +503,7 @@ class BusinessService(PrintingService):
         station = await self.db.get(PrinterStation, ticket.station_id)
         permit(self.actor, "bar_update" if station.purpose == "bar" else "kitchen_update")
         if status == ticket.status: return {"status": status}
+        await self.require_write('restaurant')
         job = await self.db.get(PrintJob, ticket.print_job_id)
         informational = all(Decimal(item["quantity"]) <= 0 for item in job.payload["items"])
         next_state = "acknowledged" if ticket.status == "needs_review" or (informational and ticket.status == "queued") else {"queued": "preparing", "preparing": "ready", "ready": "served"}.get(ticket.status)
@@ -490,6 +524,7 @@ class BusinessService(PrintingService):
         return output
 
     async def save_room(self, data, room_id=None):
+        await self.require_write('hospitality')
         permit(self.actor, "hospitality_manage"); await self.feature("hospitality"); await self.branch(data.branch_id)
         room = await self.db.get(HospitalityRoom, room_id) if room_id else HospitalityRoom(company_id=self.actor.company_id)
         if not room or room.company_id != self.actor.company_id: raise HTTPException(404, "Room not found")
@@ -504,6 +539,7 @@ class BusinessService(PrintingService):
         return {"id": room.id}
 
     async def open_guest(self, data):
+        await self.require_write('hospitality')
         permit(self.actor, "hospitality_manage"); await self.feature("hospitality")
         room = (await self.db.execute(select(HospitalityRoom).where(HospitalityRoom.id == data.room_id, HospitalityRoom.company_id == self.actor.company_id).with_for_update())).scalar_one_or_none()
         if not room or not room.active: raise HTTPException(404, "Room not available")
@@ -525,6 +561,7 @@ class BusinessService(PrintingService):
         return {"guest_id": guest.id, "guest_name": customer.name, "customer_id": customer.id, "charges": [{"sale_id": sale.id, "receipt_number": sale.receipt_number, "amount": str(sale.total_amount), "currency": sale.base_currency_code, "outstanding": str(receivable.outstanding_balance) if receivable else "0"} for sale, receivable in rows]}
 
     async def close_guest(self, guest_id):
+        await self.require_write('hospitality')
         permit(self.actor, "hospitality_manage")
         guest = (await self.db.execute(select(GuestAccount).where(GuestAccount.id == guest_id, GuestAccount.company_id == self.actor.company_id).with_for_update())).scalar_one_or_none()
         if not guest: raise HTTPException(404, "Guest not found")
@@ -549,6 +586,7 @@ class BusinessService(PrintingService):
             "expired": batch.expires_on < today, "expires_soon": 0 <= (batch.expires_on - today).days <= 30} for batch, name, variant_name in rows]
 
     async def assign_batch(self, data):
+        await self.require_write('pharmacy')
         permit(self.actor, "batches_manage"); await self.feature("pharmacy"); await self.branch(data.branch_id)
         from app.inventory.stock_repository import BranchStockRepository
         stock = BranchStockRepository(self.db)

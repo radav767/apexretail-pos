@@ -30,12 +30,12 @@ async def require_operational_writes(db=Depends(get_db), actor=Depends(get_auth_
     await SubscriptionService(db, offline_grace_hours=settings.subscription_offline_grace_hours, provider_name=settings.subscription_provider_name).enforce_writes_allowed(actor.company_id)
 
 
-@router.post("/offline/drafts", dependencies=[Depends(require_operational_writes)])
+@router.post("/offline/drafts")
 async def synchronize_draft(data: OfflineDraftInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await OfflineOrderService(db, actor).synchronize(data)
 
 
-@router.post("/offline/edits", dependencies=[Depends(require_operational_writes)])
+@router.post("/offline/edits")
 async def synchronize_edit(data: OfflineEditInput, db=Depends(get_db), actor=Depends(get_auth_actor)):
     return await OfflineOrderService(db, actor).synchronize(data, edit=True)
 
@@ -55,12 +55,12 @@ async def offline_capabilities(actor=Depends(get_auth_actor)):
     return {"protocol":"restaurant-offline-v2","commands":["drafts","edits","kitchen","kds"],"payments":False}
 
 
-@router.post("/offline/kitchen",dependencies=[Depends(require_operational_writes)])
+@router.post("/offline/kitchen")
 async def synchronize_kitchen(data:OfflineKitchenInput,db=Depends(get_db),actor=Depends(get_auth_actor)):
     return await OfflineOrderService(db,actor).synchronize(data,action="kitchen")
 
 
-@router.post("/offline/kds",dependencies=[Depends(require_operational_writes)])
+@router.post("/offline/kds")
 async def synchronize_kds(data:OfflineKDSInput,db=Depends(get_db),actor=Depends(get_auth_actor)):
     return await OfflineOrderService(db,actor).synchronize(data,action="kds")
 
@@ -90,7 +90,7 @@ async def review_offline(kind:Literal["drafts","edits","kitchen","kds"],data:Off
     return await OfflineOrderService(db,actor).review(command,action=action)
 
 
-@router.post("/offline/{kind}/resolve",dependencies=[Depends(require_operational_writes)])
+@router.post("/offline/{kind}/resolve")
 async def resolve_offline(kind:Literal["drafts","edits","kitchen","kds"],data:OfflineResolutionInput,
     db=Depends(get_db),actor=Depends(get_auth_actor)):
     command,action=offline_command(kind,data.command)
@@ -207,7 +207,7 @@ async def cancel(order_id: UUID, data: VersionInput, svc=Depends(service)): retu
 
 
 @router.post("/orders/{order_id}/settle")
-async def settle(order_id: UUID, data: SettlementInput, svc=Depends(service), _entitlement=Depends(require_operational_writes)): return await svc.settle(order_id, data)
+async def settle(order_id: UUID, data: SettlementInput, svc=Depends(service)): return await svc.settle(order_id, data)
 
 
 @router.get("/kitchen")

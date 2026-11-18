@@ -23,9 +23,9 @@ class SaleReplayTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         await fixtures.Phase7DOperationsTests.asyncSetUp(self)
-        self.license = CompanySubscription(company_id=self.company.id, status='trial',
-            trial_ends_at=datetime.now(timezone.utc)+timedelta(days=1), commercial_terms=None)
-        self.db.add(self.license); await self.db.commit()
+        self.license = (await self.db.execute(select(CompanySubscription).where(CompanySubscription.company_id==self.company.id))).scalar_one()
+        self.license.status='trial'; self.license.trial_ends_at=datetime.now(timezone.utc)+timedelta(days=1); self.license.commercial_terms=None
+        await self.db.commit()
         self.sales = SalesService(SalesRepository(self.db))
         async def override(): yield self.db
         app.dependency_overrides[get_db] = override; self.addCleanup(app.dependency_overrides.clear)
@@ -66,7 +66,7 @@ class SaleReplayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.status_code, 402)
         self.assertIsNotNone(data.client_created_at)
         self.assertEqual(self.balance.quantity, 100)
-        self.assertEqual((await self.db.execute(select(func.count(SaleCommandReceipt.client_sale_id)))).scalar_one(), 0)
+        self.assertEqual((await self.db.execute(select(func.count(SaleCommandReceipt.client_sale_id)).where(SaleCommandReceipt.company_id==self.company.id))).scalar_one(), 0)
         with self.assertRaises(HTTPException) as error: await self.sales.create_sale(self.command(), actor=None)
         self.assertEqual(error.exception.status_code, 401)
 

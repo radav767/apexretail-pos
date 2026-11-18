@@ -198,7 +198,7 @@ class CommercialTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((await client.post(f'/api/products/variants/{self.company.id}/{self.product.id}',json={'name':'Denied variant','selling_price':4})).status_code,403)
                 self.assertEqual((await client.post('/api/inventory/branches',json={'company_id':str(self.company.id),'shop_id':str(self.shop.id),'name':'Over limit'})).status_code,402)
                 self.assertEqual((await client.post('/api/subscriptions/activate',json={'company_id':str(self.company.id),'plan':'monthly'})).status_code,409)
-                self.assertEqual((await client.get('/api/reports/financial-summary/'+str(self.company.id)+'?date_from=2026-01-01&date_to=2026-12-31')).status_code,403)
+                self.assertEqual((await client.get('/api/reports/financial-summary/'+str(self.company.id)+'?date_from=2026-01-01&date_to=2026-12-31')).status_code,200)
                 access=await client.get('/api/subscriptions/access/'+str(self.company.id))
                 self.assertEqual(access.status_code,200);self.assertFalse(access.json()['features']['variants'])
         finally:app.dependency_overrides.clear()

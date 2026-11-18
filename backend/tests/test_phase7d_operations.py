@@ -57,6 +57,9 @@ class Phase7DOperationsTests(unittest.IsolatedAsyncioTestCase):
         self.db.add(currency); await self.db.flush()
         self.db.add(CompanySetting(company_id=self.company.id, base_currency_id=currency.id, currency_code="USD", currency_symbol="$", tax_rate=0, shift_enforcement_enabled=False, reporting_timezone="UTC"))
         await self.db.flush()
+        from app.subscriptions.service import SubscriptionService
+        await SubscriptionService(self.db).get_or_create_trial(self.company.id, commit=False)
+        await self.db.commit()
         self.owner.user = self.user
         self.svc = BusinessService(self.db, self.owner)
         self.waiter = AuthActor(actor_type="employee", company_id=self.company.id, role="waiter", employee=self.employee, permissions=normalize_permissions("waiter", {}), pos_session=self.session)
@@ -326,11 +329,13 @@ class Phase7DOperationsTests(unittest.IsolatedAsyncioTestCase):
         app.dependency_overrides[get_db] = db_override
         app.dependency_overrides[get_auth_actor] = lambda: self.owner
         try:
-            with patch("app.business_operations.router.SubscriptionService.enforce_writes_allowed", new=AsyncMock(side_effect=HTTPException(403, "Subscription write gate blocked"))):
-                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-                    result = await client.post(f"/api/operations/orders/{order['id']}/settle", json=self.payment(order).model_dump(mode="json"))
-                    self.assertEqual(result.status_code, 403)
-                    self.assertIn("Subscription write gate", result.json()["detail"])
+            from app.models import CompanySubscription
+            subscription = (await self.db.execute(select(CompanySubscription).where(CompanySubscription.company_id==self.company.id))).scalar_one()
+            subscription.status='expired'; await self.db.commit()
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+                result = await client.post(f"/api/operations/orders/{order['id']}/settle", json=self.payment(order).model_dump(mode="json"))
+                self.assertEqual(result.status_code, 402)
+                self.assertEqual(self.balance.quantity, 100)
         finally:
             app.dependency_overrides.pop(get_db, None); app.dependency_overrides.pop(get_auth_actor, None)
 
@@ -344,7 +349,7 @@ class Phase7DOperationsTests(unittest.IsolatedAsyncioTestCase):
         await self.db.commit(); await self.transaction.commit()
         async def settle():
             async with AsyncSession(self.engine, expire_on_commit=False) as db:
-                actor = AuthActor(actor_type="user", company_id=company_id, role="owner", user=SimpleNamespace(id=user_id))
+                actor = AuthActor(actor_type="user", company_id=company_id, role="owner", user=await db.get(User, user_id))
                 return await BusinessService(db, actor).settle(order["id"], payment)
         a, b = await asyncio.gather(settle(), settle())
         self.assertEqual(a["sale_id"], b["sale_id"])

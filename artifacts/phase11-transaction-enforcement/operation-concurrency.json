@@ -1,0 +1,21 @@
+{
+  "synthetic_only": true,
+  "same_create_one_order": true,
+  "different_register_same_identity_statuses": [
+    200,
+    409
+  ],
+  "duplicate_offline_one_ack": true,
+  "duplicate_settlement_one_sale": true,
+  "counts": {
+    "orders": 3,
+    "sales": 1,
+    "movements": 1,
+    "sync_receipts": 1,
+    "print_jobs": 1
+  },
+  "stock": "98.000",
+  "committed_replays_after_expiry_and_module_removal": true,
+  "new_offline_mutation_denied": true,
+  "physical_printing_or_provider_action": false
+}
