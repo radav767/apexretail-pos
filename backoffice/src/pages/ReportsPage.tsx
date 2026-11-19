@@ -21,6 +21,10 @@ type ReportsPageProps = {
 };
 
 type FinancialSummary = {
+  tax_collected?: string | number;
+  net_sales_ex_tax?: string | number;
+  gross_profit_ex_tax?: string | number;
+  net_profit_ex_tax?: string | number;
   net_sales: string | number;
   cost_of_sales: string | number;
   gross_profit: string | number;
@@ -343,7 +347,11 @@ export default function ReportsPage({
 
       {financial && <section className="reports-summary-grid" aria-label="Financial and profit summary">
         <article><span>Operating Expenses</span><strong>{currency.format(Number(financial.operating_expenses))}</strong><small>Posted gross expenses; excluded from sales revenue</small></article>
-        <article><span>Net Profit</span><strong>{currency.format(Number(financial.net_profit))}</strong><small>Gross profit less operating expenses</small></article>
+        <article><span>Billed margin less expenses</span><strong>{currency.format(Number(financial.net_profit))}</strong><small>Includes billed tax; see profit excluding tax below</small></article>
+        <article><span>Net tax billed</span><strong>{financial.tax_collected == null ? "Unavailable" : currency.format(Number(financial.tax_collected))}</strong><small>Sale tax less refunded tax</small></article>
+        <article><span>Net sales excluding tax</span><strong>{financial.net_sales_ex_tax == null ? "Unavailable" : currency.format(Number(financial.net_sales_ex_tax))}</strong></article>
+        <article><span>Gross profit excluding tax</span><strong>{financial.gross_profit_ex_tax == null ? "Unavailable" : currency.format(Number(financial.gross_profit_ex_tax))}</strong></article>
+        <article><span>Net profit excluding tax</span><strong>{financial.net_profit_ex_tax == null ? "Unavailable" : currency.format(Number(financial.net_profit_ex_tax))}</strong><small>Revenue excluding tax, less recorded costs and expenses</small></article>
         <article><span>Cash Settlements</span><strong>{currency.format(Number(financial.cash_settlements))}</strong><small>Customer credit cash received</small></article>
         <article><span>Cash Expenses</span><strong>{currency.format(Number(financial.cash_expenses))}</strong><small>Cash paid out for expenses</small></article>
         <article><span>Expected Cash Movement</span><strong>{currency.format(Number(financial.expected_cash_movement))}</strong><small>Cash sales plus settlements less cash expenses</small></article>

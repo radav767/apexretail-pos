@@ -757,6 +757,9 @@ class SalesService:
             amount_received = total
             change_due = Decimal("0")
 
+        from .refund_accounting import reconcile_sale_tax
+        reconcile_sale_tax(sale_items, tax_amount, tax_inclusive)
+
         if payment_method == "credit" and customer is not None and not customer.unlimited_credit:
             if customer.credit_limit is None:
                 raise HTTPException(409, "Customer credit policy has no monetary limit")
@@ -1017,6 +1020,17 @@ class SalesService:
         if data.refund_method and data.refund_method != original_sale.payment_method and (actor is None or actor.role not in {"owner", "manager", "administrator"}):
             raise HTTPException(403, "Only a manager may change the refund method")
 
+        from .refund_accounting import refund_plan
+        previous = {key: await self.repo.list_refund_items_for_original_item(key) for key in sale_items}
+        plan = refund_plan(original_sale, sale_items, previous, data.items)
+        planned_total = sum((line if original_sale.tax_inclusive else line+tax for line,tax,cost in plan.values()), Decimal(0))
+        credit_receivable = None
+        if original_sale.payment_method == 'credit':
+            if data.payment_currency_code and data.payment_currency_code.strip().upper() != original_sale.base_currency_code:
+                raise HTTPException(409, 'Credit notes must use the original base currency')
+            if not data.request_id or data.refund_method not in {None, 'credit'}:
+                raise HTTPException(409, 'Credit refund requires an identified debt adjustment; paid refund allocation requires review')
+
         branch = await self.repo.resolve_branch(
             data.company_id,
             data.branch_id or original_sale.branch_id,
@@ -1042,6 +1056,10 @@ class SalesService:
                         data.device_key and data.device_key != refund_device.device_key):
                     raise HTTPException(403, 'Refund register is no longer authorized')
                 data.device_id = refund_device.id
+        if original_sale.payment_method == 'credit':
+            credit_receivable = await self.repo.credit_receivable_for_update(data.company_id, original_sale.id)
+            if not credit_receivable or planned_total <= 0 or planned_total > credit_receivable.outstanding_balance:
+                raise HTTPException(409, 'Refund exceeds unpaid debt or requires a reviewed paid-refund allocation')
         refund_id = uuid.uuid4()
         receipt_number = (
             f"RFD-{datetime.now(timezone.utc):%Y%m%d}-"
@@ -1080,21 +1098,8 @@ class SalesService:
             )
 
             ratio = refund_item.quantity / Decimal(original_item.quantity or 1)
-            line_total = (Decimal(original_item.line_total or 0) * ratio).quantize(
-                money_quantum,
-                rounding=ROUND_HALF_UP,
-            )
-            line_cost = (
-                Decimal(original_item.unit_cost or 0)
-                * refund_item.quantity
-            ).quantize(
-                money_quantum,
-                rounding=ROUND_HALF_UP,
-            )
+            line_total, item_tax, line_cost = plan[original_item.id]
             total += line_total
-            item_tax = (
-                Decimal(getattr(original_item, "tax_amount", 0) or 0) * ratio
-            ).quantize(money_quantum, rounding=ROUND_HALF_UP)
             refund_tax += item_tax
             refund_sale_items.append(
                 SaleItem(
@@ -1231,15 +1236,7 @@ class SalesService:
                     )
                 )
 
-        # New sales carry per-line tax snapshots, including tax-exempt lines.
-        # Legacy rows predate those columns, so retain the historical aggregate
-        # proportional calculation only when no item-level tax is available.
-        if not any(getattr(item, "tax_amount", None) is not None for item in sale_items.values()):
-            refund_tax = (
-                Decimal(original_sale.tax_amount or 0)
-                * (total / Decimal(original_sale.subtotal_amount or 1))
-            ).quantize(money_quantum, rounding=ROUND_HALF_UP)
-        refund_total = -(total + refund_tax)
+        refund_total = -(total if original_sale.tax_inclusive else total + refund_tax)
         refund_method = data.refund_method or original_sale.payment_method
         refund_currency = await self.currency_from_base(
             data.company_id, refund_method, data.payment_currency_code, abs(refund_total),
@@ -1251,6 +1248,9 @@ class SalesService:
             id=refund_id,
             company_id=data.company_id,
             original_sale_id=original_sale.id,
+            customer_id=original_sale.customer_id,
+            customer_name_snapshot=original_sale.customer_name_snapshot,
+            customer_code_snapshot=original_sale.customer_code_snapshot,
             shop_id=original_sale.shop_id,
             branch_id=branch.id,
             device_id=shift.device_id if shift else (data.device_id or original_sale.device_id),
@@ -1271,7 +1271,7 @@ class SalesService:
             pos_number_snapshot=original_sale.pos_number_snapshot,
             receipt_footer_snapshot=original_sale.receipt_footer_snapshot,
             receipt_number=receipt_number,
-            subtotal_amount=-total,
+            subtotal_amount=-(total-refund_tax if original_sale.tax_inclusive else total),
             tax_name=original_sale.tax_name,
             tax_rate=original_sale.tax_rate,
             tax_amount=-refund_tax,
@@ -1291,6 +1291,17 @@ class SalesService:
             for item in sale_items.values()
         ]) else "partially_refunded"
         self.repo.db.add(AuditEvent(company_id=data.company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=data.device_id or original_sale.device_id, action="refund", reason=data.reason.strip(), details={"original_sale_id": str(original_sale.id), "refund_sale_id": str(refund_id)}))
+        if credit_receivable is not None:
+            from app.models import CreditRefundAdjustment
+            credit_receivable.amount_credited += planned_total
+            credit_receivable.outstanding_balance -= planned_total
+            credit_receivable.status = 'paid' if credit_receivable.outstanding_balance == 0 else 'partially_paid' if credit_receivable.amount_settled else 'unpaid'
+            # Parent must exist before the independent immutable note mapper.
+            # This is a flush only; stock/note/proof/debt commit together.
+            self.repo.db.add(refund_sale)
+            await self.repo.db.flush([refund_sale])
+            self.repo.db.add(CreditRefundAdjustment(company_id=data.company_id, receivable_id=credit_receivable.id,
+                refund_sale_id=refund_id, amount=planned_total))
         if refund_proof is not None:
             if data.request_id:
                 # No ORM relationship links this independent proof mapper to

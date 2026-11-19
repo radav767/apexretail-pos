@@ -1,0 +1,1 @@
+{"synthetic_only": true, "equal_refunds_one_note": true, "distinct_partial_refunds_conserve_tax_and_debt_cents": true, "collection_refund_race_statuses": [409, 200], "no_negative_debt_or_duplicate_stock": true, "stock": "97.000", "provider_actions": false}

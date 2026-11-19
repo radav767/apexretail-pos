@@ -46,6 +46,7 @@ type Receivable = {
   currency_code: string;
   original_amount: string | number;
   amount_settled: string | number;
+  amount_credited?: string | number;
   outstanding_balance: string | number;
   due_date: string;
   status: string;
@@ -347,7 +348,7 @@ export default function CustomersPage({ companyId }: { companyId: string }) {
 
         <div className="customer-activity-list">
           {detailTab === "history" && (transactions.length ? transactions.map((item) => <article key={`${item.transaction_type}-${item.transaction_id}`}><div><strong>{item.transaction_type === "credit_sale" ? "Credit sale" : "Settlement"}</strong><span>{item.receipt_number || item.reference || "No reference"} · {item.actor_name || item.actor_id || "Unknown"}</span></div><div><strong className={Number(item.amount) < 0 ? "customer-credit" : ""}>{Number(item.amount) < 0 ? "−" : "+"}{amount(Math.abs(Number(item.amount)), detailCurrency)}</strong><span>{dateTime(item.occurred_at)}</span></div></article>) : <p className="customer-empty-state">No customer transactions yet.</p>)}
-          {detailTab === "receivables" && (receivables.length ? receivables.map((item) => <article key={item.id}><div><strong>{item.sale_receipt_number || "Credit sale"}</strong><span>Due {new Date(`${item.due_date}T00:00:00`).toLocaleDateString()} · {titleCase(item.status)}</span></div><div><strong>{amount(item.outstanding_balance, item.currency_code)}</strong><span>{amount(item.amount_settled, item.currency_code)} settled of {amount(item.original_amount, item.currency_code)}</span></div></article>) : <p className="customer-empty-state">No credit receivables yet.</p>)}
+          {detailTab === "receivables" && (receivables.length ? receivables.map((item) => <article key={item.id}><div><strong>{item.sale_receipt_number || "Credit sale"}</strong><span>Due {new Date(`${item.due_date}T00:00:00`).toLocaleDateString()} · {titleCase(item.status)}</span></div><div><strong>{amount(item.outstanding_balance, item.currency_code)}</strong><span>{amount(item.amount_settled, item.currency_code)} settled of {amount(item.original_amount, item.currency_code)}{item.amount_credited != null && ` · ${amount(item.amount_credited, item.currency_code)} credited`}</span></div></article>) : <p className="customer-empty-state">No credit receivables yet.</p>)}
           {detailTab === "settlements" && (settlementsRestricted ? <p className="customer-empty-state">You do not have permission to view settlement history.</p> : settlements.length ? settlements.map((item) => <article key={item.id}><div><strong>{item.receipt_number}</strong><span>{titleCase(item.payment_method)} · {item.reference || "No reference"} · {item.actor_name || item.actor_id || "Unknown"}</span></div><div><strong className="customer-credit">{amount(item.amount, detailCurrency)}</strong><span>{dateTime(item.received_at)}</span></div></article>) : <p className="customer-empty-state">No credit settlements yet.</p>)}
         </div>
         <Pagination meta={detailPages[detailTab]} onPage={(page) => void openDetails(selected.id, page)} />

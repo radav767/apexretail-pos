@@ -14,7 +14,8 @@ class CreditReceivable(Base):
     __table_args__ = (
         CheckConstraint("original_amount > 0", name="ck_receivables_original_positive"),
         CheckConstraint("amount_settled >= 0 AND amount_settled <= original_amount", name="ck_receivables_settled_range"),
-        CheckConstraint("outstanding_balance = original_amount - amount_settled", name="ck_receivables_balance_projection"),
+        CheckConstraint("outstanding_balance = original_amount - amount_settled - amount_credited", name="ck_receivables_balance_projection"),
+        CheckConstraint("amount_credited >= 0 AND amount_settled + amount_credited <= original_amount", name="ck_receivables_credited_range"),
         CheckConstraint("status IN ('unpaid','partially_paid','paid')", name="ck_receivables_status"),
     )
 
@@ -30,6 +31,7 @@ class CreditReceivable(Base):
     currency_code: Mapped[str] = mapped_column(String(8), nullable=False)
     original_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     amount_settled: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), nullable=False)
+    amount_credited: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=Decimal("0.00"), server_default="0", nullable=False)
     outstanding_balance: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     status: Mapped[str] = mapped_column(String(30), default="unpaid", nullable=False)

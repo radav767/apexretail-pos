@@ -244,7 +244,7 @@ class ReportsRepository:
         shop_receivable = "AND (CAST(:shop_id AS uuid) IS NULL OR cr.shop_id=CAST(:shop_id AS uuid))"
         result = await self.db.execute(text(f"""
             WITH eligible_sales AS (
-                SELECT s.id,s.total_amount,s.payment_method,s.original_sale_id,s.discount_amount
+                SELECT s.id,s.total_amount,s.tax_amount,s.payment_method,s.original_sale_id,s.discount_amount
                   FROM sales s
                  WHERE s.company_id=:company_id
                    AND s.created_at>=:start_at AND s.created_at<:end_at
@@ -257,6 +257,7 @@ class ReportsRepository:
             ), sale_totals AS (
                 SELECT COALESCE(SUM(CASE WHEN original_sale_id IS NULL THEN total_amount ELSE 0 END),0) gross_sales,
                        COALESCE(SUM(total_amount),0) net_sales,
+                       COALESCE(SUM(tax_amount),0) tax_collected,
                        COALESCE(SUM(CASE WHEN original_sale_id IS NULL THEN discount_amount ELSE 0 END),0) discounts,
                        COALESCE(SUM(CASE WHEN lower(payment_method)='cash' THEN total_amount ELSE 0 END),0) cash_sales,
                        COALESCE(SUM(CASE WHEN lower(payment_method)='card' THEN total_amount ELSE 0 END),0) card_sales,
@@ -283,6 +284,9 @@ class ReportsRepository:
                    {branch_receivable} {shop_receivable}
             )
             SELECT st.gross_sales,st.net_sales,sc.cost_of_sales,
+                   st.tax_collected,st.net_sales-st.tax_collected net_sales_ex_tax,
+                   st.net_sales-st.tax_collected-sc.cost_of_sales gross_profit_ex_tax,
+                   st.net_sales-st.tax_collected-sc.cost_of_sales-et.operating_expenses net_profit_ex_tax,
                    st.net_sales-sc.cost_of_sales gross_profit,
                    st.discounts,
                    et.operating_expenses,

@@ -44,7 +44,7 @@ async def update_customer(company_id: UUID, customer_id: UUID, data: CustomerUpd
 
 
 @router.get("/{company_id}/{customer_id}/transactions", response_model=list[CustomerTransactionOut] | Page[CustomerTransactionOut])
-async def customer_transactions(company_id: UUID, customer_id: UUID, transaction_type: str | None = Query(default=None, pattern="^(credit_sale|settlement)$"), start_at: datetime | None = None, end_at: datetime | None = None, page: int | None = Query(default=None, ge=1), page_size: int | None = Query(default=None, ge=1, le=100), limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0), service: CustomerService = Depends(get_service), _actor: AuthActor = Depends(require_path_permission("customers_view"))):
+async def customer_transactions(company_id: UUID, customer_id: UUID, transaction_type: str | None = Query(default=None, pattern="^(credit_sale|settlement|credit_refund)$"), start_at: datetime | None = None, end_at: datetime | None = None, page: int | None = Query(default=None, ge=1), page_size: int | None = Query(default=None, ge=1, le=100), limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0), service: CustomerService = Depends(get_service), _actor: AuthActor = Depends(require_path_permission("customers_view"))):
     filters = dict(transaction_type=transaction_type, start_at=start_at, end_at=end_at)
     if page is None and page_size is None:
         return await service.history(company_id, customer_id, **filters, limit=limit, offset=offset)

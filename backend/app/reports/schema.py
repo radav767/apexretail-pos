@@ -80,6 +80,10 @@ class InventoryValuationResponse(BaseModel):
 
 
 class FinancialSummaryResponse(BaseModel):
+    tax_collected: Decimal
+    net_sales_ex_tax: Decimal
+    gross_profit_ex_tax: Decimal
+    net_profit_ex_tax: Decimal
     gross_sales: Decimal
     net_sales: Decimal
     cost_of_sales: Decimal

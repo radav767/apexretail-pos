@@ -21,6 +21,10 @@ from app.models.company_settings import CompanySetting
 
 
 class SalesRepository:
+    async def credit_receivable_for_update(self, company_id, sale_id):
+        return (await self.db.execute(select(CreditReceivable).where(CreditReceivable.company_id == company_id,
+            CreditReceivable.sale_id == sale_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+
     async def begin_refund_command(self, data, actor):
         from .refund_commands import begin
         return await begin(self.db, data, actor)

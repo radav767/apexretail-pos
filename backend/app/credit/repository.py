@@ -15,7 +15,7 @@ class CreditRepository:
     async def get_receivable(self, company_id, receivable_id, *, for_update=False):
         query = select(CreditReceivable).where(CreditReceivable.company_id == company_id, CreditReceivable.id == receivable_id)
         if for_update:
-            query = query.with_for_update()
+            query = query.with_for_update().execution_options(populate_existing=True)
         return (await self.db.execute(query)).scalar_one_or_none()
 
     async def get_settlement_by_key(self, company_id, key):

@@ -22,6 +22,7 @@ class ReceivableOut(BaseModel):
     currency_code: str
     original_amount: Decimal
     amount_settled: Decimal
+    amount_credited: Decimal
     outstanding_balance: Decimal
     due_date: date
     status: str

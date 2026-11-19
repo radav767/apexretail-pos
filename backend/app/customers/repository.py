@@ -88,6 +88,18 @@ class CustomerRepository:
               LEFT JOIN users settle_user ON settle_user.id=cs.actor_user_id
                AND settle_user.company_id=cs.company_id AND settle_user.active=true AND settle_user.deleted=false
              WHERE cs.company_id=:company_id AND cs.customer_id=:customer_id
+            UNION ALL
+            SELECT 'credit_refund', adjustment.id, refund.id, refund.receipt_number,
+                   -adjustment.amount, 'credit', refund.branch_id, refund.created_at,
+                   NULL::date, refund.refund_reason, proof.actor_id,
+                   COALESCE(refund_employee.name, refund_user.email, proof.actor_id::text, 'Unknown')
+              FROM credit_refund_adjustments adjustment
+              JOIN credit_receivables cr ON cr.id=adjustment.receivable_id AND cr.company_id=adjustment.company_id
+              JOIN sales refund ON refund.id=adjustment.refund_sale_id AND refund.company_id=adjustment.company_id
+              LEFT JOIN refund_command_receipts proof ON proof.sale_id=refund.id AND proof.company_id=refund.company_id
+              LEFT JOIN employees refund_employee ON proof.actor_type='employee' AND refund_employee.id=proof.actor_id AND refund_employee.company_id=refund.company_id
+              LEFT JOIN users refund_user ON proof.actor_type='user' AND refund_user.id=proof.actor_id AND refund_user.company_id=refund.company_id
+             WHERE adjustment.company_id=:company_id AND cr.customer_id=:customer_id
             ) SELECT * FROM history
              WHERE (CAST(:transaction_type AS varchar) IS NULL OR transaction_type=CAST(:transaction_type AS varchar))
                AND (CAST(:start_at AS timestamptz) IS NULL OR occurred_at>=CAST(:start_at AS timestamptz))
