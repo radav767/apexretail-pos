@@ -1,0 +1,22 @@
+{
+  "frozen_source_root": "/root/apexretail-pos/artifacts/pos-first-login-fix-20261117/release-source/pos-web",
+  "original_frozen_inputs": {
+    "src/App.tsx": true,
+    "src/api/client.ts": true,
+    "src/device.ts": true,
+    "src/api/authLifecycle.ts": true,
+    "tests/authLifecycle.test.ts": true,
+    "scripts/run-auth-lifecycle-tests.mjs": true,
+    "scripts/reproduce-baseline-startup-races.mjs": true
+  },
+  "candidate_frozen_inputs": {
+    "src/App.tsx": false,
+    "src/api/client.ts": true,
+    "src/device.ts": true,
+    "src/api/authLifecycle.ts": true,
+    "tests/authLifecycle.test.ts": false,
+    "scripts/run-auth-lifecycle-tests.mjs": true,
+    "scripts/reproduce-baseline-startup-races.mjs": true
+  },
+  "note": "Candidate App.tsx and expanded auth tests intentionally differ; original release-source inputs remain frozen."
+}

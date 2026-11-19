@@ -1,0 +1,13 @@
+369e2b1f8eb354e30926ebc11342c15dcaa2eb21 Define historical access, exact replay and queued-write licensing policy
+c796f24fc83ae6da2b1a7db9b05c4119a8ce1d39 Enforce new-sale licensing after exact committed replay proof
+95034fe8d43988aeb630815bb2ca0058f2d6f32c Enforce operational write licenses after exact committed replay checks
+9609f62d090c1760062bdbba2b7098379990ea4a Prove financial replays and guard new finance configuration writes
+60edb53ff2af89d149f6df26b371d3866ec77bf4 Revoke legacy employee and POS owner sessions on logout
+9e0dc3f30d0a01bf40e4c1e9a0d525d8b14327ff Bound offline capture with fresh signed server-time challenges
+c80c78cdac54a7162d22f4fd49d41f124dd9f18d Preserve stock and tip replay authority across subscription changes
+d82f6af5ee1804c8ce7ff1e5baf4bbf571602180 Define licensed drawer writes and expired-account shift finalization policy
+ac6cb9e94fd3b6b0a159a87d2c40f3c19a5e13cc Enforce exact shift drawer and quarantine-resolution command replay
+b8364c3f6ca0da3422f319e3408d03821d3ea392 Preserve partial refund identity across retries reloads and tabs
+297783e8d59cf90f8610ed0f9da5ea54186c7f80 Revoke changed employee authority and sign current offline actions
+ee99d46c84cdc3765830c61eab248af45e92b507 Enforce catalog service license and optional module policy before effects
+f794aeb48e0710c5f4ec52f9870c46b587439d38 Establish golden ledger cashflow and historical snapshot reconciliation
