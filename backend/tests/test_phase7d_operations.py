@@ -238,6 +238,11 @@ class Phase7DOperationsTests(unittest.IsolatedAsyncioTestCase):
         await self.db.flush()
         order = await self.add(await self.open(kind="quotation", customer_id=customer.id))
         self.assertEqual(Decimal(order["estimated_subtotal"]), 18)
+        from app.business_operations.quotations import transition
+        from app.business_operations.schema import QuotationTransition
+        for action in ('sent','accepted'):
+            order=await transition(self.svc,order['id'],QuotationTransition(version=order['version'],request_id=uuid4(),action=action,
+                valid_until=datetime.now(timezone.utc)+timedelta(days=1) if action=='sent' else None))
         result = await self.svc.settle(order["id"], self.payment(order))
         self.assertEqual((await self.db.get(Sale, result["sale_id"])).total_amount, 18)
 

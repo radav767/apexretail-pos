@@ -151,6 +151,7 @@ class BusinessService(PrintingService):
 
     async def create_order(self, data):
         permit(self.actor, "quotations_manage" if data.kind == "quotation" else "orders_manage")
+        if data.kind == "quotation" and (data.table_id or data.guest_id): raise HTTPException(422, "Quotations do not use restaurant tables or room accounts")
         await self.branch(data.branch_id)
         await self.db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {'key': 'phase11-order:' + str(self.actor.company_id) + ':' + str(data.request_id)})
         # A register lock serializes repeated create requests before uniqueness.
@@ -183,19 +184,21 @@ class BusinessService(PrintingService):
         row = CommerceOrder(company_id=self.actor.company_id, branch_id=data.branch_id, device_id=device.id, waiter_id=waiter_id,
             table_id=data.table_id, guest_id=data.guest_id, customer_id=data.customer_id, kind=data.kind, request_id=data.request_id,
             number=f"O-{uuid.uuid4().hex[:16].upper()}", status="open", version=1, notes=data.notes)
+        if row.kind == 'quotation': row.quotation_status = 'draft'
         row.creation_payload_hash = command_hash; row.creation_actor_type = self.actor.actor_type; row.creation_actor_id = command_actor
         self.db.add(row); await self.db.flush()
         self.audit("commerce_order_opened", order_id=row.id, kind=row.kind); await self.commit_operation()
         return await self.order_out(row)
 
     async def order(self, order_id, *, version=None, edit=False, settle=False):
-        row = (await self.db.execute(select(CommerceOrder).where(CommerceOrder.id == order_id, CommerceOrder.company_id == self.actor.company_id).with_for_update())).scalar_one_or_none()
+        row = (await self.db.execute(select(CommerceOrder).where(CommerceOrder.id == order_id, CommerceOrder.company_id == self.actor.company_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
         if not row: raise HTTPException(404, "Order not found")
         await self.branch(row.branch_id)
         permit(self.actor, "orders_settle" if settle else "quotations_manage" if row.kind == "quotation" else "orders_manage")
         if self.actor.employee and not self.manager() and not settle and row.waiter_id != self.actor.employee.id:
             raise HTTPException(403, "Order belongs to another employee")
         if edit: await self.require_write('wholesale' if row.kind == 'quotation' else 'hospitality' if row.kind == 'room_service' else 'restaurant')
+        if edit and row.kind == 'quotation' and row.quotation_status != 'draft': raise HTTPException(409, 'Quotation terms are frozen; create a new draft')
         if edit and row.status != "open": raise HTTPException(409, "Order is locked")
         if version is not None and row.version != version: raise HTTPException(409, "Order changed. Reload before retrying")
         return row
@@ -204,13 +207,15 @@ class BusinessService(PrintingService):
         return (await self.db.execute(select(CommerceOrderItem).where(CommerceOrderItem.order_id == row.id).order_by(CommerceOrderItem.id))).scalars().all()
 
     async def order_out(self, row):
+        from .quotations import state
         table = await self.db.get(DiningTable, row.table_id) if row.table_id else None
         waiter = await self.db.get(Employee, row.waiter_id) if row.waiter_id else None
         items = await self.order_items(row)
         return {**row_dict(row, ("id", "number", "kind", "status", "version", "branch_id", "device_id", "table_id", "waiter_id", "guest_id", "customer_id", "parent_id", "sale_id", "notes", "created_at")),
+            'quotation_status': state(row) if row.kind=='quotation' else None, 'quotation_valid_until':row.quotation_valid_until, 'quotation_terms':row.quotation_terms,
             "table_name": table.name if table else "Takeaway", "waiter_name": waiter.name if waiter else "Unassigned",
             "items": [row_dict(i, ("id", "product_id", "variant_id", "name", "quantity", "sent_quantity", "price", "unit", "notes")) for i in items],
-            "estimated_subtotal": str(sum((i.quantity * i.price for i in items), Decimal("0"))), "estimate_only": True}
+            "estimated_subtotal": str(sum((i.quantity * i.price for i in items), Decimal("0"))), "estimate_only": row.quotation_terms is None}
 
     async def refresh_price_estimates(self, row):
         # Reuse Phase 7A's configured customer-price lookup. Estimates do not
@@ -364,6 +369,7 @@ class BusinessService(PrintingService):
         await self.require_write()
         row = await self.order(order_id, version=data.version, edit=True)
         permit(self.actor, "restaurant_manage")
+        if row.kind == 'quotation': raise HTTPException(409,'Create a new quotation draft instead of splitting its authority')
         items = [i for i in await self.order_items(row) if i.quantity > 0]
         if data.item_ids and data.quantities:
             raise HTTPException(400, "Choose whole lines or quantities, not both")
@@ -411,6 +417,7 @@ class BusinessService(PrintingService):
         # Stable lock order avoids opposite-direction merge deadlocks.
         locked = {key: await self.order(key, edit=True) for key in sorted([order_id, data.source_id], key=str)}
         target, source = locked[order_id], locked[data.source_id]
+        if target.kind == 'quotation' or source.kind == 'quotation': raise HTTPException(409,'Create a new quotation draft instead of merging its authority')
         if (target.branch_id, target.device_id, target.customer_id, target.guest_id, target.kind) != (source.branch_id, source.device_id, source.customer_id, source.guest_id, source.kind): raise HTTPException(409, "Bills must share branch, register, guest/customer and type")
         if target.version != data.version or source.version != data.source_version: raise HTTPException(409, "Order changed. Reload")
         if any(i.sent_quantity > 0 for i in await self.order_items(source)) and (target.table_id != source.table_id or target.waiter_id != source.waiter_id):
@@ -450,6 +457,10 @@ class BusinessService(PrintingService):
         if self.actor.employee and (not self.actor.pos_session or self.actor.pos_session.device_id != row.device_id): raise HTTPException(403, "Settle on the assigned register")
         if data.payment.company_id != row.company_id: raise HTTPException(403, "Forbidden")
         if data.payment.client_created_at or data.payment.offline_shift_token: raise HTTPException(409, "Open-order settlement is online-only; preserve pending offline sales for their existing sync workflow")
+        if row.kind == 'quotation':
+            if data.charge_to_room: raise HTTPException(409,'Quotation customer terms are frozen; room charging is unavailable')
+            from .quotations import require_conversion
+            await require_conversion(self,row,data.payment)
         items = [i for i in await self.order_items(row) if i.quantity > 0]
         if not items: raise HTTPException(400, "Order is empty")
         if row.kind != "quotation" and any(i.quantity != i.sent_quantity for i in await self.order_items(row)):
@@ -471,8 +482,12 @@ class BusinessService(PrintingService):
         payment = data.payment.model_copy(update={"company_id": row.company_id, "branch_id": row.branch_id, "device_id": row.device_id,
             "client_sale_id": row.id, "customer_id": customer_id,
             "items": [SaleItemCreate(product_id=p, variant_id=v, quantity=q, selling_unit=u) for (p, v, u), q in grouped.items()]})
+        if row.kind == 'quotation': payment = payment.model_copy(update={'discount_amount': Decimal('0'), 'sale_discount_amount': Decimal('0')})
         try:
             sale = await SalesService(SalesRepository(self.db, commit_on_save=False)).create_sale(payment, actor=self.actor)
+            if row.kind == 'quotation':
+                from .quotations import validate_sale
+                await validate_sale(self,row,sale)
             row.sale_id = sale.id; row.status = "settled"; row.version += 1
             row.settlement_payload_hash = command_hash; row.settlement_actor_type = self.actor.actor_type; row.settlement_actor_id = command_actor
             self.audit("order_settled", order_id=row.id, sale_id=sale.id, guest_id=row.guest_id, room_charge=data.charge_to_room)

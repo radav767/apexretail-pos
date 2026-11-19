@@ -17,6 +17,7 @@ from .tips import TipService
 from .returns import ReturnService, InspectionInput
 from .schema import OfflineDraftInput, OfflineEditInput
 from .schema import OfflineKitchenInput, OfflineKDSInput, OfflineResolutionInput
+from .schema import QuotationTransition
 from .schema import ProfileInput, TableInput, RoomInput, GuestInput, OrderInput, OrderItemInput, ItemUpdate, VersionInput, MoveInput, SplitInput, MergeInput, SettlementInput, BatchInput, KitchenStateInput
 
 router = APIRouter(prefix="/operations", tags=["business operations"])
@@ -176,6 +177,12 @@ async def add_order(data: OrderInput, svc=Depends(service)): return await svc.cr
 
 @router.get("/orders/{order_id}")
 async def get_order(order_id: UUID, svc=Depends(service)): return await svc.order_out(await svc.order(order_id))
+
+
+@router.post('/orders/{order_id}/quotation-transition')
+async def transition_quotation(order_id: UUID,data: QuotationTransition,svc=Depends(service)):
+    from .quotations import transition
+    return await transition(svc,order_id,data)
 
 
 @router.post("/orders/{order_id}/items")

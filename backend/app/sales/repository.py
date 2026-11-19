@@ -96,19 +96,19 @@ class SalesRepository:
             product,
         )
     async def get_variant(self,company_id,product_id,variant_id):
-        return (await self.db.execute(select(ProductVariant).where(ProductVariant.company_id==company_id,ProductVariant.product_id==product_id,ProductVariant.id==variant_id,ProductVariant.active==True,ProductVariant.deleted==False).with_for_update())).scalar_one_or_none()
+        return (await self.db.execute(select(ProductVariant).where(ProductVariant.company_id==company_id,ProductVariant.product_id==product_id,ProductVariant.id==variant_id,ProductVariant.active==True,ProductVariant.deleted==False).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
 
     async def has_active_variants(self, company_id, product_id):
         return (await self.db.execute(select(ProductVariant.id).where(ProductVariant.company_id == company_id,
             ProductVariant.product_id == product_id, ProductVariant.active == True,
             ProductVariant.deleted == False).limit(1))).first() is not None
     async def get_variant_balance(self,company_id,branch,product_id,variant_id):
-        row=(await self.db.execute(select(VariantInventoryBalance).where(VariantInventoryBalance.company_id==company_id,VariantInventoryBalance.branch_id==branch.id,VariantInventoryBalance.variant_id==variant_id,VariantInventoryBalance.deleted==False).with_for_update())).scalar_one_or_none()
+        row=(await self.db.execute(select(VariantInventoryBalance).where(VariantInventoryBalance.company_id==company_id,VariantInventoryBalance.branch_id==branch.id,VariantInventoryBalance.variant_id==variant_id,VariantInventoryBalance.deleted==False).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
         if row is None:
             row=VariantInventoryBalance(company_id=company_id,shop_id=branch.shop_id,branch_id=branch.id,product_id=product_id,variant_id=variant_id,quantity=0,reorder_level=0); self.db.add(row); await self.db.flush()
         return row
     async def get_price_level(self,company_id,product_id,name,quantity):
-        return (await self.db.execute(select(ProductPriceLevel).where(ProductPriceLevel.company_id==company_id,ProductPriceLevel.product_id==product_id,func.lower(ProductPriceLevel.name)==name.lower(),ProductPriceLevel.minimum_quantity<=quantity,ProductPriceLevel.active==True,ProductPriceLevel.deleted==False).order_by(ProductPriceLevel.minimum_quantity.desc()).limit(1))).scalar_one_or_none()
+        return (await self.db.execute(select(ProductPriceLevel).where(ProductPriceLevel.company_id==company_id,ProductPriceLevel.product_id==product_id,func.lower(ProductPriceLevel.name)==name.lower(),ProductPriceLevel.minimum_quantity<=quantity,ProductPriceLevel.active==True,ProductPriceLevel.deleted==False).order_by(ProductPriceLevel.minimum_quantity.desc()).limit(1).execution_options(populate_existing=True))).scalar_one_or_none()
 
     async def sync_product_total(self, product):
         return await self.stock.sync_product_total(product)
@@ -165,7 +165,7 @@ class SalesRepository:
         query = select(Device).where(
             Device.company_id == company_id,
             Device.deleted == False,
-        ).with_for_update()
+        ).with_for_update().execution_options(populate_existing=True)
 
         if device_id is not None:
             query = query.where(Device.id == device_id)
@@ -198,7 +198,7 @@ class SalesRepository:
                 Customer.id == customer_id,
                 Customer.active.is_(True),
                 Customer.deleted.is_(False),
-            ).with_for_update()
+            ).with_for_update().execution_options(populate_existing=True)
         )
         return result.scalar_one_or_none()
 
@@ -341,7 +341,7 @@ class SalesRepository:
         return result.scalar_one_or_none()
 
     async def get_sale_for_update(self, company_id, sale_id):
-        result = await self.db.execute(select(Sale).where(Sale.company_id == company_id, Sale.id == sale_id).with_for_update())
+        result = await self.db.execute(select(Sale).where(Sale.company_id == company_id, Sale.id == sale_id).with_for_update().execution_options(populate_existing=True))
         return result.scalar_one_or_none()
 
     async def get_sale_items(
@@ -356,7 +356,7 @@ class SalesRepository:
         return result.scalars().all()
 
     async def get_sale_items_for_update(self, sale_id):
-        result = await self.db.execute(select(SaleItem).where(SaleItem.sale_id == sale_id).with_for_update())
+        result = await self.db.execute(select(SaleItem).where(SaleItem.sale_id == sale_id).with_for_update().execution_options(populate_existing=True))
         return result.scalars().all()
 
     async def list_refund_items_for_original_item(

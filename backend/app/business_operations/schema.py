@@ -159,3 +159,10 @@ class BatchStockInput(BatchInput):
         if self.operation != "count" and self.quantity <= 0:
             raise ValueError("Stock movement quantity must be greater than zero")
         return self
+
+
+class QuotationTransition(VersionInput):
+    model_config = {"extra":"forbid"}
+    request_id: UUID
+    action: Literal['sent','accepted','rejected']
+    valid_until: datetime | None = None

@@ -91,7 +91,7 @@ def assess(row):
                  '/api/operations/offline/edits', '/api/operations/offline/kitchen', '/api/operations/offline/kds',
                  '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries',
                  '/api/shifts/open', '/api/shifts/current/cash-movements', '/api/shifts/offline-resolutions'}
-        or path.startswith('/api/operations/orders/') and path.endswith('/settle')
+        or path.startswith('/api/operations/orders/') and path.endswith(('/settle','/quotation-transition'))
         or domain == 'shifts' and path.endswith(('/cash-movements','/close','/manager-close')))
     if exact:
         observed = 'transaction_service_replay_policy'
@@ -100,6 +100,10 @@ def assess(row):
                   'current server license/modules for pending/new commands. Legacy incomplete proofs conflict; '
                   'optional legacy command IDs have no deduplication guarantee. No stock/payment re-execution.')
         if domain == 'inventory': sources += ';inventory/command_policy.py;inventory/count_requests.py;inventory/transfer_repository.py'
+        if path.endswith('/quotation-transition'):
+            gap = 'immutable_validity_terms_and_action_proof_accepted_conversion_stock_races_verified'
+            replay = 'Current actor/register/revision plus exact immutable action proof; new workflow needs wholesale license. Freeze validity/zero-discount/tax/pricing; no stock/payment until accepted current-stock conversion, with atomic final sale comparison.'
+            sources += ';business_operations/quotations.py'
         if path == '/api/customers/checkout':
             gap = 'identified_basic_contact_creation_no_credit_stock_payment_effects_verified'
             replay = 'Current actor/tenant/customers_view plus immutable UUID/full-input proof; exact recovery survives expiry. New basic contact creation needs license and cannot accept credit/status/price-tier fields.'

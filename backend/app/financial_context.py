@@ -17,7 +17,7 @@ async def resolve_shift_for_write(
         if requested_shift_id is not None:
             raise HTTPException(409, "Shift validation requires a database transaction")
         return None
-    settings = (await db.execute(select(CompanySetting).where(
+    settings = (await db.execute(select(CompanySetting).execution_options(populate_existing=True).where(
         CompanySetting.company_id == company_id,
         CompanySetting.deleted.is_(False),
     ))).scalar_one_or_none()

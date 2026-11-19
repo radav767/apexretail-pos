@@ -55,3 +55,4 @@ from .shift_command import ShiftCommandReceipt
 from .refund_command import RefundCommandReceipt
 from app.models.credit_refund_adjustment import CreditRefundAdjustment
 from app.models.checkout_customer_command import CheckoutCustomerCommand
+from app.models.quotation_command import QuotationCommand

@@ -1,0 +1,12 @@
+{
+  "synthetic_only": true,
+  "send_lost_response_reload_retains_command": true,
+  "accepted_transition_requires_matching_request_ack": true,
+  "retry_retains_same_version_and_request": true,
+  "accepted_ui_has_no_repeat_accept_button": true,
+  "quotation_preview_escapes_injected_markup": true,
+  "preview_discloses_frozen_terms_and_no_payment_receipt": true,
+  "page_errors": [],
+  "unexpected_requests": [],
+  "provider_or_message_actions": false
+}

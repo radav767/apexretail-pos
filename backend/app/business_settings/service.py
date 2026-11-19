@@ -46,7 +46,7 @@ class BusinessSettingsService:
         *, commit: bool = True,
     ) -> CompanySetting:
         result = await self.db.execute(
-            select(CompanySetting).where(
+            select(CompanySetting).execution_options(populate_existing=True).where(
                 CompanySetting.company_id == company_id,
                 CompanySetting.deleted.is_(False),
             )

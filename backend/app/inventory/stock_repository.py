@@ -69,7 +69,7 @@ class BranchStockRepository:
                 Product.active == True,
                 Product.deleted == False,
             )
-            .with_for_update()
+            .with_for_update().execution_options(populate_existing=True)
         )
 
         product = result.scalar_one_or_none()
@@ -93,7 +93,7 @@ class BranchStockRepository:
                 InventoryBalance.product_id == product.id,
                 InventoryBalance.deleted == False,
             )
-            .with_for_update()
+            .with_for_update().execution_options(populate_existing=True)
         )
 
         balance = result.scalar_one_or_none()

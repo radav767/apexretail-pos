@@ -7,7 +7,7 @@ async def enforce_request_features(db,actor,request):
             '/api/operations/offline/kitchen', '/api/operations/offline/kds',
             '/api/inventory/stock-take', '/api/inventory/transfers',
             '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries'}
-            or request.url.path.startswith('/api/operations/orders/') and request.url.path.endswith(('/settle', '/send'))): return
+            or request.url.path.startswith('/api/operations/orders/') and request.url.path.endswith(('/settle', '/send', '/quotation-transition'))): return
     from .commercial import enforce_feature,terms_for
     terms=await terms_for(db,actor.company_id)
     if terms is None:return

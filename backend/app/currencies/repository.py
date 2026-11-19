@@ -14,7 +14,7 @@ class CurrencyRepository:
         self.db = db
 
     async def settings(self, company_id, *, for_update=False):
-        query = select(CompanySetting).where(
+        query = select(CompanySetting).execution_options(populate_existing=True).where(
             CompanySetting.company_id == company_id,
             CompanySetting.deleted.is_(False),
         )

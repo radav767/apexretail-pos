@@ -1,0 +1,13 @@
+{
+  "synthetic_only": true,
+  "three_equal_send_and_accept_requests_one_receipt_each": true,
+  "three_equal_conversions_one_sale_and_movement": true,
+  "conversion_vs_online_sale_stock_race": [
+    400,
+    200
+  ],
+  "remaining_limited_stock": "1.000",
+  "no_reservation_at_send_or_accept": true,
+  "no_duplicate_stock_payment_or_deadlock": true,
+  "real_provider_or_message_actions": false
+}
