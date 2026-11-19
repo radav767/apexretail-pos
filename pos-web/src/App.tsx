@@ -1,3 +1,4 @@
+import InlineCustomerCreate from "./components/InlineCustomerCreate";
 import { offlineLease, invalidateOfflineLease, canUseOfflineAction } from "./offline/lease";
 import { requestPosLogout } from "./api/posLogout";
 import BackofficeHandoffDialog from './components/BackofficeHandoffDialog';
@@ -2393,6 +2394,7 @@ const [loggedIn, setLoggedIn] = useState(
   }
 
   async function loadCreditCustomers(query = creditCustomerSearch) {
+    const scope = createBootstrapScope();
     try {
       setCreditCustomersLoading(true);
       setCreditDialogMessage("");
@@ -2400,6 +2402,7 @@ const [loggedIn, setLoggedIn] = useState(
         activeOnly: true,
         limit: 100,
       });
+      if (!scope.isCurrent()) return;
       setCreditCustomers(customers);
       if (
         selectedCreditCustomer &&
@@ -2409,12 +2412,13 @@ const [loggedIn, setLoggedIn] = useState(
         setSelectedCreditCustomer(null);
       }
     } catch (error) {
+      if (!scope.isCurrent()) return;
       setCreditCustomers([]);
       setCreditDialogMessage(
         getApiErrorMessage(error, "Unable to load customers"),
       );
     } finally {
-      setCreditCustomersLoading(false);
+      if (scope.isCurrent()) setCreditCustomersLoading(false);
     }
   }
 
@@ -4028,6 +4032,14 @@ const [loggedIn, setLoggedIn] = useState(
       <aside style={activePosModule === "Sales" ? cartPanel : { ...cartPanel, display: "none" }} className="pos-sales-cart">
         <h2 style={{ marginTop: 0 }}>Current Sale</h2>
         <label className="pos-pricing-customer">Customer pricing<select value={pricingCustomer?.id||""} onFocus={()=>{if(!creditCustomers.length)void loadCreditCustomers("")}} onChange={event=>choosePricingCustomer(event.target.value)}><option value="">Retail / standard</option>{creditCustomers.map(customer=><option key={customer.id} value={customer.id}>{customer.name}{customer.price_level_name?` — ${customer.price_level_name}`:""}</option>)}</select></label>
+        {cashier && cashier.permissions?.customers_view !== false && <InlineCustomerCreate key={`checkout-customer:${companyId}:${cashier?.id || "owner"}`} companyId={companyId} actorKey={cashier!.id} client={api} onCreated={customer => {
+          setCreditCustomers(current => [customer, ...current.filter(row => row.id !== customer.id)]);
+          // Keep current quoted cart/pricing intact; replacing an existing
+          // pricing customer still uses the explicit pricing selection.
+          if (!pricingCustomer) setPricingCustomer(customer);
+          if (showCreditSale) setSelectedCreditCustomer(customer);
+          setMessage("Customer saved. Cart preserved; credit starts disabled.");
+        }}/>}
 
         <div style={cartItemsArea}>
           {!cart.length && (
@@ -4197,6 +4209,8 @@ const [loggedIn, setLoggedIn] = useState(
           <div style={modalCard} className="pos-credit-dialog" role="dialog" aria-modal="true" aria-labelledby="credit-sale-title">
             <h2 id="credit-sale-title" style={{ marginTop: 0 }}>Credit Sale</h2>
             <p className="pos-credit-online-notice">Online validation is required before this sale can be posted.</p>
+            {cashier && <InlineCustomerCreate key={`credit-customer:${companyId}:${cashier?.id || "owner"}`} companyId={companyId} actorKey={cashier!.id} client={api} onCreated={customer => { setCreditCustomers(current => [customer, ...current.filter(row => row.id !== customer.id)]); setSelectedCreditCustomer(customer); setCreditDialogMessage("Customer created with credit disabled. A manager must configure credit before credit checkout."); }}/>}
+
 
             <form
               className="pos-credit-search"

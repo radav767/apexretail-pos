@@ -1,0 +1,13 @@
+{
+  "synthetic_only": true,
+  "three_equal_commands_one_contact_and_proof": true,
+  "counts": {
+    "customers": 1,
+    "checkout_customer_commands": 1,
+    "inventory_movements": 0,
+    "sales": 0
+  },
+  "exact_customer_recovery_after_expiry": true,
+  "no_stock_payment_or_credit_effects": true,
+  "provider_or_production_actions": false
+}

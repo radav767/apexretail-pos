@@ -54,3 +54,4 @@ from app.models.sale_command import SaleCommandReceipt
 from .shift_command import ShiftCommandReceipt
 from .refund_command import RefundCommandReceipt
 from app.models.credit_refund_adjustment import CreditRefundAdjustment
+from app.models.checkout_customer_command import CheckoutCustomerCommand

@@ -1,0 +1,12 @@
+{
+  "synthetic_only": true,
+  "lost_response_reload_retains_request_id_and_contact": true,
+  "no_credit_or_credentials_in_command": true,
+  "cart_quantity_price_discount_tender_unchanged": true,
+  "late_identity_response_cannot_select_customer": true,
+  "unconfirmed_request_retained_after_identity_change": true,
+  "damaged_evidence_blocks_new_request": true,
+  "page_errors": [],
+  "unexpected_requests": [],
+  "real_messages_or_provider_actions": false
+}

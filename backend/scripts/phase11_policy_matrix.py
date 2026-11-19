@@ -86,7 +86,7 @@ def assess(row):
         gap = 'service_direct_call_and_exact_replay_acceptance_pending'
         if observed == 'service_or_exception_policy': gap = 'write_license_gap_requires_transaction_specific_guard'
     exact = method == 'POST' and (
-        path in {'/api/sales', '/api/sales/refunds', '/api/expenses', '/api/credit/settlements', '/api/inventory/stock-take',
+        path in {'/api/customers/checkout', '/api/sales', '/api/sales/refunds', '/api/expenses', '/api/credit/settlements', '/api/inventory/stock-take',
                  '/api/inventory/transfers', '/api/operations/orders', '/api/operations/offline/drafts',
                  '/api/operations/offline/edits', '/api/operations/offline/kitchen', '/api/operations/offline/kds',
                  '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries',
@@ -100,6 +100,9 @@ def assess(row):
                   'current server license/modules for pending/new commands. Legacy incomplete proofs conflict; '
                   'optional legacy command IDs have no deduplication guarantee. No stock/payment re-execution.')
         if domain == 'inventory': sources += ';inventory/command_policy.py;inventory/count_requests.py;inventory/transfer_repository.py'
+        if path == '/api/customers/checkout':
+            gap = 'identified_basic_contact_creation_no_credit_stock_payment_effects_verified'
+            replay = 'Current actor/tenant/customers_view plus immutable UUID/full-input proof; exact recovery survives expiry. New basic contact creation needs license and cannot accept credit/status/price-tier fields.'
         if path == '/api/sales/refunds':
             gap = 'identified_refund_replay_implemented_legacy_idless_clients_not_deduplicated'
             replay = 'Request UUID/full immutable proof returns original refund without stock/approval effects; new corrections require current license; first-party pending intents retain identity. Legacy callers without UUID retain no deduplication contract.'

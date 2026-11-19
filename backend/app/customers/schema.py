@@ -79,3 +79,13 @@ class CustomerTransactionOut(BaseModel):
     reference: str | None = None
     actor_id: UUID | None = None
     actor_name: str = "Unknown"
+
+
+class CheckoutCustomerCreate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    company_id: UUID
+    request_id: UUID
+    name: str = Field(min_length=1,max_length=160)
+    phone: str | None = Field(default=None,max_length=60)
+    email: str | None = Field(default=None,max_length=160)
+    address: str | None = Field(default=None,max_length=1000)

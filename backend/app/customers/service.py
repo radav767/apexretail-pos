@@ -57,6 +57,38 @@ class CustomerService:
             available = max(Decimal("0.00"), Decimal(customer.credit_limit) - balance)
         return {column.name: getattr(customer, column.name) for column in customer.__table__.columns if column.name not in {"deleted", "created_at", "updated_at"}} | {"outstanding_balance": balance, "available_credit": available}
 
+    async def create_checkout(self, data, actor):
+        from sqlalchemy import text
+        from app.sales.commands import actor_identity, fingerprint
+        from app.models import CheckoutCustomerCommand
+        identity=actor_identity(actor,data.company_id)
+        permit(actor,'customers_view')
+        if not data.name.strip():raise HTTPException(422,'Customer name is required')
+        command_hash=fingerprint(data)
+        await self.repo.db.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))'),{'key':'phase11-checkout-customer:'+str(data.request_id)})
+        receipt=await self.repo.db.get(CheckoutCustomerCommand,data.request_id)
+        if receipt:
+            if receipt.company_id != data.company_id:raise HTTPException(409,'Customer request identity is already in use')
+            if receipt.actor_type != actor.actor_type or receipt.actor_id != identity:raise HTTPException(403,'Original customer request belongs to another actor')
+            if receipt.payload_hash != command_hash:raise HTTPException(409,'Customer request identity has different values')
+            customer=await self.repo.get(data.company_id,receipt.customer_id)
+            if not customer:raise HTTPException(409,'Original customer requires review')
+            return self.view(customer,await self.repo.balance(data.company_id,customer.id))
+        await require_new_write(self.repo.db,data.company_id)
+        code='POS-'+data.request_id.hex.upper()
+        if await self.repo.code_exists(data.company_id,code):raise HTTPException(409,'Generated customer code requires review')
+        customer=Customer(company_id=data.company_id,customer_code=code,name=data.name.strip(),phone=self.clean(data.phone),
+            email=self.clean(data.email),address=self.clean(data.address),active=True,deleted=False,credit_enabled=False,
+            unlimited_credit=False,credit_limit=None,credit_terms_days=0,price_level_name=None)
+        self.repo.db.add(customer)
+        await self.repo.db.flush([customer])
+        self.repo.db.add(CheckoutCustomerCommand(request_id=data.request_id,company_id=data.company_id,customer_id=customer.id,
+            actor_type=actor.actor_type,actor_id=identity,payload_hash=command_hash))
+        self.repo.db.add(AuditEvent(company_id=data.company_id,actor_user_id=identity if actor.actor_type=='user' else None,
+            actor_employee_id=identity if actor.actor_type=='employee' else None,action='checkout_customer_created',details={'request_id':str(data.request_id),'customer_id':str(customer.id)}))
+        await self.repo.save(customer)
+        return self.view(customer,0)
+
     async def create(self, data: CustomerCreate, actor):
         permit(actor, "customers_view")
         enforce_actor_company(actor, data.company_id)

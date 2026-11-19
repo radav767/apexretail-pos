@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import AuthActor, require_billable_body_company, require_body_permission, require_path_permission
 from app.customers.repository import CustomerRepository
-from app.customers.schema import CustomerCreate, CustomerOut, CustomerTransactionOut, CustomerUpdate
+from app.customers.schema import CheckoutCustomerCreate, CustomerCreate, CustomerOut, CustomerTransactionOut, CustomerUpdate
 from app.customers.service import CustomerService
 from app.db.session import get_db
 from app.pagination import Page, page_response
@@ -17,6 +17,11 @@ router = APIRouter(prefix="/customers", tags=["Customers"])
 
 def get_service(db: AsyncSession = Depends(get_db)):
     return CustomerService(CustomerRepository(db))
+
+
+@router.post('/checkout',response_model=CustomerOut)
+async def create_checkout_customer(data: CheckoutCustomerCreate,service: CustomerService=Depends(get_service),actor: AuthActor=Depends(require_body_permission('customers_view'))):
+    return await service.create_checkout(data,actor)
 
 
 @router.post("", response_model=CustomerOut)
