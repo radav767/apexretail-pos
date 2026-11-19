@@ -1,0 +1,148 @@
+test_aggregate_tax_residual_and_exempt_line_snapshots_match_full_reversal (test_phase11_tax_credit_refunds.TaxCreditRefundTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.237 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.118 seconds
+ok
+test_credit_note_is_immutable_and_fault_rolls_back_stock_and_debt (test_phase11_tax_credit_refunds.TaxCreditRefundTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.241 seconds
+ok
+test_inclusive_and_exclusive_partial_returns_conserve_original_cents_tax_and_cost (test_phase11_tax_credit_refunds.TaxCreditRefundTests) ... Executing <Task pending name='Task-9' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.254 seconds
+ok
+test_legacy_unknown_tax_requires_review_without_stock_change (test_phase11_tax_credit_refunds.TaxCreditRefundTests) ... Executing <Task pending name='Task-13' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.240 seconds
+ok
+test_paid_refunds_and_method_overrides_fail_before_stock_debt_or_note_effects (test_phase11_tax_credit_refunds.TaxCreditRefundTests) ... Executing <Task pending name='Task-17' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.245 seconds
+ok
+test_unknown_historical_tax_is_unavailable_not_zero_in_report_and_api (test_phase11_tax_credit_refunds.TaxCreditRefundTests) ... Executing <Task pending name='Task-21' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.246 seconds
+ERROR
+test_unpaid_credit_note_preserves_original_debt_collections_history_and_replay (test_phase11_tax_credit_refunds.TaxCreditRefundTests) ... Executing <Task pending name='Task-25' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.255 seconds
+Executing <Task pending name='Task-25' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.165 seconds
+Executing <Task pending name='Task-25' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.247 seconds
+ok
+test_currency_rounding_and_later_catalog_rate_changes_preserve_snapshots (test_phase11_finance_reconciliation.FinanceReconciliationTests) ... Executing <Task pending name='Task-29' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.242 seconds
+ok
+test_expired_exact_retries_leave_ledger_and_api_report_unchanged (test_phase11_finance_reconciliation.FinanceReconciliationTests) ... Executing <Task pending name='Task-33' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.245 seconds
+ok
+test_golden_snapshots_stock_cost_revenue_cashflow_and_history_agree (test_phase11_finance_reconciliation.FinanceReconciliationTests) ... Executing <Task pending name='Task-37' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.239 seconds
+Executing <Task pending name='Task-37' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.156 seconds
+ok
+test_later_collections_use_half_open_local_midnight_without_new_revenue (test_phase11_finance_reconciliation.FinanceReconciliationTests) ... Executing <Task pending name='Task-41' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.243 seconds
+ok
+
+======================================================================
+ERROR: test_unknown_historical_tax_is_unavailable_not_zero_in_report_and_api (test_phase11_tax_credit_refunds.TaxCreditRefundTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 550, in _prepare_and_execute
+    self._rows = deque(await prepared_stmt.fetch(*parameters))
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/asyncpg/prepared_stmt.py", line 177, in fetch
+    data = await self.__bind_execute(args, 0, timeout)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/asyncpg/prepared_stmt.py", line 268, in __bind_execute
+    data, status, _ = await self.__do_execute(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/asyncpg/prepared_stmt.py", line 257, in __do_execute
+    return await executor(protocol)
+  File "asyncpg/protocol/protocol.pyx", line 205, in bind_execute
+asyncpg.exceptions.NotNullViolationError: null value in column "tax_amount" of relation "sales" violates not-null constraint
+DETAIL:  Failing row contains (3ddd2d1f-2db7-4b90-9390-a2d21e16df92, 517a9878-9078-43cc-9b41-d1567c0bfae5, 12.00, cash, completed, 2026-11-19 12:13:34.210974+00, T-c43ca038-97a8-401f-aa0b-30819d8b3b79, 0.00, 0.00, efe6bb5e-b65f-47a1-95e4-7657ab729243, 602d451c-d751-4623-9a7c-9be718c84796, f549b7f9-08cb-4c80-bbde-568c6eb5c0e0, Waiter, 12.00, null, 0.000, null, f, null, null, null, null, null, d3f07fcd-ed3b-495b-9597-f38097e96bd4, null, null, null, null, null, null, 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null).
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.IntegrityError: <class 'asyncpg.exceptions.NotNullViolationError'>: null value in column "tax_amount" of relation "sales" violates not-null constraint
+DETAIL:  Failing row contains (3ddd2d1f-2db7-4b90-9390-a2d21e16df92, 517a9878-9078-43cc-9b41-d1567c0bfae5, 12.00, cash, completed, 2026-11-19 12:13:34.210974+00, T-c43ca038-97a8-401f-aa0b-30819d8b3b79, 0.00, 0.00, efe6bb5e-b65f-47a1-95e4-7657ab729243, 602d451c-d751-4623-9a7c-9be718c84796, f549b7f9-08cb-4c80-bbde-568c6eb5c0e0, Waiter, 12.00, null, 0.000, null, f, null, null, null, null, null, d3f07fcd-ed3b-495b-9597-f38097e96bd4, null, null, null, null, null, null, 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null).
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/async_case.py", line 64, in _callTestMethod
+    self._callMaybeAsync(method)
+  File "/usr/lib/python3.10/unittest/async_case.py", line 87, in _callMaybeAsync
+    return self._asyncioTestLoop.run_until_complete(fut)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/usr/lib/python3.10/unittest/async_case.py", line 101, in _asyncioLoopRunner
+    ret = await awaitable
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_tax_credit_refunds.py", line 131, in test_unknown_historical_tax_is_unavailable_not_zero_in_report_and_api
+    self.sale.tax_amount=None;await self.db.commit()  # Synthetic legacy row.
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/ext/asyncio/session.py", line 999, in commit
+    await greenlet_spawn(self.sync_session.commit)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 203, in greenlet_spawn
+    result = context.switch(value)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 2035, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 1316, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/state_changes.py", line 137, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 1290, in _prepare_impl
+    self.session.flush()
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4353, in flush
+    self._flush(objects)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4488, in _flush
+    with util.safe_reraise():
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/util/langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/session.py", line 4449, in _flush
+    flush_context.execute()
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 465, in execute
+    rec.execute(self)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/unitofwork.py", line 641, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 86, in save_obj
+    _emit_update_statements(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/orm/persistence.py", line 913, in _emit_update_statements
+    c = connection.execute(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1421, in execute
+    return meth(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/sql/elements.py", line 526, in _execute_on_connection
+    return connection._execute_clauseelement(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1643, in _execute_clauseelement
+    ret = self._execute_context(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1848, in _execute_context
+    return self._exec_single_context(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1988, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 2365, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/base.py", line 1969, in _exec_single_context
+    self.dialect.do_execute(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/engine/default.py", line 952, in do_execute
+    cursor.execute(statement, parameters)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 585, in execute
+    self._adapt_connection.await_(
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 563, in _prepare_and_execute
+    self._handle_exception(error)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 513, in _handle_exception
+    self._adapt_connection._handle_exception(error)
+  File "/tmp/apexpos-phase11-tests.qlfdlS/venv/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py", line 797, in _handle_exception
+    raise translated_error from error
+sqlalchemy.exc.IntegrityError: (sqlalchemy.dialects.postgresql.asyncpg.IntegrityError) <class 'asyncpg.exceptions.NotNullViolationError'>: null value in column "tax_amount" of relation "sales" violates not-null constraint
+DETAIL:  Failing row contains (3ddd2d1f-2db7-4b90-9390-a2d21e16df92, 517a9878-9078-43cc-9b41-d1567c0bfae5, 12.00, cash, completed, 2026-11-19 12:13:34.210974+00, T-c43ca038-97a8-401f-aa0b-30819d8b3b79, 0.00, 0.00, efe6bb5e-b65f-47a1-95e4-7657ab729243, 602d451c-d751-4623-9a7c-9be718c84796, f549b7f9-08cb-4c80-bbde-568c6eb5c0e0, Waiter, 12.00, null, 0.000, null, f, null, null, null, null, null, d3f07fcd-ed3b-495b-9597-f38097e96bd4, null, null, null, null, null, null, 0, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null).
+[SQL: UPDATE sales SET tax_amount=$1::NUMERIC(12, 2) WHERE sales.id = $2::UUID]
+[parameters: (None, UUID('3ddd2d1f-2db7-4b90-9390-a2d21e16df92'))]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+----------------------------------------------------------------------
+Ran 11 tests in 8.135s
+
+FAILED (errors=1)

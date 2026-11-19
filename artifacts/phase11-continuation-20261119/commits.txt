@@ -1,0 +1,5 @@
+fc329a7970a5bd4e4800c4db001962e6f2f8c7f0 Define split tender rounding settlement and refund accounting contract
+69101dc5ccfcb2cea96ed00a628e8a7f4862b122 Reconcile tax refunds and immutable unpaid credit adjustments
+487437f963554034db84928cf6f8623b0af81dbc Add shared paginated product selector with scoped branch stock reads
+4497b09feb178330fe5b0bdf05493b87f79721fc Create identified basic customers inline without changing checkout state
+7658883d14f6d6a5a3070ba67bfbb5f999c7758e Freeze quotation terms and require accepted idempotent sale conversion
