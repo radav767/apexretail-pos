@@ -1,0 +1,11 @@
+.product-selector { grid-column: 1 / -1; min-width: 0; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; color: #152238; }
+.product-selector label { display: block; font-weight: 600; margin-bottom: 6px; }
+.product-selector input { width: 100%; min-height: 44px; box-sizing: border-box; }
+.product-selector p { margin: 7px 0; }
+.product-selector-scroll { overflow: auto; max-height: 340px; }
+.product-selector table { width: 100%; border-collapse: collapse; text-align: left; }
+.product-selector th, .product-selector td { padding: 8px; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+.product-selector th { position: sticky; top: 0; background: #eff6ff; }
+.product-selector button { min-height: 44px; }
+.product-selector-focused { background: #eff6ff; }
+.product-selector-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }

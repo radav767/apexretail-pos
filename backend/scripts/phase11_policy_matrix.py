@@ -12,7 +12,7 @@ from pathlib import Path
 
 DOMAINS = {
     'auth': ('Business authentication, revocation and recovery', 'auth/service.py;auth/dependencies.py;auth/sessions.py;auth/remembered.py;auth/recovery.py;auth/handoff.py'),
-    'products': ('Catalog permission, tenant and branch checks; explicit write dependencies where listed', 'products/router.py;products/service.py'),
+    'products': ('Catalog permission, tenant and branch checks; explicit write dependencies where listed', 'products/router.py;products/service.py;products/selection.py'),
     'inventory': ('Branch/variant/batch scopes; optimistic counts; transaction-specific movement idempotency', 'inventory/router.py;inventory/service.py'),
     'branches': ('Tenant and branch management', 'inventory/branch_router.py;inventory/branch_repository.py'),
     'transfers': ('Source/destination branch authorization and movement ownership', 'inventory/transfer_router.py;inventory/transfer_repository.py'),
@@ -119,6 +119,8 @@ def assess(row):
         gap = 'direct_grn_adjustment_guard_implemented_no_legacy_command_idempotency_contract'
     elif domain == 'operations' and not read and policy != 'committed_command_recovery':
         gap = 'service_write_guard_subset_verified_remaining_operation_permission_replay_acceptance'
+    if path.endswith('/selection') and domain == 'products':
+        gap = 'bounded_search_branch_stock_no_cost_read_verified_browser_selector_subset_adopted'
     if path.startswith('/api/reports/financial-summary/'):
         gap = 'historical_module_exception_implemented_current_financial_scope_retained'
     if domain == 'employees' and method in {'PATCH', 'DELETE'}:

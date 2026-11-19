@@ -123,6 +123,16 @@ async def lookup_product_by_barcode(
     return result
 
 
+@router.get("/{company_id}/selection")
+async def select_products(company_id: UUID, branch_id: UUID, search: str = Query(default="",max_length=160),
+    category_id: UUID | None = None, page: int = Query(default=1,ge=1),page_size: int = Query(default=25,ge=1,le=100),
+    db: AsyncSession = Depends(get_db), actor: AuthActor = Depends(get_auth_actor)):
+    ensure_catalog_access(actor,company_id)
+    enforce_actor_branch(actor,branch_id)
+    from .selection import selection
+    return await selection(db,company_id,branch_id,search=search,category_id=category_id,page=page,page_size=page_size)
+
+
 @router.post("/categories", response_model=CategoryOut)
 async def create_category(
     data: CategoryCreate,

@@ -1,3 +1,4 @@
+import ProductSelector from "../../../pos-web/src/components/ProductSelector";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import BranchTransferPanel from "./BranchTransferPanel";
@@ -455,29 +456,7 @@ export default function InventoryPage({
           </div>
 
           <div className="inventory-form-grid">
-            <label>
-              Product
-              <select
-                value={grn.product_id}
-                onChange={(event) =>
-                  setGrn({
-                    ...grn,
-                    product_id: event.target.value,
-                  })
-                }
-              >
-                <option value="">Select product</option>
-
-                {products.map((product) => (
-                  <option
-                    key={product.product_id}
-                    value={product.product_id}
-                  >
-                    {product.name} — Stock {product.stock_qty}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ProductSelector companyId={companyId} branchId={selectedBranchId} scopeKey={companyId} value={grn.product_id} selectedLabel={products.find(p => p.product_id === grn.product_id)?.name} onChange={id => setGrn(current => ({ ...current, product_id: id }))} client={api} disabled={loading}/>
 
             <label>
               Quantity received
@@ -603,29 +582,7 @@ export default function InventoryPage({
           </div>
 
           <div className="inventory-form-grid">
-            <label>
-              Product
-              <select
-                value={adjustment.product_id}
-                onChange={(event) =>
-                  setAdjustment({
-                    ...adjustment,
-                    product_id: event.target.value,
-                  })
-                }
-              >
-                <option value="">Select product</option>
-
-                {products.map((product) => (
-                  <option
-                    key={product.product_id}
-                    value={product.product_id}
-                  >
-                    {product.name} — Stock {product.stock_qty}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <ProductSelector companyId={companyId} branchId={selectedBranchId} scopeKey={companyId} value={adjustment.product_id} selectedLabel={products.find(p => p.product_id === adjustment.product_id)?.name} onChange={id => setAdjustment(current => ({ ...current, product_id: id }))} client={api} disabled={loading}/>
 
             <label>
               Adjustment type

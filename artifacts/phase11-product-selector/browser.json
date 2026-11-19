@@ -1,0 +1,12 @@
+{
+  "synthetic_only": true,
+  "react_component_keyboard_and_scan_selection": true,
+  "enter_does_not_submit_parent_form": true,
+  "server_page_parameters": true,
+  "late_foreign_scope_response_discarded": true,
+  "network_failure_retry": true,
+  "mobile_table_visible": true,
+  "unexpected_requests": [],
+  "page_errors": [],
+  "provider_actions": false
+}

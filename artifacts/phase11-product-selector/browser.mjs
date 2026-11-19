@@ -1,0 +1,33 @@
+import {chromium} from '/tmp/apex-phase11-browser-tools/node_modules/playwright/index.mjs';
+import {build} from '/tmp/apex-phase11-build-xijhpj7t/pos-web/node_modules/vite/dist/node/index.js';
+import react from '/tmp/apex-phase11-build-xijhpj7t/pos-web/node_modules/@vitejs/plugin-react/dist/index.js';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {join,extname} from 'node:path';
+import assert from 'node:assert/strict';
+const root='/tmp/apex-phase11-build-xijhpj7t/pos-web',dir=root+'/selector-fixture';mkdirSync(dir,{recursive:true});
+writeFileSync(dir+'/index.html','<!doctype html><div id="root"></div><script type="module" src="/selector-fixture/main.tsx"></script>');
+writeFileSync(dir+'/main.tsx',`import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import Selector from '../src/components/ProductSelector';
+window.requests=[];window.choices=[];window.submissions=0;
+const client={get:(path,config)=>new Promise((resolve,reject)=>window.requests.push({path,params:config.params,resolve,reject}))};
+function Fixture(){const [scope,setScope]=useState(['company-A','branch-A','employee-A']);const [value,setValue]=useState('');window.setScope=setScope;return <form onSubmit={e=>{e.preventDefault();window.submissions++}}><Selector companyId={scope[0]} branchId={scope[1]} scopeKey={scope[2]} value={value} onChange={(id,product)=>{window.choices.push(id);setValue(id)}} client={client}/></form>};createRoot(document.getElementById('root')).render(<Fixture/>);`);
+await build({configFile:false,root,plugins:[react()],build:{outDir:dir+'/dist',emptyOutDir:true,rolldownOptions:{input:dir+'/index.html'}},logLevel:'warn'});
+const origin='http://127.0.0.1:18117',unexpected=[],errors=[];
+const browser=await chromium.launch({executablePath:'/root/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell',headless:true,args:['--no-sandbox','--disable-background-networking']});
+try{
+ const context=await browser.newContext();await context.route('**/*',async route=>{const u=new URL(route.request().url());if(u.origin!==origin){unexpected.push(u.origin);await route.abort();return;}const path=u.pathname==='/'?'/selector-fixture/index.html':u.pathname;const file=dir+'/dist'+path;try{await route.fulfill({status:200,contentType:extname(file)==='.js'?'text/javascript':extname(file)==='.css'?'text/css':'text/html',body:readFileSync(file)});}catch{unexpected.push(path);await route.abort();}});
+ const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));await page.goto(origin+'/');
+ const waitRequest=async search=>await page.waitForFunction(search=>window.requests.at(-1)?.params.search===search,search);
+ const products=[{id:'P1',name:'Synthetic first',sku:'ONE',barcode:'SCAN',category_name:'Food',unit:'each',selling_price:'12.00',branch_stock_qty:'7.000'},{id:'P2',name:'Synthetic second',sku:'TWO',barcode:'SCAN2',category_name:'Food',unit:'each',selling_price:'13.00',branch_stock_qty:'8.000'}];
+ const answer=async(index,items=products,pageNo=1)=>page.evaluate(({index,items,pageNo})=>window.requests[index].resolve({data:{items,page:pageNo,total_pages:2,total:30}}),{index,items,pageNo});
+ await waitRequest('');await answer(0);await page.getByRole('button',{name:'Select Synthetic first',exact:true}).waitFor();
+ await page.getByRole('searchbox').fill('SCAN');await waitRequest('SCAN');await answer(1);await page.getByRole('searchbox').press('Enter');assert.deepEqual(await page.evaluate(()=>window.choices),['P1']);assert.equal(await page.evaluate(()=>window.submissions),0);
+ await page.getByRole('searchbox').press('ArrowDown');await page.getByRole('searchbox').press('Enter');assert.deepEqual(await page.evaluate(()=>window.choices),['P1','P2']);
+ await page.getByRole('button',{name:'Next products'}).click();await page.waitForFunction(()=>window.requests.at(-1)?.params.page===2);await answer(2,[products[1]],2);await page.getByText('Page 2 of 2',{exact:false}).waitFor();
+ await page.getByRole('searchbox').fill('OLD');await waitRequest('OLD');const old=await page.evaluate(()=>window.requests.length-1);
+ await page.evaluate(()=>window.setScope(['company-B','branch-B','employee-B']));await page.waitForFunction(()=>window.requests.at(-1)?.path.includes('company-B'));
+ await answer(old,[{...products[0],name:'Foreign stale record'}]);assert.equal(await page.getByText('Foreign stale record').count(),0);
+ const latest=await page.evaluate(()=>window.requests.length-1);await page.evaluate(i=>window.requests[i].reject(new Error('synthetic offline')),latest);await page.getByText('Product search failed.',{exact:false}).waitFor();await page.getByRole('button',{name:'Retry product search'}).click();await page.waitForFunction(n=>window.requests.length>n,latest+1);await answer(await page.evaluate(()=>window.requests.length-1),[products[0]]);await page.getByRole('button',{name:'Select Synthetic first',exact:true}).waitFor();
+ await page.setViewportSize({width:390,height:844});assert.equal(await page.getByRole('table').isVisible(),true);
+ assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);
+ const result={synthetic_only:true,react_component_keyboard_and_scan_selection:true,enter_does_not_submit_parent_form:true,server_page_parameters:true,late_foreign_scope_response_discarded:true,network_failure_retry:true,mobile_table_visible:true,unexpected_requests:unexpected,page_errors:errors,provider_actions:false};writeFileSync('/tmp/phase11-selector-browser.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
+}finally{await browser.close()}
