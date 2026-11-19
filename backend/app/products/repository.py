@@ -29,6 +29,10 @@ class ProductRepository:
         self.db = db
         self.stock = BranchStockRepository(db)
 
+    async def require_write(self, company_id, *, features=()):
+        from app.subscriptions.write_policy import require_new_write
+        return await require_new_write(self.db, company_id, features=features)
+
     async def create_category(self, category: Category):
         self.db.add(category)
         await self.db.commit()

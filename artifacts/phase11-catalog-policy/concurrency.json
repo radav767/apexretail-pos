@@ -1,0 +1,13 @@
+{
+  "synthetic_only": true,
+  "three_same_creation_keys_one_product": true,
+  "counts": {
+    "products": 1,
+    "inventory_balances": 1,
+    "inventory_movements": 1
+  },
+  "opening_quantity": "9.000",
+  "expired_legacy_retry_denied_without_new_effects": true,
+  "altered_payload_replay_not_certified": true,
+  "provider_or_production_actions": false
+}

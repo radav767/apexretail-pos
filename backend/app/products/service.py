@@ -30,7 +30,14 @@ class ProductService:
     def __init__(self, repo: ProductRepository):
         self.repo = repo
 
+    async def _require_write(self, company_id, *, features=()):
+        # SQL repositories enforce current license without changing lightweight
+        # arithmetic adapters or committing a caller's work.
+        if hasattr(self.repo, 'require_write'):
+            await self.repo.require_write(company_id, features=features)
+
     async def create_category(self, data: CategoryCreate):
+        await self._require_write(data.company_id)
         name = data.name.strip()
 
         await self._validate_category_parent(
@@ -66,6 +73,7 @@ class ProductService:
         category_id: UUID,
         data: CategoryUpdate,
     ):
+        await self._require_write(company_id)
         category = await self.repo.get_category(company_id, category_id)
 
         if not category:
@@ -108,6 +116,7 @@ class ProductService:
         company_id: UUID,
         category_id: UUID,
     ):
+        await self._require_write(company_id)
         category = await self.repo.get_category(company_id, category_id)
 
         if not category:
@@ -131,6 +140,7 @@ class ProductService:
         }
 
     async def create_product(self, data: ProductCreate, actor=None):
+        await self._require_write(data.company_id, features=('composites',) if data.product_type in {'composite', 'bundle'} else ())
         values = data.model_dump()
         branch_id = values.pop("branch_id", None)
         opening_quantity = values.pop("stock_qty")
@@ -274,6 +284,7 @@ class ProductService:
         data: ProductUpdate,
         actor=None,
     ):
+        await self._require_write(company_id)
         product = await self.repo.get_product(company_id, product_id)
 
         if not product:
@@ -303,6 +314,8 @@ class ProductService:
                 changes[optional_field] = self._clean_optional(changes[optional_field])
 
         resulting_type = changes.get("product_type", product.product_type)
+        if resulting_type in {"composite", "bundle"}:
+            await self._require_write(company_id, features=("composites",))
         if resulting_type in {"service", "non_stock", "composite", "bundle"}:
             changes["track_inventory"] = False
 
@@ -398,6 +411,7 @@ class ProductService:
         product_id: UUID,
         actor=None,
     ):
+        await self._require_write(company_id)
         product = await self.repo.get_product(company_id, product_id)
 
         if not product:
@@ -423,6 +437,7 @@ class ProductService:
         }
 
     async def archive_product(self, company_id: UUID, product_id: UUID, actor=None):
+        await self._require_write(company_id)
         product = await self.repo.get_product(company_id, product_id)
         if not product:
             raise HTTPException(404, "Product not found")
@@ -441,6 +456,7 @@ class ProductService:
         product_id: UUID,
         data: list[ProductComponentWrite],
     ):
+        await self._require_write(company_id, features=('composites',))
         product = await self.repo.get_product(company_id, product_id)
         if not product:
             raise HTTPException(404, "Product not found")
@@ -482,6 +498,7 @@ class ProductService:
         return [{"id":v.id,"company_id":v.company_id,"product_id":v.product_id,"name":v.name,"sku":v.sku,"barcode":v.barcode,"attributes":v.attributes or {},"cost_price":v.cost_price,"selling_price":v.selling_price,"active":v.active,"branch_id":branch_id,"stock_qty":b.quantity if b else 0,"reorder_level":b.reorder_level if b else 0} for v,b in rows]
 
     async def create_variant(self, company_id: UUID, product_id: UUID, data: ProductVariantCreate):
+        await self._require_write(company_id, features=('variants',))
         product = await self._require_product(company_id, product_id)
         values = data.model_dump(exclude={"branch_id", "stock_qty", "reorder_level"})
         variant = ProductVariant(
@@ -526,6 +543,7 @@ class ProductService:
             raise HTTPException(409, "Variant SKU or barcode already exists") from error
 
     async def update_variant(self, company_id: UUID, variant_id: UUID, data: ProductVariantUpdate):
+        await self._require_write(company_id, features=('variants',))
         variant = await self.repo.get_variant(company_id, variant_id)
         if not variant:
             raise HTTPException(404, "Variant not found")
@@ -598,6 +616,7 @@ class ProductService:
             raise HTTPException(409, "Variant SKU or barcode already exists") from error
 
     async def delete_variant(self, company_id: UUID, variant_id: UUID):
+        await self._require_write(company_id, features=('variants',))
         variant = await self.repo.get_variant(company_id, variant_id)
         if not variant:
             raise HTTPException(404, "Variant not found")
@@ -610,6 +629,7 @@ class ProductService:
         return await self.repo.list_price_levels(company_id, product_id)
 
     async def create_price_level(self, company_id: UUID, product_id: UUID, data: ProductPriceLevelCreate):
+        await self._require_write(company_id)
         await self._require_product(company_id, product_id)
         level = ProductPriceLevel(
             company_id=company_id,
@@ -624,6 +644,7 @@ class ProductService:
             raise HTTPException(409, "Price level name already exists for this product") from error
 
     async def update_price_level(self, company_id: UUID, price_level_id: UUID, data: ProductPriceLevelUpdate):
+        await self._require_write(company_id)
         level = await self.repo.get_price_level(company_id, price_level_id)
         if not level:
             raise HTTPException(404, "Price level not found")
@@ -632,6 +653,7 @@ class ProductService:
         return await self.repo.save_price_level(level)
 
     async def delete_price_level(self, company_id: UUID, price_level_id: UUID):
+        await self._require_write(company_id)
         level = await self.repo.get_price_level(company_id, price_level_id)
         if not level:
             raise HTTPException(404, "Price level not found")
@@ -641,6 +663,11 @@ class ProductService:
         return {"ok": True, "message": "Price level archived"}
 
     async def import_products(self, data: ProductImportRequest, actor=None):
+        await self._require_write(data.company_id)
+        features = set()
+        if any(row.variant_name for row in data.rows): features.add('variants')
+        if any(row.product_type in {'composite', 'bundle'} for row in data.rows): features.add('composites')
+        await self._require_write(data.company_id, features=features)
         created = []
         batch={}
         variant_keys = {

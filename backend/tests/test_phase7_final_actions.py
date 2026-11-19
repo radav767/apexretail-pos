@@ -46,7 +46,7 @@ class FinalActionTests(unittest.IsolatedAsyncioTestCase):
     async def test_transfer_preserves_fefo_lots_expiry_stock_and_single_ledger(self):
         await self.transfer_setup()
         before_sale_total = self.sale.total_amount
-        movements = await self.transfers.transfer(self.command)
+        movements = await self.transfers.transfer(self.command, actor=self.owner)
         batches = (await self.db.execute(select(ProductBatch).where(ProductBatch.company_id==self.company.id))).scalars().all()
         positions = {(b.branch_id, b.code): b for b in batches}
         self.assertEqual(positions[(self.branch.id,"FIRST")].quantity, 0)
@@ -75,7 +75,7 @@ class FinalActionTests(unittest.IsolatedAsyncioTestCase):
         await self.db.commit()
         company, branch, product, reference = self.company.id,self.branch.id,self.product.id,self.command.reference
         with self.assertRaises(HTTPException) as rejected:
-            await self.transfers.transfer(self.command)
+            await self.transfers.transfer(self.command, actor=self.owner)
         self.assertEqual(rejected.exception.status_code,409)
         qty=(await self.db.execute(select(InventoryBalance.quantity).where(InventoryBalance.branch_id==branch,
             InventoryBalance.product_id==product))).scalar_one()
@@ -92,14 +92,14 @@ class FinalActionTests(unittest.IsolatedAsyncioTestCase):
         await self.db.commit()
         branch, product = self.branch.id,self.product.id
         with self.assertRaises(HTTPException) as rejected:
-            await self.transfers.transfer(self.command)
+            await self.transfers.transfer(self.command, actor=self.owner)
         self.assertEqual(rejected.exception.status_code,409)
         self.assertEqual((await self.db.execute(select(InventoryBalance.quantity).where(
             InventoryBalance.branch_id==branch,InventoryBalance.product_id==product))).scalar_one(),100)
 
     async def test_non_batch_transfer_keeps_existing_behavior(self):
         await self.transfer_setup(tracked=False)
-        movements=await self.transfers.transfer(self.command)
+        movements=await self.transfers.transfer(self.command, actor=self.owner)
         self.assertEqual(len(movements),2)
         self.assertEqual(self.balance.quantity,97)
         self.assertEqual((await self.db.execute(select(func.count(ProductBatch.id)).where(
@@ -131,13 +131,13 @@ class FinalActionTests(unittest.IsolatedAsyncioTestCase):
         self.product.cost_price=Decimal("2.50");await self.db.commit()
         actor=AuthActor(actor_type="employee",company_id=self.company.id,role="custom",employee=self.employee,
             permissions={"inventory_transfer":True,"product_costs_view":False},pos_session=self.session)
-        rows=await create_stock_transfer(self.command,service=self.transfers,_actor=actor,_entitlement=None)
+        rows=await create_stock_transfer(self.command,service=self.transfers,_actor=actor)
         self.assertTrue(all(row.unit_cost is None for row in rows))
         stored=await self.db.get(InventoryMovement,rows[0].id)
         self.assertEqual(stored.unit_cost,Decimal("2.50"))
         with self.assertRaises(HTTPException) as denied:
             await create_stock_transfer(self.command.model_copy(update={"source_branch_id":self.destination.id}),
-                service=self.transfers,_actor=actor,_entitlement=None)
+                service=self.transfers,_actor=actor)
         self.assertEqual(denied.exception.status_code,403)
 
     async def test_transfer_retry_capability_requires_current_permission(self):

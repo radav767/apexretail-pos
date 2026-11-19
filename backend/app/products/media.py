@@ -5,6 +5,7 @@ from app.core.config import get_settings
 from app.models.product_media import ProductMedia
 TYPES={"image/jpeg":(".jpg",lambda b:b.startswith(b"\xff\xd8\xff")),"image/png":(".png",lambda b:b.startswith(b"\x89PNG\r\n\x1a\n")),"image/webp":(".webp",lambda b:len(b)>11 and b[:4]==b"RIFF" and b[8:12]==b"WEBP")}
 async def store(repo,company_id,product_id,upload):
+    if hasattr(repo, 'require_write'): await repo.require_write(company_id)
     product=await repo.get_product(company_id,product_id)
     if not product: raise HTTPException(404,"Product not found")
     kind=(upload.content_type or "").lower()

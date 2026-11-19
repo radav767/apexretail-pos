@@ -110,6 +110,9 @@ def assess(row):
     elif policy == 'new_business_write' and domain in {'currencies', 'expenses', 'credit', 'customers', 'settings'}:
         observed = 'service_new_write_policy'
         gap = 'write_guard_subset_verified_no_general_idempotency_contract'
+    elif domain == 'products' and not read:
+        observed = 'service_catalog_write_policy'
+        gap = 'direct_license_module_import_preflight_verified_legacy_create_key_not_full_replay_proof_direct_actor_contract_unchanged'
     elif domain == 'sales' and not read:
         gap = 'new_refund_guard_implemented_no_refund_command_idempotency_contract'
     elif domain == 'inventory' and not read:
