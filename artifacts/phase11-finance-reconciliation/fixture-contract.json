@@ -1,0 +1,31 @@
+{
+  "synthetic_only": true,
+  "fixture": "backend/tests/test_phase11_finance_reconciliation.py",
+  "instant": "2026-01-15T10:00:00Z",
+  "report_timezone": "Africa/Harare",
+  "golden": {
+    "original_sales": "90.60",
+    "refund": "10.00",
+    "net_revenue": "80.60",
+    "historical_cost": "18.80",
+    "gross_profit": "61.80",
+    "expense": "3.25",
+    "net_profit": "58.55",
+    "later_cash_collection": "12.15",
+    "later_card_collection": "8.25",
+    "current_debt": "20.00",
+    "combined_expected_cash": "28.90",
+    "stock": "92"
+  },
+  "currency_case": {
+    "foreign_units_per_base": "3.3333333333",
+    "base_sale": "10.10",
+    "foreign_sale": "33.67",
+    "foreign_tender": "40.00",
+    "foreign_change": "6.33",
+    "base_tender": "12.00",
+    "base_change": "1.90"
+  },
+  "single_sale_split_tender_supported": false,
+  "live_provider_or_fiscal_actions": false
+}
