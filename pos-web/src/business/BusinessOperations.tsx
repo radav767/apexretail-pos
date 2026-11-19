@@ -82,7 +82,8 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
       if(outbox.list().some(entry=>entry.status!=="acknowledged"&&entry.endpoint===endpoint&&
         (kind==="kitchen"?(entry.payload as any).order_id===payload.order_id:(entry.payload as any).ticket_id===payload.ticket_id)))throw new Error("An original request is already saved. Review its confirmation before another action.");
       const id=crypto.randomUUID();await outbox.enqueueLicensed({id,endpoint,payload:{...payload,request_id:id,
-        employee_id:profile.employee_id,device_id:deviceId,captured_at:new Date().toISOString()}},companyId);
+        employee_id:profile.employee_id,device_id:deviceId,captured_at:new Date().toISOString()}},companyId,
+        kind === "kitchen" ? "kitchen" : view === "bar" ? "bar_update" : "kitchen_update");
       setNotice("Request saved. Not sent or confirmed until synchronization.");
     }catch(error){setError(errorMessage(error));}
     finally { offlineQueueLock.current = false; }

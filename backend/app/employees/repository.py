@@ -13,6 +13,17 @@ class EmployeeRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def authorize_actor(self, company_id, actor):
+        from app.sales.commands import actor_identity
+        from app.printing.service import permit
+        actor_identity(actor, company_id)
+        permit(actor, 'employees_manage')
+
+    async def revoke_sessions(self, employee, reason):
+        from .revocation import revoke
+        employee.session_version = await revoke(self.db, employee.company_id, employee.id, reason)
+        return employee.session_version
+
     def view_query(self):
         return (
             select(

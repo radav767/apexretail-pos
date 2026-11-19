@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 
-from app.employees.permissions import PERMISSION_GROUPS, ROLE_TEMPLATES, has_permission, normalize_permissions
+from app.employees.permissions import PERMISSION_GROUPS, PERMISSION_KEYS, ROLE_TEMPLATES, has_permission, normalize_permissions
 from app.models import AuditEvent, Employee, EmployeeRole, User
 
 
@@ -24,6 +24,13 @@ class EmployeeAdminService:
             if enabled and not has_permission(actor.permissions, key):
                 raise HTTPException(403, f"Cannot grant permission: {key}")
 
+    @staticmethod
+    def authorize(company_id, actor):
+        from app.sales.commands import actor_identity
+        from app.printing.service import permit
+        actor_identity(actor, company_id)
+        permit(actor, 'employees_manage')
+
     async def list_roles(self, company_id):
         rows = (await self.db.execute(select(EmployeeRole).where(
             EmployeeRole.company_id == company_id,
@@ -42,6 +49,9 @@ class EmployeeAdminService:
         return builtins + custom
 
     async def create_role(self, data, actor):
+        self.authorize(data.company_id, actor)
+        from app.subscriptions.write_policy import require_new_write
+        await require_new_write(self.db, data.company_id)
         self.ensure_grantable(actor, data.permissions)
         name = data.name.strip()
         if name.lower().replace(" ", "_") in {*ROLE_TEMPLATES, "manager"}:
@@ -70,6 +80,7 @@ class EmployeeAdminService:
         return {"id": role.id, "company_id": role.company_id, "name": role.name, "description": role.description, "permissions": role.permissions, "active": role.active, "system": False}
 
     async def update_role(self, company_id, role_id, data, actor):
+        self.authorize(company_id, actor)
         if data.permissions is not None:
             self.ensure_grantable(actor, data.permissions)
         role = (await self.db.execute(select(EmployeeRole).where(
@@ -78,6 +89,14 @@ class EmployeeAdminService:
         ).with_for_update())).scalar_one_or_none()
         if role is None:
             raise HTTPException(404, "Role not found")
+        requested = {key for key,value in data.model_dump(exclude_unset=True).items() if value is not None}
+        preview = role.permissions if data.permissions is None else normalize_permissions('denied', data.permissions)
+        adds_rights = any(has_permission(preview,key) and not has_permission(role.permissions,key) for key in PERMISSION_KEYS)
+        security_only = (bool(requested) and requested <= {'permissions','active'} and not adds_rights and
+                         not (data.active is True and not role.active))
+        if not security_only:
+            from app.subscriptions.write_policy import require_new_write
+            await require_new_write(self.db, company_id)
         before = {"name": role.name, "permissions": role.permissions, "active": role.active}
         if data.name is not None:
             name = data.name.strip()
@@ -102,15 +121,21 @@ class EmployeeAdminService:
             Employee.company_id == company_id, Employee.role_id == role.id,
             Employee.deleted == False,
         ).with_for_update())).scalars().all()
+        revoked = []
         for employee in assigned:
+            previous = (employee.role, dict(employee.permissions or {}))
             employee.role = "custom"
             employee.permissions = normalize_permissions(
                 "kitchen_staff",
                 {**role.permissions, **(employee.role_overrides or {})},
             ) if role.active else normalize_permissions("denied", {})
+            if (employee.role, dict(employee.permissions or {})) != previous:
+                from .revocation import revoke
+                employee.session_version = await revoke(self.db, company_id, employee.id, 'role_security_changed')
+                revoked.append(str(employee.id))
         self.db.add(AuditEvent(
             company_id=company_id, action="role_updated",
-            details={"role_id": str(role.id), "before": before, "after": {"name": role.name, "permissions": role.permissions, "active": role.active}},
+            details={"role_id": str(role.id), "before": before, "after": {"name": role.name, "permissions": role.permissions, "active": role.active}, "revoked_employee_ids": revoked},
             **self._actor_ids(actor),
         ))
         await self.db.commit()

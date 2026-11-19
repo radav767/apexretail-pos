@@ -370,7 +370,7 @@ class SubscriptionService:
     def snapshot_for(
         self,
         subscription: CompanySubscription,
-        *, lease_nonce: str | None = None,
+        *, lease_nonce: str | None = None, offline_actor: dict | None = None,
     ) -> dict:
         # JWT NumericDate claims have whole-second precision. Derive every
         # entitlement boundary from that same aligned instant so the ISO grace
@@ -405,6 +405,7 @@ class SubscriptionService:
             snapshot_expires_at=snapshot_expires_at,
             issued_at=issued_at,
             lease_nonce=lease_nonce,
+            offline_actor=offline_actor,
             **({'features':terms.get('features',{}),'limits':{kind:terms.get(kind+'_limit') for kind in ('branch','device','employee')}} if terms is not None else {}),
         )
         writes_allowed = signed_status in WRITE_ALLOWED_STATUSES
@@ -612,7 +613,7 @@ class SubscriptionService:
     async def page(
         self,
         company_id: UUID,
-        *, lease_nonce: str | None = None,
+        *, lease_nonce: str | None = None, offline_actor: dict | None = None,
     ) -> dict:
         subscription = await self.ensure_current(company_id)
         commercial=getattr(subscription,'commercial_terms',None)
@@ -668,7 +669,7 @@ class SubscriptionService:
                 "provider": subscription.provider,
                 "provider_reference": subscription.provider_reference,
                 "status_reason": subscription.status_reason,
-                "snapshot": self.snapshot_for(subscription, lease_nonce=lease_nonce),
+                "snapshot": self.snapshot_for(subscription, lease_nonce=lease_nonce, offline_actor=offline_actor),
             },
             "usage": self.usage_summary(
                 subscription,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSync, sign } from "node:crypto";
-import { OfflineLease, MAX_DISCONNECTED_MS } from "../src/offline/lease.ts";
+import { OfflineLease, MAX_DISCONNECTED_MS, canUseOfflineAction } from "../src/offline/lease.ts";
 import type { CachedEntitlementSnapshot, EntitlementKeyring, EntitlementVerificationResult } from "../src/offline/entitlement.ts";
 const keys = generateKeyPairSync("rsa", { modulusLength: 2048,
   publicKeyEncoding: { type: "spki", format: "pem" }, privateKeyEncoding: { type: "pkcs8", format: "pem" } });
@@ -96,4 +96,21 @@ test("tenant or cashier/register context changes require a fresh online proof", 
 test("delayed challenge response cannot extend the lease or revive an expired request", async()=>{
   const f=fixture();const request=f.lease.beginRefresh("synthetic-company");f.tick(60001);
   assert.equal(category(await f.lease.acceptOnline(snapshot(request.nonce),request)),"offline_clock_changed");
+});
+
+
+test("signed current action/actor/register rights cannot be replaced by cached PIN permissions", async()=>{
+  const values=new Map([['employee_id','synthetic-employee'],['device_id','synthetic-register'],['branch_id','synthetic-branch'],['device_assignment_revision','1']]);
+  Object.defineProperty(globalThis,'localStorage',{value:{getItem:(key:string)=>values.get(key)||null},configurable:true});
+  const actor={actor_type:'employee',actor_id:'synthetic-employee',session_version:0,device_id:'synthetic-register',branch_id:'synthetic-branch',assignment_revision:1,
+    actions:{sale:false,draft:false,kitchen:false,kitchen_update:false,bar_update:true}};
+  const {f,saved}=await connected(fixture(),{offline_actor:actor});
+  const verified=await f.lease.verify(saved);assert(verified.ok);
+  values.set('apexpos_offline_cashiers_v1',JSON.stringify({permissions:{sales_process:true,kitchen_update:true}}));
+  assert.equal(canUseOfflineAction(verified.claims,'sale'),false);assert.equal(canUseOfflineAction(verified.claims,'kitchen_update'),false);
+  assert.equal(canUseOfflineAction(verified.claims,'bar_update'),true);
+  values.set('device_assignment_revision','2');assert.equal(canUseOfflineAction(verified.claims,'bar_update'),false);
+  values.set('device_assignment_revision','1');values.set('employee_id','other');assert.equal(canUseOfflineAction(verified.claims,'bar_update'),false);
+  values.set('employee_id','synthetic-employee');values.set('branch_id','other');assert.equal(canUseOfflineAction(verified.claims,'bar_update'),false);
+  assert.equal(canUseOfflineAction({...verified.claims,offline_actor:undefined},'sale'),false);
 });

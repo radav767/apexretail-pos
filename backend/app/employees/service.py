@@ -194,6 +194,10 @@ class EmployeeService:
         data: EmployeeCreate,
         actor=None,
     ):
+        if hasattr(self.repo, 'authorize_actor'):
+            await self.repo.authorize_actor(data.company_id, actor)
+            from app.subscriptions.write_policy import require_new_write
+            await require_new_write(self.repo.db, data.company_id)
         if hasattr(self.repo,'db'):
             from app.subscriptions.commercial import enforce_capacity
             await enforce_capacity(self.repo.db,data.company_id,'employee')
@@ -291,6 +295,8 @@ class EmployeeService:
         data: EmployeeUpdate,
         actor=None,
     ):
+        if hasattr(self.repo, 'authorize_actor'):
+            await self.repo.authorize_actor(company_id, actor)
         employee = await self.repo.get_employee(
             company_id,
             employee_id,
@@ -301,6 +307,33 @@ class EmployeeService:
                 404,
                 "Employee not found",
             )
+
+        security_before = None
+        if hasattr(self.repo, 'authorize_actor'):
+            old_permissions = await self.effective_permissions(employee, self.repo.db)
+            old_devices = set(await self.repo.device_ids(employee.id))
+            security_before = (employee.pin, employee.shop_id, employee.branch_id, employee.role, employee.role_id,
+                               dict(employee.permissions or {}), dict(employee.role_overrides or {}), employee.active,
+                               employee.device_restricted, old_devices)
+            fields = {key for key,value in data.model_dump(exclude_unset=True).items() if value is not None}
+            security_only = bool(fields) and fields <= {'pin','permissions','active','device_restricted','device_ids'}
+            preview = old_permissions
+            if data.permissions is not None:
+                if employee.role_id:
+                    custom = await self.repo.get_role(company_id, employee.role_id)
+                    if custom is None: raise HTTPException(400, 'The selected role is unavailable')
+                    preview = self.build_permissions('kitchen_staff', {**custom.permissions, **self.custom_overrides(custom.permissions, data.permissions)})
+                else: preview = self.build_permissions(employee.role, data.permissions)
+            adds_rights = any(enabled and not has_permission(old_permissions,key) for key,enabled in preview.items())
+            new_restricted = employee.device_restricted if data.device_restricted is None else data.device_restricted
+            device_reduction = (data.device_ids is None or new_restricted and
+                (not employee.device_restricted or set(data.device_ids) <= old_devices))
+            security_only = (security_only and not adds_rights and device_reduction and
+                not (data.active is True and not employee.active) and
+                not (employee.device_restricted and not new_restricted))
+            if not security_only:
+                from app.subscriptions.write_policy import require_new_write
+                await require_new_write(self.repo.db, company_id)
 
         if data.active is True and not employee.active and hasattr(self.repo,'db'):
             from app.subscriptions.commercial import enforce_capacity
@@ -400,21 +433,20 @@ class EmployeeService:
                 raise HTTPException(400, "One or more selected devices are unavailable")
             await self.repo.set_devices(employee, devices)
 
-        if data.active is False:
-            sessions = await self.repo.db.execute(select(PosSession).where(
-                PosSession.employee_id == employee.id, PosSession.revoked_at.is_(None)
-            ))
-            now = datetime.now(timezone.utc)
-            for session in sessions.scalars().all():
-                session.revoked_at = now
-                session.revoke_reason = "employee_deactivated"
+        sessions_revoked = False
+        if security_before is not None:
+            security_after = (employee.pin, employee.shop_id, employee.branch_id, employee.role, employee.role_id,
+                              dict(employee.permissions or {}), dict(employee.role_overrides or {}), employee.active,
+                              employee.device_restricted, set(await self.repo.device_ids(employee.id)))
+            sessions_revoked = security_after != security_before
+            if sessions_revoked: await self.repo.revoke_sessions(employee, 'employee_security_changed')
 
         self.repo.db.add(AuditEvent(
             company_id=company_id,
             actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None,
             actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None,
             action="employee_deactivated" if data.active is False else "employee_updated",
-            details={"employee_id": str(employee.id), "before": before, "pin_changed": data.pin is not None},
+            details={"employee_id": str(employee.id), "before": before, "pin_changed": data.pin is not None, "sessions_revoked": sessions_revoked},
         ))
 
         await self.repo.save(employee)
@@ -429,6 +461,8 @@ class EmployeeService:
         employee_id: UUID,
         actor=None,
     ):
+        if hasattr(self.repo, 'authorize_actor'):
+            await self.repo.authorize_actor(company_id, actor)
         employee = await self.repo.get_employee(
             company_id,
             employee_id,
@@ -456,6 +490,8 @@ class EmployeeService:
             action="employee_deactivated",
             details={"employee_id": str(employee.id), "name": employee.name},
         ))
+        if hasattr(self.repo, 'revoke_sessions'):
+            await self.repo.revoke_sessions(employee, 'employee_deleted')
         await self.repo.soft_delete(employee)
 
         return {

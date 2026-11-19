@@ -48,10 +48,18 @@ async def get_subscription_page(
     company_id: UUID,
     lease_nonce: str | None = Query(default=None, pattern=r"^[A-Za-z0-9_-]{32,64}$"),
     service: SubscriptionService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
     actor: AuthActor = Depends(get_auth_actor),
 ):
     ensure_company_access(actor, company_id)
-    return await service.page(company_id, lease_nonce=lease_nonce)
+    offline_actor = None
+    if lease_nonce is not None:
+        # Explicit subscription provisioning may initialize a trial. Finish
+        # that lifecycle before acquiring the security locks held for signing.
+        await service.ensure_current(company_id)
+        from .offline_actor import grant_for
+        offline_actor = await grant_for(db, actor)
+    return await service.page(company_id, lease_nonce=lease_nonce, offline_actor=offline_actor)
 
 
 @router.post("/activate", response_model=SubscriptionActivateOut)

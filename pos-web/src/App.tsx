@@ -1,4 +1,4 @@
-import { offlineLease, invalidateOfflineLease } from "./offline/lease";
+import { offlineLease, invalidateOfflineLease, canUseOfflineAction } from "./offline/lease";
 import { requestPosLogout } from "./api/posLogout";
 import BackofficeHandoffDialog from './components/BackofficeHandoffDialog';
 import { applyDiscounts } from "./discounts";
@@ -1046,12 +1046,12 @@ const [loggedIn, setLoggedIn] = useState(
     const verification = await offlineLease.verify(
       entitlementSnapshot,
     );
-    if (verification.ok) {
+    if (verification.ok && canUseOfflineAction(verification.claims, "sale")) {
       setEntitlementVerificationMessage("");
       return true;
     }
     setEntitlementVerificationMessage(
-      entitlementReconnectMessage(verification.category),
+      entitlementReconnectMessage(verification.ok ? "offline_permission_required" : verification.category),
     );
     return false;
   }
@@ -2071,6 +2071,7 @@ const [loggedIn, setLoggedIn] = useState(
             String(result.device_id),
           );
         }
+        if (result.assignment_revision != null) localStorage.setItem("device_assignment_revision", String(result.assignment_revision));
         localStorage.setItem("employee_id", employeeId);
         if (result.access_token) {
           localStorage.setItem(
@@ -3109,7 +3110,7 @@ const [loggedIn, setLoggedIn] = useState(
       if (online && scope.isCurrent()) return loadSubscriptionSnapshot(companyId, scope.isCurrent);
     }).catch(() => undefined);
     return () => scope.cancel();
-  }, [loggedIn, companyId, cashier?.id, cashier?.access_token]);
+  }, [loggedIn, companyId, cashier]);
 
   useEffect(() => {
     if (!loggedIn || !companyId) return;

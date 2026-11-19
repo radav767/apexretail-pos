@@ -168,9 +168,6 @@ async def update_employee(
     employee_id: UUID,
     data: EmployeeUpdate,
     service: EmployeeService = Depends(get_service),
-    _entitlement: None = Depends(
-        require_billable_path_company
-    ),
     actor: AuthActor = Depends(require_path_permission("employees_manage")),
 ):
     return await service.update(
@@ -188,9 +185,6 @@ async def delete_employee(
     company_id: UUID,
     employee_id: UUID,
     service: EmployeeService = Depends(get_service),
-    _entitlement: None = Depends(
-        require_billable_path_company
-    ),
     actor: AuthActor = Depends(require_path_permission("employees_manage")),
 ):
     return await service.delete(

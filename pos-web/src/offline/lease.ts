@@ -5,6 +5,7 @@ import {
   type CachedEntitlementSnapshot,
   type EntitlementFailureCategory,
   type EntitlementKeyring,
+  type EntitlementClaims,
   type EntitlementVerificationResult,
 } from "./entitlement.ts";
 
@@ -15,7 +16,7 @@ type Clock = () => { monotonic: number; wall: number };
 type Challenge = { companyId: string; nonce: string; monotonic: number; wall: number; identity: string };
 type Anchor = Challenge & { token: string; serverTime: number };
 const browserClock: Clock = () => ({ monotonic: performance.now(), wall: Date.now() });
-const authKeys = ["company_id", "token", "employee_id", "employee_token", "device_id", "device_key", "branch_id"];
+const authKeys = ["company_id", "token", "employee_id", "employee_token", "device_id", "device_key", "branch_id", "device_assignment_revision"];
 const browserIdentity = () => JSON.stringify(authKeys.map(key => localStorage.getItem(key)));
 const denied = (category: EntitlementFailureCategory): EntitlementVerificationResult => ({ ok: false, category });
 
@@ -123,9 +124,19 @@ export function invalidateOfflineLease() {
   channel?.postMessage({ type: "invalidate" });
 }
 
-export async function requireOfflineAccess(companyId: string, features: string[] = []) {
+export type OfflineAction = "sale" | "draft" | "kitchen" | "kitchen_update" | "bar_update";
+export function canUseOfflineAction(claims: EntitlementClaims, action: OfflineAction): boolean {
+  const actor = claims.offline_actor;
+  const revision = actor?.assignment_revision;
+  return Boolean(actor && actor.actor_type === "employee" && Number.isSafeInteger(actor.session_version) && actor.session_version >= 0 &&
+    actor.actor_id === localStorage.getItem("employee_id") && actor.device_id && actor.device_id === localStorage.getItem("device_id") &&
+    actor.branch_id && actor.branch_id === localStorage.getItem("branch_id") && typeof revision === "number" && Number.isSafeInteger(revision) && revision > 0 &&
+    revision === Number(localStorage.getItem("device_assignment_revision")) && actor.actions?.[action] === true);
+}
+export async function requireOfflineAccess(companyId: string, features: string[] = [], action: OfflineAction = "sale") {
   const result = await offlineLease.verify(loadEntitlementSnapshot(companyId));
   if (!result.ok) throw new Error(entitlementReconnectMessage(result.category));
+  if (!canUseOfflineAction(result.claims, action)) throw new Error(entitlementReconnectMessage("offline_permission_required"));
   if (result.claims.features !== undefined && features.some(feature => result.claims.features?.[feature] !== true)) {
     throw new Error("Your subscription does not include this offline operation. Original queued records are retained.");
   }

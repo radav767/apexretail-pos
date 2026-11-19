@@ -190,6 +190,7 @@ def create_entitlement_snapshot_token(
     features: dict | None = None,
     limits: dict | None = None,
     lease_nonce: str | None = None,
+    offline_actor: dict | None = None,
 ) -> str:
     settings = get_settings()
     algorithm = str(settings.entitlement_signing_algorithm or "").upper()
@@ -238,6 +239,7 @@ def create_entitlement_snapshot_token(
             "iss": ENTITLEMENT_ISSUER,
             "aud": ENTITLEMENT_AUDIENCE,
             **({"lease_nonce": lease_nonce} if lease_nonce is not None else {}),
+            **({"offline_actor": offline_actor} if offline_actor is not None else {}),
             **({"features":features,"limits":limits} if features is not None else {}),
         },
         signing_key,

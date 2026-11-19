@@ -22,7 +22,7 @@ DOMAINS = {
     'expenses': ('Tenant/branch, expense permission and posted-record identity', 'expenses/service.py;financial_commands.py;subscriptions/write_policy.py'),
     'currencies': ('Tenant and currency-management roles; immutable rates and quote versions', 'currencies/service.py'),
     'devices': ('Register identity, activation, tombstones, tenant/reassignment authority', 'devices/service.py;devices/authority.py'),
-    'employees': ('Current permissions/device restrictions; legacy JWT and opaque epoch revocation; same-business revocation-only POS logout', 'employees/service.py;employees/admin_service.py;employees/logout.py;auth/dependencies.py'),
+    'employees': ('Current permissions/device restrictions; legacy JWT and opaque epoch revocation; same-business revocation-only POS logout', 'employees/service.py;employees/admin_service.py;employees/revocation.py;employees/logout.py;auth/dependencies.py'),
     'settings': ('Company management permissions; receipt/shop preferences', 'business_settings/router.py;business_settings/service.py'),
     'shifts': ('Current cashier/register/epoch and full shift command proof; licensed opens/drawer writes; evidence-only close/quarantine exceptions', 'shifts/service.py;shifts/commands.py;financial_context.py'),
     'printing': ('Tenant/branch/register/station access; original sale and queue identity preserved', 'printing/service.py'),
@@ -69,6 +69,9 @@ def assess(row):
     elif domain == 'shifts' and path.endswith('/offline-resolutions'):
         policy = 'quarantine_evidence_or_new_sale_resolution'
         replay = 'Retaining quarantine is evidence-only; posting requires current write license. Full resolver/action/reason/payload proof and original signed shift identity required'
+    elif domain == 'employees' and method in {'PATCH', 'DELETE'}:
+        policy = 'employee_security_reduction_or_licensed_configuration'
+        replay = 'Current employees_manage authority required. Security-only PIN resets, disabling/deleting and rights/device reductions survive expiry; grants/reactivation/ordinary changes require current license. Changed employee/shared-role security atomically revokes epochs and opaque sessions; no general mutation idempotency contract.'
     elif domain == 'devices' and any(x in path for x in ('heartbeat', 'decommission')):
         policy = 'device_security_or_health'
         replay = 'Identity/status validation; decommission must remain possible without subscription renewal'
@@ -115,6 +118,12 @@ def assess(row):
         gap = 'service_write_guard_subset_verified_remaining_operation_permission_replay_acceptance'
     if path.startswith('/api/reports/financial-summary/'):
         gap = 'historical_module_exception_implemented_current_financial_scope_retained'
+    if domain == 'employees' and method in {'PATCH', 'DELETE'}:
+        observed = 'service_security_exception_policy'
+        gap = 'security_reduction_epoch_and_direct_tenant_checks_verified_full_role_ui_acceptance_pending'
+    if domain == 'subscriptions' and method == 'GET':
+        sources += ';subscriptions/offline_actor.py'
+        gap = 'fresh_nonce_signed_current_opaque_actor_register_actions_bounded_browser_lease_verified_installed_device_acceptance_pending'
     if path.endswith('/employees/session/logout'):
         gap = 'legacy_user_employee_jwt_opaque_revocation_and_pin_races_verified_device_acceptance_pending'
     return domain, policy, description, replay, sources, observed + ':' + gap

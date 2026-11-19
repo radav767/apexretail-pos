@@ -30,6 +30,11 @@ export type EntitlementClaims = {
   offline_grace_expires_at: string;
   token_type: string;
   lease_nonce?: string;
+  offline_actor?: {
+    actor_type: string; actor_id: string; session_version: number;
+    branch_id: string | null; device_id: string | null; assignment_revision: number | null;
+    actions: Record<string, boolean>;
+  };
   iat?: number;
   exp: number;
   iss?: string;
@@ -46,7 +51,7 @@ export type EntitlementFailureCategory =
   | "token_lifetime_exceeded" | "offline_grace_exceeded"
   | "issuer_mismatch" | "audience_mismatch"
   | "offline_reconnect_required" | "offline_lease_expired" | "offline_clock_changed"
-  | "offline_challenge_mismatch" | "offline_refresh_stale";
+  | "offline_challenge_mismatch" | "offline_refresh_stale" | "offline_permission_required";
 
 export type EntitlementKeyring = {
   version: 1;
@@ -169,6 +174,9 @@ function finiteTimestamp(value: unknown): number | null {
 }
 
 export function entitlementReconnectMessage(category: EntitlementFailureCategory): string {
+  if (category === "offline_permission_required") {
+    return "Reconnect and sign in with an authorized device-bound employee PIN. Saved cashier permissions alone cannot authorize offline actions. Queued records are retained.";
+  }
   if (category.startsWith("offline_")) {
     return "Reconnect to renew POS access. Offline access lasts at most four hours in this open window, ends on sign-out, and cannot be restored after reload. Queued sales are retained.";
   }
