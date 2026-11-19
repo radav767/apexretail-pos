@@ -1,0 +1,45 @@
+TAP version 13
+# Subtest: lost response/reload/concurrent tabs retain exactly the same original intent
+ok 1 - lost response/reload/concurrent tabs retain exactly the same original intent
+  ---
+  duration_ms: 8.369486
+  ...
+# Subtest: changed quantities, reason, register or account cannot generate another identity
+ok 2 - changed quantities, reason, register or account cannot generate another identity
+  ---
+  duration_ms: 1.207928
+  ...
+# Subtest: confirmed original increments generation so old forms cannot manufacture a retry UUID
+ok 3 - confirmed original increments generation so old forms cannot manufacture a retry UUID
+  ---
+  duration_ms: 1.250988
+  ...
+# Subtest: wrong or incomplete acknowledgement preserves original intent
+ok 4 - wrong or incomplete acknowledgement preserves original intent
+  ---
+  duration_ms: 0.726474
+  ...
+# Subtest: tenant/sale isolation and credential exclusion precede submission
+ok 5 - tenant/sale isolation and credential exclusion precede submission
+  ---
+  duration_ms: 5.513115
+  ...
+# Subtest: storage corruption/quota or unavailable locks fail without pretending to submit
+ok 6 - storage corruption/quota or unavailable locks fail without pretending to submit
+  ---
+  duration_ms: 0.716255
+  ...
+# Subtest: local actor namespace never promotes decoded data into API authority
+ok 7 - local actor namespace never promotes decoded data into API authority
+  ---
+  duration_ms: 3.860745
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 39.012447

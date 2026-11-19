@@ -1,3 +1,5 @@
+import { RefundCommands, refundActorStorageId } from "./refundCommand";
+import { createBootstrapScope } from "./api/authLifecycle";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, getApiErrorMessage } from "./api/client";
@@ -429,6 +431,10 @@ export default function PosModulePage({
   const [refundQuantities, setRefundQuantities] = useState<
     Record<string, string>
   >({});
+  const refundCommandsRef = useRef<RefundCommands | null>(null);
+  const refundGenerationRef = useRef(0);
+  const refundDialogScopeRef = useRef<ReturnType<typeof createBootstrapScope> | null>(null);
+  const refundInFlightRef = useRef(false);
   const [refundReason, setRefundReason] = useState("");
   const [managerApproval, setManagerApproval] = useState<ManagerApprovalRequest | null>(null);
   const [refundAuthorization, setRefundAuthorization] = useState<{ saleId: string; token: string } | null>(null);
@@ -959,6 +965,12 @@ export default function PosModulePage({
     return true;
   }
 
+  function hasPendingRefund(sale: Sale) {
+    if (sale.original_sale_id) return false;
+    try { return Boolean(new RefundCommands(companyId, refundActorStorageId(), sale.id).load().pending); }
+    catch { return true; } // Expose review; never clear unreadable intent storage.
+  }
+
   async function openSaleReceipt(
     sale: Sale,
     mode: "view" | "refund",
@@ -967,15 +979,13 @@ export default function PosModulePage({
       setError("Sales permission is required to view receipts.");
       return;
     }
-    if (mode === "refund" && !isRefundableSale(sale)) {
-      setError("This sale has no remaining refundable amount.");
-      return;
-    }
+    const scope = createBootstrapScope();
     if (!(await isDeviceOnline())) {
       setError("Internet access is required to view or refund this sale.");
       return;
     }
 
+    if (!scope.isCurrent()) return;
     try {
       setSaving(true);
       setError("");
@@ -984,6 +994,25 @@ export default function PosModulePage({
         { params: { mark_reprint: false } },
       );
       const receipt = response.data as SaleReceipt;
+      if (!scope.isCurrent()) return;
+      const commands = mode === 'refund' ? new RefundCommands(companyId, refundActorStorageId(), sale.id) : null;
+      const frame = commands?.load();
+      const pending = frame?.pending;
+      if (commands && pending) {
+        try {
+          const existing = await api.get(`/sales/by-client-id/${companyId}/${pending.request_id}`);
+          await commands.confirm(existing.data);
+          if (!scope.isCurrent()) return;
+          setNotice(`Refund ${String(existing.data?.receipt_number || '')} was already confirmed. Reload the sale before starting a separate refund.`);
+          setSalesRefreshSignal(current => current + 1);
+          return;
+        } catch (error) {
+          if (!scope.isCurrent()) return;
+          if ((error as {response?: {status?: number}})?.response?.status !== 404) throw error;
+          if (pending.actor !== refundActorStorageId()) throw new Error('Another account has an unconfirmed refund. Use the original account or check server confirmation.');
+        }
+      }
+
 
       if (
         mode === "refund" &&
@@ -996,14 +1025,15 @@ export default function PosModulePage({
         return;
       }
 
-      setRefundQuantities(
-        Object.fromEntries(
-          receipt.items.map((item) => [item.id, ""]),
-        ),
-      );
-      setRefundReason("");
+      refundCommandsRef.current = commands;
+      refundGenerationRef.current = frame?.generation || 0;
+      refundDialogScopeRef.current = scope;
+      setRefundQuantities(Object.fromEntries(receipt.items.map(item => [item.id,
+        pending?.payload.items.find(line => line.sale_item_id === item.id)?.quantity || ""])));
+      setRefundReason(pending?.payload.reason || "");
       setReceiptDialog({ mode, receipt });
     } catch (requestError: unknown) {
+      if (!scope.isCurrent()) return;
       setError(
         getApiErrorMessage(
           requestError,
@@ -1013,11 +1043,18 @@ export default function PosModulePage({
         ),
       );
     } finally {
-      setSaving(false);
+      if (scope.isCurrent()) setSaving(false);
     }
   }
 
   async function submitPartialRefund() {
+    if (refundInFlightRef.current) return;
+    const commands = refundCommandsRef.current;
+    const scope = refundDialogScopeRef.current;
+    if (!scope?.isCurrent() || !commands) {
+      setError('The refund account changed. Reload the original sale before continuing.');
+      return;
+    }
     if (!receiptDialog || receiptDialog.mode !== "refund") {
       return;
     }
@@ -1053,24 +1090,30 @@ export default function PosModulePage({
       }
     }
 
+    refundInFlightRef.current = true;
     try {
       setSaving(true);
       setError("");
-      const response = await api.post("/sales/refunds", {
+      const command = await commands.prepare({
         company_id: companyId,
         original_sale_id: receiptDialog.receipt.id,
         branch_id: branchId || undefined,
         employee_id: cashier?.id || undefined,
         device_id: localStorage.getItem("device_id") || undefined,
-        device_key: localStorage.getItem("device_key") || undefined,
         reason: refundReason.trim(),
         refund_method: receiptDialog.receipt.payment_method,
-        manager_authorization_token: refundAuthorization?.saleId === receiptDialog.receipt.id ? refundAuthorization.token : undefined,
         items: selectedItems.map(({ item, quantity }) => ({
           sale_item_id: item.id,
           quantity,
         })),
-      });
+      }, refundGenerationRef.current);
+
+      if (!scope.isCurrent() || refundCommandsRef.current !== commands) return;
+      const response = await api.post('/sales/refunds', { ...command.payload, request_id:command.request_id,
+        device_key:localStorage.getItem('device_key') || undefined,
+        manager_authorization_token:refundAuthorization?.saleId === receiptDialog.receipt.id ? refundAuthorization.token : undefined });
+      await commands.confirm(response.data);
+      if (!scope.isCurrent() || refundCommandsRef.current !== commands) return;
 
       setReceiptDialog(null);
       setRefundAuthorization(null);
@@ -1079,12 +1122,14 @@ export default function PosModulePage({
       );
       setSalesRefreshSignal((current) => current + 1);
     } catch (requestError: unknown) {
+      if (!scope.isCurrent() || refundCommandsRef.current !== commands) return;
       if ((requestError as { response?: { status?: number } })?.response?.status === 403) setRefundAuthorization(null);
       setError(
         getApiErrorMessage(requestError, "Refund failed."),
       );
     } finally {
-      setSaving(false);
+      refundInFlightRef.current = false;
+      if (scope.isCurrent() && refundCommandsRef.current === commands) setSaving(false);
     }
   }
 
@@ -1590,14 +1635,14 @@ export default function PosModulePage({
                               Reprint
                             </button>
                           )}
-                          {canViewSalesReceipts && isRefundableSale(sale) && (
+                          {canViewSalesReceipts && (isRefundableSale(sale) || hasPendingRefund(sale)) && (
                             <button
                               type="button"
                               className="pos-inline-button danger"
                               disabled={saving}
                               onClick={() => void openSaleReceipt(sale, "refund")}
                             >
-                              Refund
+                              {hasPendingRefund(sale) ? "Review refund" : "Refund"}
                             </button>
                           )}
                           {!canViewSalesReceipts && !canCreateRefunds && (

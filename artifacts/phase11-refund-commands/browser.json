@@ -1,0 +1,14 @@
+{
+  "synthetic_only": true,
+  "chromium": "153.0.8010.12",
+  "real_browser_web_locks": true,
+  "two_tabs_one_refund_uuid": true,
+  "reload_preserves_request": true,
+  "stale_form_cannot_create_new_uuid_after_confirmation": true,
+  "late_ack_cannot_erase_new_intent": true,
+  "account_change_does_not_replace_unconfirmed_request": true,
+  "acknowledgement_shape_fixture_only": true,
+  "unexpected_requests": [],
+  "page_errors": [],
+  "api_provider_or_payment_actions": false
+}

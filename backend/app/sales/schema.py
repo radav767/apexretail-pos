@@ -138,6 +138,7 @@ class RefundItemCreate(BaseModel):
 
 
 class RefundCreate(BaseModel):
+    request_id: UUID | None = None
     company_id: UUID
     original_sale_id: UUID
     branch_id: UUID | None = None

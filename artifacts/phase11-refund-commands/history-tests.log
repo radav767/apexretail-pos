@@ -1,0 +1,35 @@
+TAP version 13
+# Subtest: owners and administrators can view, reprint, and refund
+ok 1 - owners and administrators can view, reprint, and refund
+  ---
+  duration_ms: 6.633114
+  ...
+# Subtest: employee actions require their specific permissions
+ok 2 - employee actions require their specific permissions
+  ---
+  duration_ms: 0.284221
+  ...
+# Subtest: only completed original sales with remaining state are refundable
+ok 3 - only completed original sales with remaining state are refundable
+  ---
+  duration_ms: 0.259572
+  ...
+# Subtest: partial and full refund states have explicit labels
+ok 4 - partial and full refund states have explicit labels
+  ---
+  duration_ms: 0.211681
+  ...
+# Subtest: refund quantities cannot exceed the remaining quantity
+ok 5 - refund quantities cannot exceed the remaining quantity
+  ---
+  duration_ms: 1.014126
+  ...
+1..5
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 37.940999

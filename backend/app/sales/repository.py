@@ -21,6 +21,14 @@ from app.models.company_settings import CompanySetting
 
 
 class SalesRepository:
+    async def begin_refund_command(self, data, actor):
+        from .refund_commands import begin
+        return await begin(self.db, data, actor)
+
+    def record_refund_command(self, data, proof, refund, device):
+        from .refund_commands import record
+        record(self.db, data, proof, refund, device)
+
     async def begin_command(self, data, actor):
         from app.sales.commands import begin
         return await begin(self.db, data, actor)

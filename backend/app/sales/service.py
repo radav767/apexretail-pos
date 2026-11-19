@@ -963,11 +963,19 @@ class SalesService:
         *,
         actor: AuthActor | None,
     ):
-        if hasattr(self.repo, "begin_command"):
-            from app.sales.commands import actor_identity
-            from app.subscriptions.write_policy import require_new_write
-            actor_identity(actor, data.company_id)
-            await require_new_write(self.repo.db, data.company_id)
+        data = data.model_copy(deep=True)
+        if len({item.sale_item_id for item in data.items}) != len(data.items):
+            raise HTTPException(422, 'Each original sale item may appear only once in a refund')
+        if actor is not None and actor.actor_type == 'employee' and actor.employee is not None:
+            data.employee_id = actor.employee.id
+        command_data = data.model_copy(deep=True)
+        refund_proof = None
+        refund_device = None
+        if hasattr(self.repo, 'begin_refund_command'):
+            committed, refund_proof = await self.repo.begin_refund_command(command_data, actor)
+            if committed is not None: return committed
+            if data.employee_id and await self.repo.get_employee(data.employee_id, company_id=data.company_id) is None:
+                raise HTTPException(404, 'Refund employee is not active in this business')
         if actor is not None:
             if actor.company_id != data.company_id:
                 raise HTTPException(403, "Forbidden")
@@ -1021,6 +1029,19 @@ class SalesService:
             data.shift_id,
             attach_active=True,
         )
+        if hasattr(self.repo, 'begin_refund_command'):
+            target_device = data.device_id or (shift.device_id if shift else actor.pos_session.device_id if actor.pos_session else original_sale.device_id)
+            if shift and target_device != shift.device_id:
+                raise HTTPException(403, 'Refund register does not match the active shift')
+            if target_device:
+                refund_device = await self.repo.get_device(data.company_id, device_id=target_device,
+                                                          device_key=data.device_key)
+                if (not refund_device or not refund_device.active or refund_device.deleted or refund_device.removed_at or
+                        refund_device.deactivated_at or refund_device.branch_id != branch.id or
+                        actor.pos_session and actor.pos_session.device_id != refund_device.id or
+                        data.device_key and data.device_key != refund_device.device_key):
+                    raise HTTPException(403, 'Refund register is no longer authorized')
+                data.device_id = refund_device.id
         refund_id = uuid.uuid4()
         receipt_number = (
             f"RFD-{datetime.now(timezone.utc):%Y%m%d}-"
@@ -1226,6 +1247,7 @@ class SalesService:
         )
         refund_original = -Decimal(refund_currency["original_amount"])
         refund_sale = Sale(
+            client_sale_id=data.request_id,
             id=refund_id,
             company_id=data.company_id,
             original_sale_id=original_sale.id,
@@ -1269,6 +1291,14 @@ class SalesService:
             for item in sale_items.values()
         ]) else "partially_refunded"
         self.repo.db.add(AuditEvent(company_id=data.company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=data.device_id or original_sale.device_id, action="refund", reason=data.reason.strip(), details={"original_sale_id": str(original_sale.id), "refund_sale_id": str(refund_id)}))
+        if refund_proof is not None:
+            if data.request_id:
+                # No ORM relationship links this independent proof mapper to
+                # Sale. Flush the immutable parent first, without committing
+                # stock, approvals or other caller work midway.
+                self.repo.db.add(refund_sale)
+                await self.repo.db.flush([refund_sale])
+            self.repo.record_refund_command(command_data, refund_proof, refund_sale, refund_device)
         return await self.repo.save_sale(
             refund_sale,
             refund_sale_items,

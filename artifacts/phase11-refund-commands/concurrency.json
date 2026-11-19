@@ -1,0 +1,19 @@
+{
+  "synthetic_only": true,
+  "three_equal_partial_refunds_one_result": true,
+  "conflicting_payload_statuses": [
+    200,
+    409
+  ],
+  "different_refund_keys_serialized_original_sale": true,
+  "counts": {
+    "sales": 5,
+    "movements": 5,
+    "refund_receipts": 4
+  },
+  "stock": "95.000",
+  "refunded_quantity": "5.000",
+  "committed_refund_after_expiry": true,
+  "new_refund_denied": true,
+  "real_payment_provider_actions": false
+}
