@@ -12,6 +12,7 @@ from app.workflows.outputs import router as document_outputs_router
 from app.workflows.delivery import router as document_delivery_router
 from app.workflows.retention import router as document_retention_router
 from app.reports.credit_reconciliation import router as credit_reconciliation_router
+from app.sales.split import router as split_checkout_router
 from app.inventory import branch_router
 from app.inventory import transfer_router
 from app.devices import router as devices
@@ -99,6 +100,7 @@ app.include_router(document_outputs_router, prefix="/api")
 app.include_router(document_delivery_router, prefix="/api")
 app.include_router(document_retention_router, prefix="/api")
 app.include_router(credit_reconciliation_router, prefix="/api")
+app.include_router(split_checkout_router, prefix="/api")
 app.include_router(branch_router.router, prefix="/api")
 app.include_router(transfer_router.router, prefix="/api")
 app.include_router(devices.router, prefix="/api")

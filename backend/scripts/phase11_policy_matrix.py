@@ -178,6 +178,12 @@ def assess(row):
         else:
             policy = 'workflow_exact_command_or_licensed_write'
             replay = 'Current actor epoch/tenant/branch/role/register before full immutable UUID/input replay; current license/modules for new work. Draft/approval has no movement. Receipt/return/count stock and parent/child evidence commit once atomically; cutoff changes require explicit recount.'
+    if path == '/api/sales/v2/split':
+        policy = 'synthetic_versioned_atomic_split_checkout'
+        observed = 'transaction_service_replay_policy'
+        sources += ';sales/split.py;sales/split_schema.py;accounting/planning.py'
+        replay = 'Current actor/epoch/tenant/branch/register/revision and full original sale/tender input proof recover committed legs before current price/license/test-mode checks. New cash/credit work requires current license and explicit APP_ENV=test/SPLIT_CHECKOUT_MODE=test. One atomic sale/stock/debt/leg/proof commit; no offline/provider authority.'
+        gap = 'synthetic_cash_credit_and_fx_checkout_rollback_races_verified_refund_receipt_report_ui_provider_acceptance_pending_default_disabled'
     return domain, policy, description, replay, sources, observed + ':' + gap
 
 

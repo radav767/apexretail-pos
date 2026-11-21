@@ -1,0 +1,1 @@
+{"synthetic_only": true, "equal_ids_one_sale": true, "distinct_sales_same_legs_statuses": [200, 409], "credit_limit_race_statuses": [409, 200], "sales": 3, "legs": 6, "movements": 3, "stock": "97.000", "original_unpaid_credit": "11.00", "provider_invoked": false, "release_enabled": false}

@@ -107,6 +107,11 @@ class SalesService:
         resolution_command_receipt=None,
     ):
         data = data.model_copy(deep=True)
+        from .split_schema import SplitSaleCreate
+        is_split=isinstance(data,SplitSaleCreate)
+        if is_split and not getattr(self.repo,'split_capable',False):raise HTTPException(409,'Versioned split checkout requires its atomic tender repository')
+        has_credit=data.has_credit if is_split else data.payment_method.strip().lower()=='credit'
+        split_plan=None
         command_data = data.model_copy(deep=True)
         command_proof = None
         device = resolved_device
@@ -164,7 +169,7 @@ class SalesService:
 
         payment_method = data.payment_method.strip().lower()
 
-        if payment_method not in {
+        if not is_split and payment_method not in {
             "cash",
             "card",
             "mobile",
@@ -195,19 +200,19 @@ class SalesService:
             data.device_id = shift.device_id
             data.employee_id = shift.employee_id
 
-        if payment_method == "credit" and data.customer_id is None:
+        if has_credit and data.customer_id is None:
             raise HTTPException(400, "A customer is required for a credit sale")
         if data.customer_id is not None:
             if data.client_created_at is not None:
                 raise HTTPException(409, "Customer-specific pricing is online-only")
             if actor is None:
                 raise HTTPException(401, "Authentication is required for a credit sale")
-            if payment_method=="credit" and actor.actor_type == "employee" and not (actor.permissions or {}).get("credit_sales"):
+            if has_credit and actor.actor_type == "employee" and not (actor.permissions or {}).get("credit_sales"):
                 raise HTTPException(403, "Credit sales permission denied")
             customer = await self.repo.get_customer_for_update(data.company_id, data.customer_id)
             if customer is None:
                 raise HTTPException(404, "Customer not found or inactive")
-            if payment_method=="credit" and not customer.credit_enabled:
+            if has_credit and not customer.credit_enabled:
                 raise HTTPException(409, "Credit is not enabled for this customer")
 
         if resolved_device is None and (data.device_id is not None or data.device_key):
@@ -703,8 +708,8 @@ class SalesService:
         total = total_amount
 
         currency_snapshot = await self.currency_from_base(
-            data.company_id, payment_method,
-            None if payment_method == "credit" else data.payment_currency_code, total,
+            data.company_id, "credit" if is_split else payment_method,
+            None if is_split or payment_method == "credit" else data.payment_currency_code, total,
             at=data.client_created_at or datetime.now(timezone.utc),
         )
         current_version = None
@@ -724,7 +729,11 @@ class SalesService:
         tendered_amount_original = payment_amount_original
         change_amount_original = Decimal("0")
 
-        if payment_method == "cash":
+        if is_split:
+            split_plan=await self.repo.prepare_split(data,actor,total)
+            payment_amount_original=None;tendered_amount_original=None;change_amount_original=None
+            amount_received=split_plan['amount_received'];change_due=split_plan['change_due']
+        elif payment_method == "cash":
             if payment_currency.is_base and data.tendered_amount_original is None:
                 tendered_amount_original = quantize_currency(
                     data.amount_received or Decimal("0"), payment_currency.decimal_places
@@ -760,11 +769,12 @@ class SalesService:
         from .refund_accounting import reconcile_sale_tax
         reconcile_sale_tax(sale_items, tax_amount, tax_inclusive)
 
-        if payment_method == "credit" and customer is not None and not customer.unlimited_credit:
+        credit_total=split_plan["credit"] if is_split else total
+        if has_credit and customer is not None and not customer.unlimited_credit:
             if customer.credit_limit is None:
                 raise HTTPException(409, "Customer credit policy has no monetary limit")
             current_outstanding = Decimal(await self.repo.customer_outstanding(data.company_id, customer.id))
-            if current_outstanding + total > Decimal(customer.credit_limit):
+            if current_outstanding + credit_total > Decimal(customer.credit_limit):
                 raise HTTPException(409, "Credit limit exceeded")
 
 
@@ -824,9 +834,9 @@ class SalesService:
             price_level_name_snapshot=getattr(customer,"price_level_name",None) if customer else None,
             shift_id=shift.id if shift else None,
             base_currency_code=base_currency.code,
-            payment_currency_code=base_currency.code if payment_method == "credit" else payment_currency.code,
+            payment_currency_code=None if is_split else base_currency.code if payment_method == "credit" else payment_currency.code,
             exchange_rate_id=None if payment_method == "credit" else currency_snapshot["exchange_rate_id"],
-            exchange_rate_snapshot=Decimal("1") if payment_method == "credit" else rate_snapshot,
+            exchange_rate_snapshot=None if is_split else Decimal("1") if payment_method == "credit" else rate_snapshot,
             payment_amount_original=payment_amount_original,
             tendered_amount_original=tendered_amount_original,
             change_amount_original=change_amount_original,
@@ -910,7 +920,7 @@ class SalesService:
             if resolution_command_receipt is not None:
                 self.repo.db.add(resolution_command_receipt)
 
-        if payment_method == "credit" and customer is not None:
+        if has_credit and customer is not None:
             receivable_id = uuid.uuid4()
             receivable = CreditReceivable(
                 id=receivable_id,
@@ -923,9 +933,9 @@ class SalesService:
                 device_id=device.id if device else None,
                 shift_id=shift.id if shift else None,
                 currency_code=await self.repo.get_currency_code(data.company_id),
-                original_amount=total,
+                original_amount=credit_total,
                 amount_settled=Decimal("0.00"),
-                outstanding_balance=total,
+                outstanding_balance=credit_total,
                 due_date=datetime.now(ZoneInfo("Africa/Harare")).date() + timedelta(days=customer.credit_terms_days),
                 status="unpaid",
             )
@@ -935,7 +945,7 @@ class SalesService:
                 actor_user_id=actor.user.id if actor.actor_type == "user" else None,
                 device_id=device.id if device else None,
                 action="credit_sale_created",
-                details={"sale_id": str(sale.id), "customer_id": str(customer.id), "receivable_id": str(receivable_id), "amount": str(total)},
+                details={"sale_id": str(sale.id), "customer_id": str(customer.id), "receivable_id": str(receivable_id), "amount": str(credit_total)},
             )
             if command_proof is not None:
                 self.repo.record_command(command_data, command_proof, sale, device)
@@ -1004,6 +1014,8 @@ class SalesService:
         if actor is not None:
             enforce_actor_branch(actor, original_sale.branch_id)
             enforce_actor_branch(actor, data.branch_id or original_sale.branch_id)
+
+        if original_sale.payment_method=="split":raise HTTPException(409,"Split refunds require versioned original tender allocation; legacy refund path is unavailable")
 
         sale_items = {
             item.id: item
