@@ -3,7 +3,7 @@ from sqlalchemy import and_, func, select
 from app.models import (
     Branch, CashierShift, CashierShiftCashMovement, CashierShiftCurrencySnapshot,
     CompanyCurrency, CompanySetting, CreditSettlement, Device, Employee, Sale, Shop,
-    OfflineSaleResolution,
+    OfflineSaleResolution,SaleTender,
 )
 
 
@@ -262,6 +262,7 @@ class ShiftRepository:
         ).where(
             Sale.shift_id.in_(shift_ids), Sale.payment_method == "cash", Sale.total_amount > 0,
         ))).scalar_one()
+        split_cash=(await self.db.execute(select(func.coalesce(func.sum(SaleTender.applied_base),0)).join(Sale,Sale.id==SaleTender.sale_id).where(Sale.shift_id.in_(shift_ids),SaleTender.company_id==company_id,Sale.payment_method=='split',SaleTender.method=='cash'))).scalar_one()
         cash_settlements = (await self.db.execute(select(
             func.coalesce(func.sum(CreditSettlement.amount), 0)
         ).where(
@@ -290,7 +291,7 @@ class ShiftRepository:
             "open_shifts": int(counts[1] or 0),
             "closed_shifts": int(counts[2] or 0),
             "total_sales_base": total_sales,
-            "cash_received_base": (positive_cash_sales or 0) + (cash_settlements or 0),
+            "cash_received_base": (positive_cash_sales or 0) + (cash_settlements or 0) + split_cash,
             "base_currency_code": base_currency_code,
             "variance_by_currency": [
                 {"currency_code": row[0], "amount": row[1]}

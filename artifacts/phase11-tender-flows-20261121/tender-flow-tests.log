@@ -1,0 +1,29 @@
+test_bounds_tenant_and_permission_fail_closed (test_phase11_tender_flows.TenderFlowTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.174 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.252 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.175 seconds
+ok
+test_dated_payment_collection_refund_boundaries_and_replay_never_multiply_revenue (test_phase11_tender_flows.TenderFlowTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.249 seconds
+FAIL
+test_two_fx_residuals_and_final_refund_do_not_become_debt_or_hidden_cash (test_phase11_tender_flows.TenderFlowTests) ... Executing <Task pending name='Task-9' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.245 seconds
+ok
+
+======================================================================
+FAIL: test_dated_payment_collection_refund_boundaries_and_replay_never_multiply_revenue (test_phase11_tender_flows.TenderFlowTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/async_case.py", line 64, in _callTestMethod
+    self._callMaybeAsync(method)
+  File "/usr/lib/python3.10/unittest/async_case.py", line 87, in _callMaybeAsync
+    return self._asyncioTestLoop.run_until_complete(fut)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/usr/lib/python3.10/unittest/async_case.py", line 101, in _asyncioLoopRunner
+    ret = await awaitable
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_tender_flows.py", line 43, in test_dated_payment_collection_refund_boundaries_and_replay_never_multiply_revenue
+    all_rows=await self.flow(t,t+timedelta(days=3),limit=1);self.assertEqual(all_rows['event_count'],5);self.assertEqual(len(all_rows['events']),1);self.assertEqual(Decimal(all_rows['revenue'][0]['billed']),6);self.assertEqual(Decimal(all_rows['revenue'][0]['cost']),1)
+AssertionError: Decimal('0.00') != 1
+
+----------------------------------------------------------------------
+Ran 3 tests in 2.735s
+
+FAILED (failures=1)

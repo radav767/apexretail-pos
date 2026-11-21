@@ -107,9 +107,9 @@ class ShiftService:
         if detailed:
             summary.update({
                 "total_sales_base": summary["net_sales_base"],
-                "cash_received_base": calculated_summary["cash_received_base"],
-                "cash_paid_out_base": calculated_summary["cash_paid_out_base"],
-                "refunds_base": calculated_summary["refunds_base"],
+                "cash_received_base": calculated_summary["cash_received_base"] if shift.status=='open' else (summary['cash_sales_base'] or Decimal(0))+(summary['cash_settlements_base'] or Decimal(0)),
+                "cash_paid_out_base": calculated_summary["cash_paid_out_base"] if shift.status=='open' else (summary['cash_refunds_base'] or Decimal(0))+(summary['cash_expenses_base'] or Decimal(0)),
+                "refunds_base": calculated_summary["refunds_base"] if shift.status=='open' else summary['refunds_base'],
                 "base_currency_code": await self.repo.base_currency_code(shift.company_id),
             })
         summary["base_currency_code"] = getattr(
@@ -228,6 +228,8 @@ class ShiftService:
 
     async def _currency_activity(self, shift_id, code):
         db = self.repo.db
+        from .split_accounting import activity
+        split=await activity(db,shift_id,code)
         sales = list((await db.execute(select(Sale).where(
             Sale.shift_id == shift_id, Sale.payment_currency_code == code,
             Sale.payment_method == "cash",
@@ -237,7 +239,8 @@ class ShiftService:
             - Decimal(row.change_amount_original or 0)
             for row in sales if Decimal(row.total_amount or 0) >= 0
         ), Decimal("0"))
-        cash_refunds = sum((abs(Decimal(row.payment_amount_original or row.total_amount or 0)) for row in sales if Decimal(row.total_amount or 0) < 0), Decimal("0"))
+        cash_sales+=split['cash_original']
+        cash_refunds = sum((abs(Decimal(row.payment_amount_original or row.total_amount or 0)) for row in sales if Decimal(row.total_amount or 0) < 0), Decimal("0"))+split['cash_refund_original']
         settlements = (await db.execute(select(func.coalesce(func.sum(CreditSettlement.original_amount), 0)).where(
             CreditSettlement.shift_id == shift_id, CreditSettlement.payment_currency_code == code,
             CreditSettlement.payment_method == "cash",
@@ -253,11 +256,14 @@ class ShiftService:
 
     async def _base_summary(self, shift_id):
         db = self.repo.db
+        from .split_accounting import activity
+        split=await activity(db,shift_id)
         sales = list((await db.execute(select(Sale).where(Sale.shift_id == shift_id))).scalars())
         gross = sum((Decimal(row.total_amount or 0) + Decimal(row.discount_amount or 0) for row in sales if row.original_sale_id is None), Decimal("0"))
         net = sum((Decimal(row.total_amount or 0) for row in sales), Decimal("0"))
         discounts = sum((Decimal(row.discount_amount or 0) for row in sales if row.original_sale_id is None), Decimal("0"))
         by_method = {name: sum((Decimal(row.total_amount or 0) for row in sales if row.payment_method == name and row.original_sale_id is None), Decimal("0")) for name in ("cash", "card", "mobile", "credit")}
+        by_method['cash']+=split['cash_base'];by_method['credit']+=split['credit_base']
         sale_ids = [row.id for row in sales]
         cost = Decimal("0")
         if sale_ids:
@@ -267,9 +273,9 @@ class ShiftService:
         noncash_expenses = Decimal((await db.execute(select(func.coalesce(func.sum(Expense.amount), 0)).where(Expense.shift_id == shift_id, Expense.payment_method.in_(("card", "mobile"))))).scalar_one() or 0)
         cash_in = Decimal((await db.execute(select(func.coalesce(func.sum(CashierShiftCashMovement.base_amount), 0)).where(CashierShiftCashMovement.shift_id == shift_id, CashierShiftCashMovement.movement_type == "cash_in"))).scalar_one() or 0)
         cash_out = Decimal((await db.execute(select(func.coalesce(func.sum(CashierShiftCashMovement.base_amount), 0)).where(CashierShiftCashMovement.shift_id == shift_id, CashierShiftCashMovement.movement_type == "cash_out"))).scalar_one() or 0)
-        cash_received = sum((Decimal(row.total_amount or 0) for row in sales if row.payment_method == "cash" and Decimal(row.total_amount or 0) > 0), Decimal("0")) + settlements["cash"]
+        cash_received = by_method['cash'] + settlements["cash"]
         refunds = sum((abs(Decimal(row.total_amount or 0)) for row in sales if row.original_sale_id is not None and Decimal(row.total_amount or 0) < 0), Decimal("0"))
-        cash_refunds = sum((abs(Decimal(row.total_amount or 0)) for row in sales if row.original_sale_id is not None and row.payment_method == "cash" and Decimal(row.total_amount or 0) < 0), Decimal("0"))
+        cash_refunds = sum((abs(Decimal(row.total_amount or 0)) for row in sales if row.original_sale_id is not None and row.payment_method == "cash" and Decimal(row.total_amount or 0) < 0), Decimal("0"))+split['cash_refund_base']
         return {
             "gross_sales_base": gross, "net_sales_base": net, "cost_of_sales_base": cost,
             "gross_profit_base": net - cost, "discounts_base": discounts,

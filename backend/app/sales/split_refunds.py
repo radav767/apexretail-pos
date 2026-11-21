@@ -25,7 +25,7 @@ class SplitRefundRepository(SalesRepository):
         device=await self.db.get(Device,data.device_id,populate_existing=True)
         if not device or device.company_id!=data.company_id or device.assignment_revision!=data.assignment_revision:raise HTTPException(403,'Original refund register revision changed')
         return None,proof
-    async def prepare_split_refund(self,data,original,total):
+    async def prepare_split_refund(self,data,original,total,*,shift=None):
         if total!=data.expected_total:raise HTTPException(409,'Original item refund differs from expected total')
         legs=(await self.db.execute(select(SaleTender).where(SaleTender.sale_id==original.id,SaleTender.company_id==data.company_id).order_by(SaleTender.id))).scalars().all()
         if not 2<=len(legs)<=20 or sum((r.applied_base for r in legs),Decimal(0))!=original.total_amount:raise HTTPException(409,'Original tender evidence requires review')
@@ -44,6 +44,9 @@ class SplitRefundRepository(SalesRepository):
         expected={str(r.tender_id):(r.kind,r.amount_base,r.amount_original) for r in data.allocations}
         actual={r['id']:(r['kind'],Decimal(r['base']),Decimal(r['original'])) for r in plan['allocations']}
         if expected!=actual:raise HTTPException(409,'Original refund allocation changed; review debt and original currency budgets')
+        from app.shifts.split_accounting import require_cash_snapshots
+        paid_ids={key for key,(kind,_,_) in actual.items() if kind=='paid_refund'}
+        await require_cash_snapshots(self.db,shift,{r.currency_code:r.currency_places for r in legs if str(r.id) in paid_ids})
         self.allocations=[{'id':uuid5(NAMESPACE_URL,'apex:split-refund:'+str(data.request_id)+':'+key),'company_id':data.company_id,'tender_id':UUID(key),'kind':kind,'amount_base':base,'amount_original':orig} for key,(kind,base,orig) in actual.items()]
         return recv,sum((base for kind,base,_ in actual.values() if kind=='debt_reduction'),Decimal(0))
     async def save_sale(self,*args,**kwargs):

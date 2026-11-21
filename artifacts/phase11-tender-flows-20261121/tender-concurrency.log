@@ -1,0 +1,1 @@
+{"synthetic_only": true, "sale_vs_close_statuses": [409, 409, 200], "refund_vs_close_statuses": [409, 409, 200], "one_receipt_per_equal_id": true, "closed_expected_original_units_match_commits": true, "report_cannot_see_uncommitted_partial_legs": true, "no_provider_invoked": true, "split_release_enabled": false}

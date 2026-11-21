@@ -730,7 +730,7 @@ class SalesService:
         change_amount_original = Decimal("0")
 
         if is_split:
-            split_plan=await self.repo.prepare_split(data,actor,total)
+            split_plan=await self.repo.prepare_split(data,actor,total,shift=shift)
             payment_amount_original=None;tendered_amount_original=None;change_amount_original=None
             amount_received=split_plan['amount_received'];change_due=split_plan['change_due']
         elif payment_method == "cash":
@@ -1077,7 +1077,7 @@ class SalesService:
                 raise HTTPException(409, 'Refund exceeds unpaid debt or requires a reviewed paid-refund allocation')
         credit_adjustment_total=planned_total
         if is_split_refund:
-            credit_receivable,credit_adjustment_total=await self.repo.prepare_split_refund(data,original_sale,planned_total)
+            credit_receivable,credit_adjustment_total=await self.repo.prepare_split_refund(data,original_sale,planned_total,shift=shift)
         refund_id = uuid.uuid4()
         receipt_number = (
             f"RFD-{datetime.now(timezone.utc):%Y%m%d}-"

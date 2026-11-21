@@ -15,6 +15,7 @@ from app.reports.credit_reconciliation import router as credit_reconciliation_ro
 from app.sales.split import router as split_checkout_router
 from app.sales import split_refunds  # Register refunds before router inclusion.
 from app.sales import split_history  # Historical reads never enable split posting.
+from app.accounting.tender_flows import router as tender_flow_router
 from app.inventory import branch_router
 from app.inventory import transfer_router
 from app.devices import router as devices
@@ -103,6 +104,7 @@ app.include_router(document_delivery_router, prefix="/api")
 app.include_router(document_retention_router, prefix="/api")
 app.include_router(credit_reconciliation_router, prefix="/api")
 app.include_router(split_checkout_router, prefix="/api")
+app.include_router(tender_flow_router, prefix="/api")
 app.include_router(branch_router.router, prefix="/api")
 app.include_router(transfer_router.router, prefix="/api")
 app.include_router(devices.router, prefix="/api")

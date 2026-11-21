@@ -33,7 +33,8 @@ class SplitRepository(SalesRepository):
             await self.db.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))'),{'key':'sale-tender:'+str(key)})
         if (await self.db.execute(select(SaleTender.id).where(SaleTender.id.in_([r.id for r in data.tenders])).limit(1))).first():raise HTTPException(409,'Tender identity already belongs to an original sale')
         return None,proof
-    async def prepare_split(self,data,actor,total):
+    async def prepare_split(self,data,actor,total,*,shift=None):
+        from app.shifts.split_accounting import require_cash_snapshots
         if total!=data.expected_total:raise HTTPException(409,'Current priced/taxed sale differs from expected split total')
         repo=CurrencyRepository(self.db);base=await repo.base(data.company_id);settings=await repo.settings(data.company_id)
         if not base or base.decimal_places!=2:raise HTTPException(409,'Initial synthetic split checkout requires a two-decimal base currency')
@@ -60,6 +61,7 @@ class SplitRepository(SalesRepository):
             inputs.append({'id':leg.id,'method':leg.method,'currency':currency.code,'places':currency.decimal_places,'applied':leg.applied_original,'tendered':cash_tender if leg.method=='cash' else leg.applied_original,'rate':rate,'quoted_base':leg.applied_base})
             base_change+=(change/rate).quantize(Decimal('.01'),rounding=ROUND_HALF_UP)
             rows.append({'id':leg.id,'company_id':data.company_id,'method':leg.method,'currency_code':currency.code,'currency_places':currency.decimal_places,'applied_original':leg.applied_original,'tendered_original':cash_tender,'change_original':change,'applied_base':leg.applied_base,'exchange_rate_id':rate_id,'exchange_rate_snapshot':rate,'currency_config_version':settings.currency_config_version})
+        await require_cash_snapshots(self.db,shift,{r['currency_code']:r['currency_places'] for r in rows if r['method']=='cash'})
         plan=tenders(total,2,inputs);credit=Decimal(plan['credit']);paid=total-credit
         self.split_plan={'rows':rows,'credit':credit,'paid':paid,'change_due':base_change,'amount_received':paid+base_change}
         return self.split_plan

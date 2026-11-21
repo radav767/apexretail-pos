@@ -194,6 +194,10 @@ def assess(row):
         sources += ';sales/split_history.py'
         replay = 'Historical original tender/refund/current debt disclosure after current identity/revocation and native receipt permissions for selected and original branches. One SQL snapshot, independent ledger aggregates, bounded authorized-branch history page; no reprint, price/license/mode dependency, posting or immutable document rewrite.'
         gap = 'single_snapshot_original_budget_and_branch_pagination_verified_dated_cashflow_shift_receipt_ui_parity_pending'
+    if path.startswith('/api/reports/tender-flows/'):
+        sources += ';accounting/tender_flows.py;shifts/split_accounting.py'
+        replay = 'Current identity/revocation/revenue and collection permissions plus own event tenant/branch/shift. Aware UTC half-open <=366day window; one statement independently aggregates original/refund revenue, applied payments, debt and original cash units with frozen FX residuals. Exact committed commands contribute once. Historical read survives expiry; no provider/posting authority or current-rate reconstruction.'
+        gap = 'synthetic_dates_boundaries_fx_replay_and_shift_close_lock_orders_verified_receipt_ui_full_device_acceptance_pending'
     return domain, policy, description, replay, sources, observed + ':' + gap
 
 
