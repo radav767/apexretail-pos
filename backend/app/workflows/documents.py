@@ -14,6 +14,9 @@ def text(value):return html.escape('Unavailable' if value is None else str(value
 PERMISSIONS={'sale':'sales_receipt_reprint','quotation':'quotations_manage','purchase_order':'inventory_receive','supplier_receipt':'inventory_receive','supplier_return':'inventory_adjust','count_sheet':'inventory_count'}
 
 def render(template,snapshot):
+    if template.get('layout_version')==2:
+        from .layout import render_layout
+        return render_layout(template,snapshot)
     width={'58mm':'58mm','80mm':'80mm','A4':'210mm'}[template['paper']]
     parts=['<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
       '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\'">',
@@ -45,6 +48,15 @@ class DocumentService(WorkflowService):
         record_id=uuid4()
         payload={'family_id':previous.payload['family_id'] if previous else str(record_id),'document_version':previous.payload['document_version']+1 if previous else 1,
             'previous_id':str(previous.id) if previous else None,'paper':data.paper,'blocks':[b.model_dump() for b in data.blocks]}
+        kinds=[block['kind'] for block in payload['blocks']]
+        if kinds.count('logo')>1 or any(kinds.count(kind)>1 for kind in ('items','totals','tax')):raise HTTPException(422,'Only one logo/items/totals/tax block is allowed')
+        if any(kind in {'logo','contact','items','totals','tax'} for kind in kinds):payload['layout_version']=2
+        for block in payload['blocks']:
+            if block['kind']=='logo':
+                from .media import MediaService
+                if block['width_mm']>{'58mm':50,'80mm':72,'A4':80}[data.paper]:raise HTTPException(422,'Logo width exceeds safe paper width')
+                block['media_id']=str(block['media_id'])
+                payload.setdefault('media',{})[block['media_id']]=await MediaService(self.db,self.actor).asset(data.company_id,UUID(block['media_id']),data.branch_id)
         payload['template_digest']=digest(canonical(payload))
         row=WorkflowRecord(id=record_id,company_id=data.company_id,branch_id=data.branch_id,kind='template',state='published',payload=payload)
         self.db.add(row);return await self.finish(data,'template_publish',row,proof)
@@ -94,7 +106,7 @@ class DocumentService(WorkflowService):
         if len(snapshot['rows'])>5000:raise HTTPException(422,'Document exceeds 5000 rows; use a narrower source')
         rendered=render(template.payload,snapshot)
         if len(rendered.encode('utf8'))>2_000_000:raise HTTPException(413,'Document exceeds safe rendering size')
-        payload={'renderer_version':1,'template_id':str(template.id),'template_digest':template.payload['template_digest'],'template_version':template.payload['document_version'],
+        payload={'renderer_version':template.payload.get('layout_version',1),'template_snapshot':template.payload,'template_id':str(template.id),'template_digest':template.payload['template_digest'],'template_version':template.payload['document_version'],
             'source_kind':data.source_kind,'source_id':str(data.source_id),'source_snapshot':snapshot,'source_digest':digest(canonical(snapshot)),
             'html':rendered,'content_digest':digest(rendered)}
         row=WorkflowRecord(id=uuid4(),company_id=data.company_id,branch_id=branch,kind='document',state='rendered',payload=payload)

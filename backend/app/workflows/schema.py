@@ -52,13 +52,20 @@ class ReviewInput(VersionCommand):
     reason:str=Field(min_length=1,max_length=500)
 
 class TemplateBlock(Strict):
-    kind:Literal['title','text','terms','footer']
+    kind:Literal['title','text','terms','footer','contact']
     text:str=Field(min_length=1,max_length=2000)
+class LogoBlock(Strict):
+    kind:Literal['logo']
+    media_id:UUID
+    alignment:Literal['left','center','right']='center'
+    width_mm:int=Field(default=30,ge=10,le=80)
+class SourceBlock(Strict):
+    kind:Literal['items','totals','tax']
 class TemplateInput(Command):
     branch_id:UUID|None=None
     previous_id:UUID|None=None
     paper:Literal['58mm','80mm','A4']='80mm'
-    blocks:list[TemplateBlock]=Field(min_length=1,max_length=20)
+    blocks:list[TemplateBlock|LogoBlock|SourceBlock]=Field(min_length=1,max_length=20)
 class DocumentInput(Command):
     template_id:UUID
     source_kind:Literal['sale','quotation','purchase_order','supplier_receipt','supplier_return','count_sheet']
@@ -76,3 +83,8 @@ class CancellationInput(Command):
     original_payload:dict
     record_id:UUID|None=None
     reason:str=Field(min_length=1,max_length=500)
+
+class MediaInput(Command):
+    branch_id:UUID|None=None
+    content_type:Literal['image/png','image/jpeg','image/webp']
+    data_base64:str=Field(min_length=4,max_length=699052)

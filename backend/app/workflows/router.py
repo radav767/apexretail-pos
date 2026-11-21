@@ -50,7 +50,7 @@ async def publish_template(data:TemplateInput,svc=Depends(documents)):return awa
 async def create_document(data:DocumentInput,svc=Depends(documents)):return await svc.create_document(data)
 @router.get('/documents/{company_id}/{document_id}/html',response_class=HTMLResponse)
 async def document_html(company_id:UUID,document_id:UUID,svc=Depends(documents)):
-    return HTMLResponse(await svc.read_html(company_id,document_id),headers={'Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'})
+    return HTMLResponse(await svc.read_html(company_id,document_id),headers={'Content-Security-Policy':"default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'})
 
 from .schema import PODraftUpdate,SupplierUpdate
 @router.put('/purchase-orders/{po_id}')

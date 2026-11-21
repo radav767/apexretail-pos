@@ -7,6 +7,7 @@ from app.products import router as products
 from app.dashboard import router as dashboard
 from app.inventory import router as inventory
 from app.workflows.router import router as workflows_router
+from app.workflows.media import router as document_media_router
 from app.inventory import branch_router
 from app.inventory import transfer_router
 from app.devices import router as devices
@@ -89,6 +90,7 @@ app.include_router(products.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(inventory.router, prefix="/api")
 app.include_router(workflows_router, prefix="/api")
+app.include_router(document_media_router, prefix="/api")
 app.include_router(branch_router.router, prefix="/api")
 app.include_router(transfer_router.router, prefix="/api")
 app.include_router(devices.router, prefix="/api")

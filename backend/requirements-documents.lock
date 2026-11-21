@@ -1,0 +1,7 @@
+# Additive document worker/API profile, CPython3.10. Never install into production
+# during development. Base runtime identity remains separately reproducible.
+-r requirements-runtime.lock
+Pillow==12.3.0
+reportlab==4.5.1
+qrcode==8.2
+charset-normalizer==3.5.2
