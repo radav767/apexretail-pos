@@ -1,0 +1,1 @@
+{"synthetic_only": true, "equal_refund_ids_one_receipt": true, "distinct_refund_stale_allocations": [200, 409], "collection_vs_full_refund": [200, 409], "original_allocation_budget_conserved": true, "stock": "99.000", "provider_invoked": false, "release_enabled": false}

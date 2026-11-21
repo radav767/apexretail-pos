@@ -977,6 +977,9 @@ class SalesService:
         actor: AuthActor | None,
     ):
         data = data.model_copy(deep=True)
+        from .split_schema import SplitRefundCreate
+        is_split_refund=isinstance(data,SplitRefundCreate)
+        if is_split_refund and not getattr(self.repo,'split_refund_capable',False):raise HTTPException(409,'Versioned split refund requires its atomic allocation repository')
         if len({item.sale_item_id for item in data.items}) != len(data.items):
             raise HTTPException(422, 'Each original sale item may appear only once in a refund')
         if actor is not None and actor.actor_type == 'employee' and actor.employee is not None:
@@ -1015,7 +1018,7 @@ class SalesService:
             enforce_actor_branch(actor, original_sale.branch_id)
             enforce_actor_branch(actor, data.branch_id or original_sale.branch_id)
 
-        if original_sale.payment_method=="split":raise HTTPException(409,"Split refunds require versioned original tender allocation; legacy refund path is unavailable")
+        if (original_sale.payment_method=='split')!=is_split_refund:raise HTTPException(409,'Split originals require only the versioned original tender refund path')
 
         sale_items = {
             item.id: item
@@ -1072,6 +1075,9 @@ class SalesService:
             credit_receivable = await self.repo.credit_receivable_for_update(data.company_id, original_sale.id)
             if not credit_receivable or planned_total <= 0 or planned_total > credit_receivable.outstanding_balance:
                 raise HTTPException(409, 'Refund exceeds unpaid debt or requires a reviewed paid-refund allocation')
+        credit_adjustment_total=planned_total
+        if is_split_refund:
+            credit_receivable,credit_adjustment_total=await self.repo.prepare_split_refund(data,original_sale,planned_total)
         refund_id = uuid.uuid4()
         receipt_number = (
             f"RFD-{datetime.now(timezone.utc):%Y%m%d}-"
@@ -1249,12 +1255,12 @@ class SalesService:
                 )
 
         refund_total = -(total if original_sale.tax_inclusive else total + refund_tax)
-        refund_method = data.refund_method or original_sale.payment_method
-        refund_currency = await self.currency_from_base(
+        refund_method = 'split_refund' if is_split_refund else data.refund_method or original_sale.payment_method
+        refund_currency = None if is_split_refund else await self.currency_from_base(
             data.company_id, refund_method, data.payment_currency_code, abs(refund_total),
             at=datetime.now(timezone.utc),
         )
-        refund_original = -Decimal(refund_currency["original_amount"])
+        refund_original = None if is_split_refund else -Decimal(refund_currency["original_amount"])
         refund_sale = Sale(
             client_sale_id=data.request_id,
             id=refund_id,
@@ -1269,13 +1275,13 @@ class SalesService:
             employee_id=shift.employee_id if shift else (data.employee_id or original_sale.employee_id),
             cashier_name=getattr(actor.employee, "name", None) if actor and actor.actor_type == "employee" else original_sale.cashier_name,
             shift_id=shift.id if shift else None,
-            base_currency_code=refund_currency["base_currency"].code,
-            payment_currency_code=refund_currency["currency"].code,
-            exchange_rate_id=refund_currency["exchange_rate_id"],
-            exchange_rate_snapshot=refund_currency["exchange_rate_snapshot"],
+            base_currency_code=original_sale.base_currency_code if is_split_refund else refund_currency["base_currency"].code,
+            payment_currency_code=None if is_split_refund else refund_currency["currency"].code,
+            exchange_rate_id=None if is_split_refund else refund_currency["exchange_rate_id"],
+            exchange_rate_snapshot=None if is_split_refund else refund_currency["exchange_rate_snapshot"],
             payment_amount_original=refund_original,
             tendered_amount_original=refund_original,
-            change_amount_original=Decimal("0"),
+            change_amount_original=None if is_split_refund else Decimal("0"),
             shop_name_snapshot=original_sale.shop_name_snapshot,
             shop_address_snapshot=original_sale.shop_address_snapshot,
             branch_name_snapshot=original_sale.branch_name_snapshot,
@@ -1303,17 +1309,17 @@ class SalesService:
             for item in sale_items.values()
         ]) else "partially_refunded"
         self.repo.db.add(AuditEvent(company_id=data.company_id, actor_employee_id=actor.employee.id if actor and actor.actor_type == "employee" else None, actor_user_id=actor.user.id if actor and actor.actor_type == "user" else None, device_id=data.device_id or original_sale.device_id, action="refund", reason=data.reason.strip(), details={"original_sale_id": str(original_sale.id), "refund_sale_id": str(refund_id)}))
-        if credit_receivable is not None:
+        if credit_receivable is not None and credit_adjustment_total>0:
             from app.models import CreditRefundAdjustment
-            credit_receivable.amount_credited += planned_total
-            credit_receivable.outstanding_balance -= planned_total
+            credit_receivable.amount_credited += credit_adjustment_total
+            credit_receivable.outstanding_balance -= credit_adjustment_total
             credit_receivable.status = 'paid' if credit_receivable.outstanding_balance == 0 else 'partially_paid' if credit_receivable.amount_settled else 'unpaid'
             # Parent must exist before the independent immutable note mapper.
             # This is a flush only; stock/note/proof/debt commit together.
             self.repo.db.add(refund_sale)
             await self.repo.db.flush([refund_sale])
             self.repo.db.add(CreditRefundAdjustment(company_id=data.company_id, receivable_id=credit_receivable.id,
-                refund_sale_id=refund_id, amount=planned_total))
+                refund_sale_id=refund_id, amount=credit_adjustment_total))
         if refund_proof is not None:
             if data.request_id:
                 # No ORM relationship links this independent proof mapper to

@@ -13,6 +13,7 @@ from app.workflows.delivery import router as document_delivery_router
 from app.workflows.retention import router as document_retention_router
 from app.reports.credit_reconciliation import router as credit_reconciliation_router
 from app.sales.split import router as split_checkout_router
+from app.sales import split_refunds  # Register refunds before router inclusion.
 from app.inventory import branch_router
 from app.inventory import transfer_router
 from app.devices import router as devices

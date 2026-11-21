@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel,ConfigDict,Field,model_validator,field_validator
-from .schema import SaleCreate,SaleItemCreate
+from .schema import SaleCreate,SaleItemCreate,RefundCreate,RefundItemCreate
 class TenderInput(BaseModel):
     model_config=ConfigDict(extra='forbid')
     id:UUID
@@ -37,4 +37,27 @@ class SplitSaleCreate(SaleCreate):
         if any(value is not None for value in (self.amount_received,self.tendered_amount_original,self.payment_currency_code,self.exchange_rate_id,self.exchange_rate_snapshot)):raise ValueError('Split amounts/currencies belong to identified tender legs only')
         if len({leg.id for leg in self.tenders})!=len(self.tenders) or sum(leg.method=='credit' for leg in self.tenders)>1 or not any(leg.method=='cash' for leg in self.tenders):raise ValueError('Distinct legs, at most one credit leg and at least one cash leg are required')
         if any(leg.method=='credit' and leg.tendered_original not in (None,Decimal(0)) for leg in self.tenders):raise ValueError('A credit allocation is not received cash')
+        return self
+
+class RefundAllocationInput(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    tender_id:UUID
+    kind:Literal['debt_reduction','paid_refund']
+    amount_base:Decimal=Field(gt=0,max_digits=12,decimal_places=2)
+    amount_original:Decimal=Field(gt=0,max_digits=18,decimal_places=4)
+
+class SplitRefundCreate(RefundCreate):
+    model_config=ConfigDict(extra='forbid')
+    contract_version:Literal['split-refund-v2']
+    request_id:UUID
+    branch_id:UUID
+    device_id:UUID
+    assignment_revision:int=Field(ge=1)
+    expected_total:Decimal=Field(gt=0,max_digits=12,decimal_places=2)
+    allocations:list[RefundAllocationInput]=Field(min_length=1,max_length=20)
+    items:list[RefundItemCreate]=Field(min_length=1,max_length=100)
+    @model_validator(mode='after')
+    def original_only(self):
+        if self.refund_method is not None or self.payment_currency_code is not None:raise ValueError('Split refunds use only original tender methods/currencies')
+        if len({r.tender_id for r in self.allocations})!=len(self.allocations):raise ValueError('Original tender identities must be distinct')
         return self

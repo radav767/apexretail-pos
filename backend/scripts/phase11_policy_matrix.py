@@ -183,7 +183,13 @@ def assess(row):
         observed = 'transaction_service_replay_policy'
         sources += ';sales/split.py;sales/split_schema.py;accounting/planning.py'
         replay = 'Current actor/epoch/tenant/branch/register/revision and full original sale/tender input proof recover committed legs before current price/license/test-mode checks. New cash/credit work requires current license and explicit APP_ENV=test/SPLIT_CHECKOUT_MODE=test. One atomic sale/stock/debt/leg/proof commit; no offline/provider authority.'
-        gap = 'synthetic_cash_credit_and_fx_checkout_rollback_races_verified_refund_receipt_report_ui_provider_acceptance_pending_default_disabled'
+        gap = 'synthetic_cash_credit_and_fx_checkout_refund_rollback_races_verified_receipt_report_ui_provider_acceptance_pending_default_disabled'
+    if path == '/api/sales/v2/split/refunds':
+        policy = 'synthetic_versioned_original_tender_refund'
+        observed = 'transaction_service_replay_policy'
+        sources += ';sales/split_refunds.py;sales/split_schema.py;sales/refund_accounting.py;accounting/planning.py'
+        replay = 'Current actor/epoch/tenant/branch/register/revision plus exact original item/allocation input recover immutable receipt/legs before current license/test-mode checks. New test-only refunds lock original sale and receivable, verify collection/note proof, reduce unpaid debt first, cap original cash/currency budgets, atomically restore stock and persist credit note/allocations/native proof. Collected-credit excess and method overrides reject before effects.'
+        gap = 'synthetic_partial_final_fx_tax_collection_contention_and_rollback_verified_paid_credit_payout_receipt_report_ui_provider_acceptance_pending'
     return domain, policy, description, replay, sources, observed + ':' + gap
 
 
