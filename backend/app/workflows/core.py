@@ -23,7 +23,7 @@ class WorkflowService:
             self.authorize(row.company_id,'inventory_receive')
             if row.kind=='po':self.costs(row.company_id)
         elif row.kind=='count':self.authorize(row.company_id,'inventory_count')
-        elif row.kind=='document':
+        elif row.kind in {'document','document_output'}:
             from .documents import PERMISSIONS
             self.authorize(row.company_id,PERMISSIONS[row.payload['source_kind']])
             if row.payload['source_kind'] in {'purchase_order','supplier_receipt','supplier_return'}:self.costs(row.company_id)

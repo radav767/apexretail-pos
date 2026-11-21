@@ -1,0 +1,4 @@
+# Disposable parser/software-scan acceptance only; not an API runtime profile.
+-r requirements-documents.lock
+pypdf==6.21.4
+zxing-cpp==3.1.1

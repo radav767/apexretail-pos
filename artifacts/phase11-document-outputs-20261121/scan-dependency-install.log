@@ -1,0 +1,5 @@
+Collecting zxing-cpp<4,>=2.3
+  Downloading zxing_cpp-3.1.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (1.1 MB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 7.3 MB/s eta 0:00:00
+Installing collected packages: zxing-cpp
+Successfully installed zxing-cpp-3.1.1

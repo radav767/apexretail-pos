@@ -6,6 +6,7 @@ from . import schema
 from app.sales.commands import fingerprint
 INPUTS={
  "media_upload":schema.MediaInput,
+ "document_output":schema.OutputInput,
  "supplier_create":schema.SupplierInput,"supplier_update":schema.SupplierUpdate,"po_create":schema.POInput,"po_edit":schema.PODraftUpdate,
  "po_approve":schema.VersionCommand,"po_cancel":schema.ReviewInput,"po_receive":schema.ReceiveInput,"supplier_return":schema.SupplierReturnInput,
  "count_create":schema.CountInput,"count_measure":schema.MeasureInput,"count_submit":schema.VersionCommand,"count_recount":schema.ReviewInput,
@@ -36,6 +37,8 @@ class RecoveryService(WorkflowService):
                     from .documents import PERMISSIONS
                     self.authorize(data.company_id,PERMISSIONS[original.source_kind])
                     if original.source_kind in {'purchase_order','supplier_receipt','supplier_return'}:self.costs(data.company_id)
+                elif committed.kind=='document_output':
+                    record=await self.record(data.company_id,committed.record_id,'document_output');self.authorize_record(record)
                 if (committed.device_id,committed.assignment_revision)!=(proof['device_id'],proof['assignment_revision']):raise HTTPException(403,'Recover using the original authorized register assignment')
                 record=await self.record(data.company_id,committed.record_id)
                 if record.branch_id:await self.current_context(data.company_id,record.branch_id)

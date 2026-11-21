@@ -88,3 +88,11 @@ class MediaInput(Command):
     branch_id:UUID|None=None
     content_type:Literal['image/png','image/jpeg','image/webp']
     data_base64:str=Field(min_length=4,max_length=699052)
+class OutputInput(Command):
+    document_id:UUID
+    format:Literal['pdf','authenticated_lookup_qr']
+class LookupInput(Strict):
+    company_id:UUID
+    document_id:UUID
+    purpose:Literal['authenticated_document_lookup']
+    content_digest:str=Field(pattern=r'^[0-9a-f]{64}$')

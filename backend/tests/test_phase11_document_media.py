@@ -26,7 +26,7 @@ class DocumentMediaTests(unittest.IsolatedAsyncioTestCase):
         with Image.open(io.BytesIO(raw)) as decoded:self.assertNotIn('private',decoded.info);self.assertEqual(decoded.size,(40,20))
         template=await self.post('/templates',{'branch_id':str(self.b),'paper':'58mm','blocks':[{'kind':'logo','media_id':asset['id'],'width_mm':30,'alignment':'right'},{'kind':'contact','text':'<script>private</script>'},{'kind':'items'},{'kind':'tax'},{'kind':'totals'}]})
         doc=await self.post('/documents',{'template_id':template['id'],'source_kind':'sale','source_id':str(self.sale.id)})
-        body=doc['payload']['html'];self.assertIn('data:image/png;base64,',body);self.assertIn('&lt;script&gt;',body);self.assertNotIn('<script>',body);self.assertEqual(doc['payload']['renderer_version'],2)
+        body=doc['payload']['html'];self.assertIn('data:image/png;base64,',body);self.assertIn('&lt;script&gt;',body);self.assertNotIn('<script>',body);self.assertEqual(doc['payload']['renderer_version'],3)
         self.assertEqual(template['payload']['media'][asset['id']]['sha256'],asset['payload']['sha256'])
         with self.assertRaises(DBAPIError):
             async with self.db.begin_nested():await self.db.execute(text("UPDATE workflow_records SET payload='{}'::jsonb,version=version+1 WHERE id=:id"),{'id':UUID(asset['id'])})

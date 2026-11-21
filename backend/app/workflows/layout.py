@@ -18,7 +18,7 @@ def render_layout(template,snapshot):
         kind=block['kind']
         if kind=='logo':
             asset=template['media'][block['media_id']]
-            parts.append('<div style="text-align:'+block['alignment']+'"><img alt="Business supplied logo" width="'+str(round(block['width_mm']*96/25.4))+'" src="data:image/png;base64,'+asset['data_base64']+'"></div>')
+            parts.append('<div style="text-align:'+block['alignment']+'"><img alt="Business supplied logo" width="'+str(round(block['width_mm']*96/25.4))+'" style="height:30mm;object-fit:contain" src="data:image/png;base64,'+asset['data_base64']+'"></div>')
         elif kind=='items':items()
         elif kind=='totals':totals()
         elif kind=='tax':parts.append('<p>Recorded tax: '+text(snapshot.get('totals',{}).get('Tax','Unavailable for this source'))+'</p>')
