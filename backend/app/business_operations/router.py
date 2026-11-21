@@ -265,3 +265,9 @@ from .schema import QuotationRevision
 async def quotation_revision(order_id:UUID,data:QuotationRevision,svc=Depends(service)):
     from .quotation_revisions import revise
     return await revise(svc,order_id,data)
+
+from .pricing_review import PricingReview
+@router.post('/orders/{order_id}/pricing/review')
+async def pricing_review(order_id:UUID,data:PricingReview,svc=Depends(service)):
+    from .pricing_review import review
+    return await review(svc,order_id,data)

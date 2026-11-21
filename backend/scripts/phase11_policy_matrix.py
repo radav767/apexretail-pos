@@ -91,7 +91,7 @@ def assess(row):
                  '/api/operations/offline/edits', '/api/operations/offline/kitchen', '/api/operations/offline/kds',
                  '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries',
                  '/api/shifts/open', '/api/shifts/current/cash-movements', '/api/shifts/offline-resolutions'}
-        or path.startswith('/api/operations/orders/') and path.endswith(('/settle','/quotation-transition'))
+        or path.startswith('/api/operations/orders/') and path.endswith(('/settle','/quotation-transition','/quotation-revision'))
         or domain == 'shifts' and path.endswith(('/cash-movements','/close','/manager-close')))
     if exact:
         observed = 'transaction_service_replay_policy'
@@ -104,6 +104,10 @@ def assess(row):
             gap = 'immutable_validity_terms_and_action_proof_accepted_conversion_stock_races_verified'
             replay = 'Current actor/register/revision plus exact immutable action proof; new workflow needs wholesale license. Freeze validity/zero-discount/tax/pricing; no stock/payment until accepted current-stock conversion, with atomic final sale comparison.'
             sources += ';business_operations/quotations.py'
+        if path.endswith('/quotation-revision'):
+            gap = 'immutable_parent_child_revision_lineage_one_conversion_and_races_verified_device_acceptance_pending'
+            replay = 'Full original request/actor/register proof recovers same linked draft after expiry; root lock before order/checkout, current license for new revision, immutable original terms/lineage, later sent supersession and one converted sale per lineage.'
+            sources += ';business_operations/quotation_revisions.py'
         if path == '/api/customers/checkout':
             gap = 'identified_basic_contact_creation_no_credit_stock_payment_effects_verified'
             replay = 'Current actor/tenant/customers_view plus immutable UUID/full-input proof; exact recovery survives expiry. New basic contact creation needs license and cannot accept credit/status/price-tier fields.'
@@ -130,6 +134,14 @@ def assess(row):
         gap = 'bounded_search_branch_stock_no_cost_read_verified_browser_selector_subset_adopted'
     if path.startswith('/api/reports/financial-summary/'):
         gap = 'historical_module_exception_implemented_current_financial_scope_retained'
+    if path.endswith('/pricing/review'):
+        policy = 'read_only_proposed_pricing_review'
+        replay = 'Current quotation version/tenant/branch/role and discount permissions, configured units/prices/rates only. Bounded integer/Fraction discount/tax/currency proposal; no accepted terms, stock, sale, payment, provider or command mutation. Posting remains disabled.'
+        sources += ';business_operations/pricing_review.py;accounting/planning.py'
+        gap = 'proposal_arithmetic_verified_discount_unit_currency_checkout_enablement_pending'
+    if '/reports/credit-reconciliation/' in path:
+        sources += ';reports/credit_reconciliation.py'
+        gap = 'single_statement_current_receivable_ledger_proof_scoped_no_repair_no_historical_asof_claim'
     if domain == 'employees' and method in {'PATCH', 'DELETE'}:
         observed = 'service_security_exception_policy'
         gap = 'security_reduction_epoch_and_direct_tenant_checks_verified_full_role_ui_acceptance_pending'
@@ -151,6 +163,9 @@ def assess(row):
         elif path.endswith('/documents'):
             policy = 'immutable_historical_document_render'
             replay = 'Full UUID/input/actor/register proof; immutable escaped source/template snapshot permitted after expiry with current source permissions. No new sale/payment/stock/print/fiscal/provider action.'
+        elif '/retention/' in path:
+            policy = 'retained_evidence_selection_policy'
+            replay = 'Current owner/settings/tenant/branch; immutable original assets/documents/outputs remain untouched. Archive/replay allowed after expiry, reactivation licensed. Same normalized branch asset reuses identity; archive does not reclaim quota or delete evidence.'
         elif '/outputs' in path:
             policy = 'immutable_historical_output_or_authenticated_lookup'
             replay = 'Current source/tenant/branch/cost authority. Identified PDF/authenticated-lookup QR coalesce by original document/format; immutable stored bytes and full actor/register command proof. Lookup requires authentication and exact digest. No public/payment/fiscal QR or stock/payment/provider effect.'
