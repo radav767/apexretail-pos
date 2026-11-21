@@ -208,11 +208,13 @@ class BusinessService(PrintingService):
 
     async def order_out(self, row):
         from .quotations import state
+        from .quotation_revisions import superseded
+        is_superseded=await superseded(self,row) if row.kind=='quotation' and row.status!='settled' else False
         table = await self.db.get(DiningTable, row.table_id) if row.table_id else None
         waiter = await self.db.get(Employee, row.waiter_id) if row.waiter_id else None
         items = await self.order_items(row)
         return {**row_dict(row, ("id", "number", "kind", "status", "version", "branch_id", "device_id", "table_id", "waiter_id", "guest_id", "customer_id", "parent_id", "sale_id", "notes", "created_at")),
-            'quotation_status': state(row) if row.kind=='quotation' else None, 'quotation_valid_until':row.quotation_valid_until, 'quotation_terms':row.quotation_terms,
+            'quotation_status': ('superseded' if is_superseded else state(row)) if row.kind=='quotation' else None, 'quotation_root_id':str(row.quotation_root_id or row.id) if row.kind=='quotation' else None,'quotation_revision':row.quotation_revision, 'quotation_valid_until':row.quotation_valid_until, 'quotation_terms':row.quotation_terms,
             "table_name": table.name if table else "Takeaway", "waiter_name": waiter.name if waiter else "Unassigned",
             "items": [row_dict(i, ("id", "product_id", "variant_id", "name", "quantity", "sent_quantity", "price", "unit", "notes")) for i in items],
             "estimated_subtotal": str(sum((i.quantity * i.price for i in items), Decimal("0"))), "estimate_only": row.quotation_terms is None}
@@ -441,6 +443,8 @@ class BusinessService(PrintingService):
         return await self.order_out(row)
 
     async def settle(self, order_id, data):
+        from .quotation_revisions import lock_lineage
+        await lock_lineage(self,order_id)
         row = await self.order(order_id, settle=True)
         from app.sales.commands import fingerprint, actor_identity
         command_hash, command_actor = fingerprint(data), actor_identity(self.actor, self.actor.company_id)

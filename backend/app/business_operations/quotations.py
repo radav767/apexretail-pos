@@ -83,6 +83,8 @@ def validate_device(svc,row,device,revision=None):
 
 async def transition(svc,order_id,data):
     identity=actor_identity(svc.actor,svc.actor.company_id);permit(svc.actor,'quotations_manage')
+    from .quotation_revisions import lock_lineage,require_current
+    await lock_lineage(svc,order_id)
     await svc.db.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))'),{'key':'phase11-quotation:'+str(data.request_id)})
     row=await svc.order(order_id)
     if row.kind!='quotation':raise HTTPException(400,'Quotation workflow requires a quotation')
@@ -96,6 +98,7 @@ async def transition(svc,order_id,data):
         return {**await svc.order_out(row),'quotation_command_ack':str(data.request_id)}
     await svc.require_write('wholesale')
     if row.status!='open' or row.version!=data.version:raise HTTPException(409,'Quotation changed or locked')
+    await require_current(svc,row,conversion=True)
     current=state(row)
     if data.action=='sent':
         deadline=data.valid_until
@@ -119,6 +122,8 @@ async def transition(svc,order_id,data):
 
 
 async def require_conversion(svc,row,payment):
+    from .quotation_revisions import require_current
+    await require_current(svc,row,conversion=True)
     if state(row)!='accepted' or not row.quotation_terms:raise HTTPException(409,'Only accepted, unexpired quotations with frozen terms may convert')
     if any(Decimal(getattr(payment,key,None) or 0) for key in ('discount_amount','sale_discount_amount')):raise HTTPException(409,'Quotation discount terms are frozen')
     if await terms(svc,row)!=row.quotation_terms:raise HTTPException(409,'Quotation terms changed; create and accept a new draft before conversion')

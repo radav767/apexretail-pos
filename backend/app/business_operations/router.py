@@ -259,3 +259,9 @@ async def assign_batch(data: BatchInput, svc=Depends(service)): return await svc
 
 @router.get("/reports")
 async def reports(start: date, end: date, svc=Depends(service)): return await svc.reports(start, end)
+
+from .schema import QuotationRevision
+@router.post('/orders/{order_id}/quotation-revision')
+async def quotation_revision(order_id:UUID,data:QuotationRevision,svc=Depends(service)):
+    from .quotation_revisions import revise
+    return await revise(svc,order_id,data)

@@ -14,4 +14,5 @@ class QuotationCommand(Base):
     device_id=Column(UUID(as_uuid=True),ForeignKey('devices.id'),nullable=False)
     assignment_revision=Column(Integer,nullable=False)
     action=Column(String(20),nullable=False)
+    revised_order_id=Column(UUID(as_uuid=True),ForeignKey('commerce_orders.id'))
     created_at=Column(DateTime(timezone=True),server_default=func.now(),nullable=False)

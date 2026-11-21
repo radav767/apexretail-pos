@@ -166,3 +166,8 @@ class QuotationTransition(VersionInput):
     request_id: UUID
     action: Literal['sent','accepted','rejected']
     valid_until: datetime | None = None
+
+class QuotationRevision(VersionInput):
+    model_config = {"extra":"forbid"}
+    request_id: UUID
+    reason: str = Field(min_length=1,max_length=500)
