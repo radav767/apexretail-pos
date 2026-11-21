@@ -1,0 +1,29 @@
+test_paginated_original_and_refund_read_conserve_ledgers_without_reprint (test_phase11_split_history.SplitHistoryTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.173 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.257 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.137 seconds
+ok
+test_tenant_branch_permission_revocation_and_bounds (test_phase11_split_history.SplitHistoryTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.247 seconds
+FAIL
+
+======================================================================
+FAIL: test_tenant_branch_permission_revocation_and_bounds (test_phase11_split_history.SplitHistoryTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/async_case.py", line 64, in _callTestMethod
+    self._callMaybeAsync(method)
+  File "/usr/lib/python3.10/unittest/async_case.py", line 87, in _callMaybeAsync
+    return self._asyncioTestLoop.run_until_complete(fut)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/usr/lib/python3.10/unittest/async_case.py", line 101, in _asyncioLoopRunner
+    ret = await awaitable
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_split_history.py", line 42, in test_tenant_branch_permission_revocation_and_bounds
+    await self.read(status=403,headers={'Authorization':'Bearer '+bearer})
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_split_history.py", line 19, in read
+    self.assertEqual(response.status_code,status,response.text);return response.json()
+AssertionError: 200 != 403 : {"contract_version":"split-history-v2","selected_sale_id":"a6e13564-4b4f-452b-b4f6-01f484da25ce","original_sale_id":"a6e13564-4b4f-452b-b4f6-01f484da25ce","receipt_number":"APR-20261121-A6E13564","base_currency_code":"USD","read_consistency":"single_statement","scope":"original tender accounting and current debt; not historical as-of cash flow or provider confirmation","posting_enabled":false,"provider_confirmed":false,"reprint_recorded":false,"refund_page_scope":"current authorized branches; totals follow original tender budgets","legs":[{"id":"1c8ce424-0ad8-495a-9d63-46a2c149a221","method":"cash","applied_base":"8.00","currency_code":"USD","refunded_base":"0","remaining_base":"8.00","change_original":"2.0000","currency_places":2,"applied_original":"8.0000","exchange_rate_id":null,"refunded_original":"0","tendered_original":"10.0000","remaining_original":"8.0000","exchange_rate_snapshot":"1.0000000000","currency_config_version":1},{"id":"6ade6a54-ba33-49cf-89b5-501f4a723242","method":"credit","applied_base":"4.00","currency_code":"USD","refunded_base":"0","remaining_base":"4.00","change_original":"0.0000","currency_places":2,"applied_original":"4.0000","exchange_rate_id":null,"refunded_original":"0","tendered_original":"0.0000","remaining_original":"4.0000","exchange_rate_snapshot":"1.0000000000","currency_config_version":1}],"refunds":[],"refund_count":0,"limit":100,"offset":0,"totals":{"total_amount":"12.00","tax_amount":"0.00","initial_cash":"8.00","original_credit":"4.00","collected":"0","credited":"0","outstanding":"4.00","cash_refunded":"0","debt_reduced":"0","refund_total":"0","refund_tax":"0"},"net_billed":"12.00","net_tax":"0.00","net_applied_cash_base":"8.00","ledger_matches":true,"status":"reconciled"}
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.822s
+
+FAILED (failures=1)

@@ -1,0 +1,31 @@
+test_paginated_original_and_refund_read_conserve_ledgers_without_reprint (test_phase11_split_history.SplitHistoryTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.168 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.245 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.152 seconds
+ok
+test_tenant_branch_permission_revocation_and_bounds (test_phase11_split_history.SplitHistoryTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.240 seconds
+ERROR
+
+======================================================================
+ERROR: test_tenant_branch_permission_revocation_and_bounds (test_phase11_split_history.SplitHistoryTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/async_case.py", line 64, in _callTestMethod
+    self._callMaybeAsync(method)
+  File "/usr/lib/python3.10/unittest/async_case.py", line 87, in _callMaybeAsync
+    return self._asyncioTestLoop.run_until_complete(fut)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/usr/lib/python3.10/unittest/async_case.py", line 101, in _asyncioLoopRunner
+    ret = await awaitable
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_split_history.py", line 44, in test_tenant_branch_permission_revocation_and_bounds
+    role=(await self.db.execute(select(EmployeeRole).where(EmployeeRole.company_id==self.c,EmployeeRole.name=='cashier'))).scalar_one();role.permissions={**role.permissions,'sales_history_view':True}
+  File "/tmp/apex-phase11-document-venv/lib/python3.10/site-packages/sqlalchemy/engine/result.py", line 1518, in scalar_one
+    return self._only_one_row(
+  File "/tmp/apex-phase11-document-venv/lib/python3.10/site-packages/sqlalchemy/engine/result.py", line 799, in _only_one_row
+    raise exc.NoResultFound(
+sqlalchemy.exc.NoResultFound: No row was found when one was required
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.762s
+
+FAILED (errors=1)

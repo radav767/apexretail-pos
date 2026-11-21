@@ -190,6 +190,10 @@ def assess(row):
         sources += ';sales/split_refunds.py;sales/split_schema.py;sales/refund_accounting.py;accounting/planning.py'
         replay = 'Current actor/epoch/tenant/branch/register/revision plus exact original item/allocation input recover immutable receipt/legs before current license/test-mode checks. New test-only refunds lock original sale and receivable, verify collection/note proof, reduce unpaid debt first, cap original cash/currency budgets, atomically restore stock and persist credit note/allocations/native proof. Collected-credit excess and method overrides reject before effects.'
         gap = 'synthetic_partial_final_fx_tax_collection_contention_and_rollback_verified_paid_credit_payout_receipt_report_ui_provider_acceptance_pending'
+    if path.startswith('/api/sales/v2/split/history/'):
+        sources += ';sales/split_history.py'
+        replay = 'Historical original tender/refund/current debt disclosure after current identity/revocation and native receipt permissions for selected and original branches. One SQL snapshot, independent ledger aggregates, bounded authorized-branch history page; no reprint, price/license/mode dependency, posting or immutable document rewrite.'
+        gap = 'single_snapshot_original_budget_and_branch_pagination_verified_dated_cashflow_shift_receipt_ui_parity_pending'
     return domain, policy, description, replay, sources, observed + ':' + gap
 
 
