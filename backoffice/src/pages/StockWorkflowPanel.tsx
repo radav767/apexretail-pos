@@ -11,6 +11,8 @@ const root="/inventory/workflows";
 export default function StockWorkflowPanel({companyId,branchId,client=api,onChanged}: {companyId:string;branchId:string;client?:Client;onChanged?:()=>void}){
   const actor=sessionStorage.getItem("backoffice_user_id")||"",scope=`${companyId}:${branchId}:${actor}`,key=`apexretail_workflow_pending_v1:${scope}`;
   const active=useRef(scope);active.current=scope;const lock=useRef(false);
+  const listVersion=useRef(0),selectionVersion=useRef(0),readLock=useRef(false);
+  const [more,setMore]=useState<Record<string,boolean>>({}),[historyMore,setHistoryMore]=useState(false),[paging,setPaging]=useState(false);
   const [tab,setTab]=useState("purchasing"),[lists,setLists]=useState<Record<string,RecordRow[]>>({}),[caps,setCaps]=useState<any>({}),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
   const [pending,setPending]=useState<Pending|null>(null),[blocked,setBlocked]=useState(false),[selected,setSelected]=useState<RecordRow|null>(null),[history,setHistory]=useState<any[]>([]);
   const [supplierName,setSupplierName]=useState(""),[contact,setContact]=useState(""),[supplier,setSupplier]=useState(""),[lines,setLines]=useState<Line[]>([]);
@@ -21,12 +23,23 @@ export default function StockWorkflowPanel({companyId,branchId,client=api,onChan
   const [paper,setPaper]=useState("80mm"),[title,setTitle]=useState("Business document"),[terms,setTerms]=useState(""),[previousTemplate,setPreviousTemplate]=useState(""),[templateId,setTemplateId]=useState(""),[sourceKind,setSourceKind]=useState("sale"),[sourceId,setSourceId]=useState(""),[preview,setPreview]=useState("");
   const rows=(kind:string)=>lists[kind]||[];
   function guard(){const at=active.current,epoch=contextGeneration();return ()=>active.current===at&&contextGeneration()===epoch;}
-  async function load(){const current=guard();const kinds=["supplier","po","count","template","document"];
+  async function load(){const current=guard(),revision=++listVersion.current;const kinds=["supplier","po","count","template","document"];
     const responses=await Promise.allSettled(kinds.map(kind=>client.get(`${root}/${companyId}`,{params:{kind,...(["po","count","document"].includes(kind)?{branch_id:branchId}:{})}})));
-    if(!current())return;
+    if(!current()||listVersion.current!==revision)return;
     setLists(Object.fromEntries(kinds.map((kind,index)=>[kind,responses[index].status==="fulfilled"?(responses[index] as PromiseFulfilledResult<{data:RecordRow[]}>).value.data:[]])));
+    setMore(Object.fromEntries(kinds.map((kind,index)=>[kind,responses[index].status==="fulfilled"&&(responses[index] as PromiseFulfilledResult<{data:RecordRow[]}>).value.data.length===100])));
   }
-  useEffect(()=>{active.current=scope;const current=guard();setSelected(null);setHistory([]);setCounts({});setLines([]);setPreview("");setPartial([]);setProduct(null);setCaps({});setMessage("");setBlocked(false);setLists({});setBusy(false);lock.current=false;
+  async function older(kind:string){if(readLock.current)return;readLock.current=true;setPaging(true);const current=guard(),revision=listVersion.current;
+    try{const {data}=await client.get(`${root}/${companyId}`,{params:{kind,limit:100,offset:rows(kind).length,...(["po","count","document"].includes(kind)?{branch_id:branchId}:{})}});
+      if(!current()||listVersion.current!==revision)return;setLists(previous=>({...previous,[kind]:[...new Map([...(previous[kind]||[]),...data].map(row=>[row.id,row])).values()]}));setMore(previous=>({...previous,[kind]:data.length===100}));
+    }catch{if(current())setMessage("Cannot load older records. Existing records remain available.")}finally{if(current()){readLock.current=false;setPaging(false)}}
+  }
+  async function olderHistory(){if(!selected||readLock.current)return;readLock.current=true;setPaging(true);const current=guard(),revision=selectionVersion.current;
+    try{const {data}=await client.get(`${root}/${companyId}/${selected.id}/history`,{params:{limit:100,offset:history.length}});
+      if(!current()||selectionVersion.current!==revision)return;setHistory(previous=>[...new Map([...previous,...data].map(entry=>[entry.request_id,entry])).values()]);setHistoryMore(data.length===100);
+    }catch{if(current())setMessage("Cannot load older actions. Original evidence remains retained.")}finally{if(current()){readLock.current=false;setPaging(false)}}
+  }
+  useEffect(()=>{active.current=scope;readLock.current=false;selectionVersion.current++;setPaging(false);setMore({});setHistoryMore(false);const current=guard();setSelected(null);setHistory([]);setCounts({});setLines([]);setPreview("");setPartial([]);setProduct(null);setCaps({});setMessage("");setBlocked(false);setLists({});setBusy(false);lock.current=false;
     try{const old=JSON.parse(sessionStorage.getItem(key)||"null");if(old&&(!["post","put"].includes(old.method)||typeof old.path!=="string"||!new RegExp("^"+root+"/(suppliers|purchase-orders|counts|templates|documents)(/[0-9a-f-]{36}(/(approve|receive|returns|cancel|measure|submit|recount|reject))?)?$").test(old.path)||!old.body||old.body.company_id!==companyId||typeof old.body.request_id!=="string"))throw Error();setPending(old)}catch{setBlocked(true);setMessage("Pending workflow evidence needs review. Nothing was removed.");}
     if(!actor||!branchId)return;
     void client.get(`${root}/capabilities/${companyId}/current`).then(({data})=>{if(current()){if(data.actor_id!==actor){setBlocked(true);setMessage("Sign in again to confirm the current business account.");}else setCaps(data)}}).catch(()=>{if(current())setMessage("Cannot verify workflow permissions. Reconnect and reload.")});
@@ -34,7 +47,7 @@ export default function StockWorkflowPanel({companyId,branchId,client=api,onChan
     void client.get(`/products/categories/${companyId}`).then(r=>{if(current())setCategories(r.data)}).catch(()=>{});
     return ()=>{if(active.current===scope)active.current=""};
   },[scope]);
-  async function choose(id:string){const current=guard();try{const {data}=await client.get(`${root}/${companyId}/${id}`);const log=await client.get(`${root}/${companyId}/${id}/history`);if(!current())return;setSelected(data);if(data.kind==="po"){setLines([]);setSupplier(data.payload.supplier_id)}setHistory(log.data);setPage(0);setCounts({});setReason("");setReceived({});setLotCodes({});setExpiries({});setReceipt("");setReturnLine("");}catch{if(current())setMessage("Cannot load this record with the current account.")}}
+  async function choose(id:string){const current=guard(),revision=++selectionVersion.current;try{const {data}=await client.get(`${root}/${companyId}/${id}`);const log=await client.get(`${root}/${companyId}/${id}/history`);if(!current()||selectionVersion.current!==revision)return;setSelected(data);if(data.kind==="po"){setLines([]);setSupplier(data.payload.supplier_id)}setHistory(log.data);setHistoryMore(log.data.length===100);setPage(0);setCounts({});setReason("");setReceived({});setLotCodes({});setExpiries({});setReceipt("");setReturnLine("");}catch{if(current()&&selectionVersion.current===revision)setMessage("Cannot load this record with the current account.")}}
   async function send(path:string,body:Record<string,unknown>,method:Pending["method"]="post",retry=false){
     if(!navigator.onLine){setMessage("Reconnect before posting workflow commands. Original pending input stays retained.");return;}if(lock.current||blocked||!actor)return;if(pending&&!retry){setMessage("Resolve the retained request before starting another action.");return;}lock.current=true;setBusy(true);setMessage("");const current=guard();
     try{const command=retry?pending!:{method,path:root+path,body:{...body,company_id:companyId,request_id:crypto.randomUUID()}};
@@ -70,7 +83,7 @@ export default function StockWorkflowPanel({companyId,branchId,client=api,onChan
   const activeReceipt=history.find(e=>e.request_id===receipt)?.result;
   const sourceOptions=sourceKind==="purchase_order"?rows("po").map(r=>({id:r.id,label:r.payload.supplier_name||r.id.slice(0,8)})):sourceKind==="count_sheet"?rows("count").map(r=>({id:r.id,label:`${r.state} · ${r.id.slice(0,8)}`})):[];
   return <section className="inventory-form-card"><h2>Purchasing, counts & documents</h2><p>Drafts and purchase approval do not change stock. Receiving, returns and reviewed count variances post through the stock ledger.</p>
-    <div className="inventory-tabs">{["purchasing","counts","documents"].map(value=><button key={value} type="button" onClick={()=>{setTab(value);setSelected(null);setPreview("");setReason("")}}>{value}</button>)}<button type="button" onClick={()=>void load()}>Reload current records</button></div>
+    <div className="inventory-tabs">{["purchasing","counts","documents"].map(value=><button key={value} type="button" onClick={()=>{selectionVersion.current++;setHistoryMore(false);setTab(value);setSelected(null);setPreview("");setReason("")}}>{value}</button>)}<button type="button" onClick={()=>void load()}>Reload current records</button></div>
     {message&&<p role="status">{message}</p>}{pending&&<aside><strong>Unconfirmed action retained</strong><p>Retry uses the original quantities, version and request identity.</p><button type="button" disabled={busy||blocked} onClick={()=>void send("",{},"post",true)}>Retry original action</button><button type="button" disabled={busy||blocked} onClick={()=>void reviewPending()}>Review / cancel uncommitted request</button></aside>}
     {tab==="purchasing"&&<><h3>Suppliers</h3>{caps.manage_purchasing&&<div className="inventory-form-grid"><label>Supplier name<input value={supplierName} maxLength={160} onChange={e=>setSupplierName(e.target.value)}/></label><label>Contact details<input value={contact} maxLength={500} onChange={e=>setContact(e.target.value)}/></label><button type="button" disabled={disabled||!supplierName.trim()} onClick={()=>void send("/suppliers",{name:supplierName,contact})}>Save supplier</button></div>}
       <div>{rows("supplier").map(row=><button type="button" key={row.id} onClick={()=>void choose(row.id)}>{row.payload.name} · {row.state}</button>)}</div>
@@ -105,5 +118,7 @@ export default function StockWorkflowPanel({companyId,branchId,client=api,onChan
       <button type="button" disabled={disabled||!templateId||!sourceId} onClick={()=>void send("/documents",{template_id:templateId,source_kind:sourceKind,source_id:sourceId})}>Render snapshot — no stock or payment</button><h3>Saved documents</h3>{rows("document").map(doc=><button type="button" key={doc.id} onClick={async()=>{const current=guard();try{const {data}=await client.get(`${root}/documents/${companyId}/${doc.id}/html`);if(current())setPreview(data)}catch{if(current())setMessage("Cannot read the saved document with this account.")}}}>{doc.payload.source_kind} · {doc.id.slice(0,8)}</button>)}
       {preview&&<iframe title="Saved document preview" sandbox="" srcDoc={preview} style={{width:"100%",height:600,border:"1px solid #cbd5e1"}}/>}<p>These are stored HTML snapshots. No email, supplier payment, fiscal transaction or physical print is invoked.</p>
     </>}
+    {(tab==="purchasing"?["supplier","po"]:tab==="counts"?["count"]:["template","document"]).filter(kind=>more[kind]).map(kind=><button type="button" key={kind} disabled={busy||paging} onClick={()=>void older(kind)}>Load older {kind} records</button>)}
+    {selected&&historyMore&&<button type="button" disabled={busy||paging} onClick={()=>void olderHistory()}>Load older actions / receipts</button>}
   </section>;
 }

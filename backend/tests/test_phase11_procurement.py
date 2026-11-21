@@ -127,3 +127,23 @@ class ProcurementTests(unittest.IsolatedAsyncioTestCase):
             read=await self.client.get('/api/inventory/workflows'+path,headers=headers);self.assertEqual(read.status_code,403,read.text)
         response=await self.client.post(f"/api/inventory/workflows/purchase-orders/{po['id']}/receive",headers=headers,json={'company_id':str(self.c),'request_id':str(uuid4()),'version':po['version'],'reference':'DENIED-COST','lines':[{'line_id':self.line,'quantity':'1'}]})
         self.assertEqual(response.status_code,403,response.text);self.assertEqual(await self.stock(),100)
+
+    async def test_workflow_record_and_history_pages_are_bounded_scoped_and_stable(self):
+        suppliers=[await self.post('/suppliers',{'name':f'Synthetic paged supplier {i}'}) for i in range(5)]
+        path=f'/api/inventory/workflows/{self.c}'
+        pages=[await self.client.get(path,params={'kind':'supplier','limit':2,'offset':i}) for i in (0,2,4)]
+        for response in pages:self.assertEqual(response.status_code,200,response.text)
+        ids=[r['id'] for response in pages for r in response.json()]
+        self.assertEqual(len(set(ids)),5);self.assertEqual(set(ids),{r['id'] for r in suppliers})
+        again=await self.client.get(path,params={'kind':'supplier','limit':2,'offset':2});self.assertEqual(again.json(),pages[1].json())
+        for params in [{'kind':'supplier','limit':101},{'kind':'supplier','offset':-1}]:self.assertEqual((await self.client.get(path,params=params)).status_code,422)
+        self.assertEqual((await self.client.get(f'/api/inventory/workflows/{uuid4()}',params={'kind':'supplier','offset':2})).status_code,403)
+        supplier=suppliers[0]
+        for i in range(3):
+            response=await self.client.put(f"/api/inventory/workflows/suppliers/{supplier['id']}",json={'company_id':str(self.c),'request_id':str(uuid4()),'version':supplier['version'],'name':f'Synthetic revision {i}','contact':'','active':True})
+            self.assertEqual(response.status_code,200,response.text);supplier=response.json()
+        history=f"{path}/{supplier['id']}/history"
+        a=await self.client.get(history,params={'limit':2});b=await self.client.get(history,params={'limit':2,'offset':2})
+        self.assertEqual(a.status_code,200,a.text);self.assertEqual(b.status_code,200,b.text)
+        self.assertEqual(len({r['request_id'] for r in a.json()+b.json()}),4)
+        self.assertEqual(await self.stock(),100)

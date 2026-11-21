@@ -8,8 +8,8 @@ from .schema import SupplierInput,POInput,VersionCommand,ReceiveInput,SupplierRe
 router=APIRouter(prefix='/inventory/workflows',tags=['Stock workflows'])
 def service(db=Depends(get_db),actor=Depends(get_auth_actor)):return ProcurementService(db,actor)
 @router.get('/{company_id}')
-async def records(company_id:UUID,kind:Literal['supplier','po','count','template','document'],branch_id:UUID|None=None,svc=Depends(service)):
-    return await svc.list(company_id,kind,branch_id)
+async def records(company_id:UUID,kind:Literal['supplier','po','count','template','document'],branch_id:UUID|None=None,limit:int=Query(default=100,ge=1,le=100),offset:int=Query(default=0,ge=0),svc=Depends(service)):
+    return await svc.list(company_id,kind,branch_id,limit,offset)
 @router.get('/{company_id}/{record_id}')
 async def record(company_id:UUID,record_id:UUID,svc=Depends(service)):
     row=await svc.record(company_id,record_id)

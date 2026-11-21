@@ -77,14 +77,15 @@ class WorkflowService:
         await self.db.commit();return result
     def version(self,row,data,states):
         if row.version!=data.version or row.state not in states:raise HTTPException(409,'Workflow changed or is locked; reload before a new command')
-    async def list(self,company,kind,branch=None):
+    async def list(self,company,kind,branch=None,limit=100,offset=0):
+        if not 1<=limit<=100 or offset<0:raise HTTPException(422,'Workflow page must have limit 1–100 and a nonnegative offset')
         self.authorize(company,'inventory_receive' if kind in {'supplier','po'} else 'inventory_count' if kind=='count' else 'business_settings_manage')
         if kind=='po':self.costs(company)
         query=select(WorkflowRecord).where(WorkflowRecord.company_id==company,WorkflowRecord.kind==kind)
         if kind!='supplier' and self.actor.employee and self.actor.role not in {'owner','administrator'}:branch=self.actor.employee.branch_id
         if branch and kind!='supplier':await self.branch(company,branch);query=query.where(WorkflowRecord.branch_id==branch)
         result=[]
-        for row in (await self.db.execute(query.order_by(WorkflowRecord.created_at.desc()).limit(100))).scalars():
+        for row in (await self.db.execute(query.order_by(WorkflowRecord.created_at.desc(),WorkflowRecord.id).limit(limit).offset(offset))).scalars():
             value=self.view(row)
             if row.kind=='count':value['payload']={'scope':row.payload['scope'],'positions':len(row.payload['rows']),'entered':sum(e['measured'] is not None for e in row.payload['rows'])}
             elif row.kind=='document':value['payload']={key:row.payload[key] for key in ('source_kind','source_id','template_id','content_digest')}

@@ -1,0 +1,6 @@
+{
+  "backend/app/workflows/core.py": "3e00fd59370b2b3a1cb507fec9e385a809ec03e35795c31a0585a12825a95690",
+  "backend/app/workflows/router.py": "995d41d662d0a1a175ce4211ba760c30d8a788e4b4e11e53a642d1e6bf7625df",
+  "backend/tests/test_phase11_procurement.py": "08b2eeae22c4c67729c81c7306417a5354faf9e92926451598364694535076bd",
+  "backoffice/src/pages/StockWorkflowPanel.tsx": "18e7981ec591ae3af231e45ed6c8874b668f095f5fcb691663816b1598bcacb3"
+}
