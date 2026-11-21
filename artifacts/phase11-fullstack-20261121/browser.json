@@ -1,0 +1,26 @@
+{
+  "synthetic_only": true,
+  "real_api_and_persistence": true,
+  "tenant": "01e6a4d9-5642-4656-ad27-3bce8dbc2b17",
+  "product_id": "da0de959-d498-46ec-986a-c83cd90d6385",
+  "po_id": "0aa573c1-74bb-47be-969d-89e79f7f09a3",
+  "count_id": "3c0c2219-384f-4157-85e2-99d726fbb831",
+  "final_stock": 208,
+  "partial_final_receipts": true,
+  "return_original_receipt": true,
+  "lost_receipt_response_same_uuid_once": true,
+  "older_real_receipt_page": true,
+  "concurrent_final_receipt_statuses": [
+    409,
+    200
+  ],
+  "net_zero_cutoff_rejected": true,
+  "explicit_recount": true,
+  "lost_count_approval_committed_recovery": true,
+  "uncommitted_cancellation_late_packet_denied": true,
+  "tenant_cashier_isolation": true,
+  "reload_persistence": true,
+  "page_errors": [],
+  "unexpected_requests": [],
+  "real_provider_actions": false
+}

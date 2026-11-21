@@ -1,0 +1,50 @@
+{
+  "synthetic_only": true,
+  "stock": "208.000",
+  "command_counts": {
+    "supplier_return": 1,
+    "count_measure": 2,
+    "count_recount": 1,
+    "count_submit": 2,
+    "po_create": 1,
+    "supplier_create": 1,
+    "po_approve": 1,
+    "count_approve": 1,
+    "count_create": 1,
+    "po_receive": 102
+  },
+  "movements": [
+    {
+      "kind": "adjustment_add",
+      "count": 1,
+      "quantity": "1.000"
+    },
+    {
+      "kind": "grn",
+      "count": 102,
+      "quantity": "110.000"
+    },
+    {
+      "kind": "adjustment_remove",
+      "count": 1,
+      "quantity": "1.000"
+    },
+    {
+      "kind": "supplier_return",
+      "count": 1,
+      "quantity": "1.000"
+    },
+    {
+      "kind": "stock_take",
+      "count": 1,
+      "quantity": "1.000"
+    },
+    {
+      "kind": "opening_stock",
+      "count": 1,
+      "quantity": "100.000"
+    }
+  ],
+  "cancellation_fences": 2,
+  "count_state": "approved"
+}
