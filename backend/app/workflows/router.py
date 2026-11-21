@@ -13,7 +13,7 @@ async def records(company_id:UUID,kind:Literal['supplier','po','count','template
 @router.get('/{company_id}/{record_id}')
 async def record(company_id:UUID,record_id:UUID,svc=Depends(service)):
     row=await svc.record(company_id,record_id)
-    svc.authorize(company_id,'inventory_receive' if row.kind in {'supplier','po'} else 'inventory_count' if row.kind=='count' else 'business_settings_manage')
+    svc.authorize_record(row)
     return svc.view(row)
 @router.post('/suppliers')
 async def supplier(data:SupplierInput,svc=Depends(service)):return await svc.supplier(data)
@@ -64,7 +64,7 @@ async def history(company_id:UUID,record_id:UUID,limit:int=Query(default=100,ge=
     from sqlalchemy import select
     from app.models import WorkflowCommand
     row=await svc.record(company_id,record_id)
-    svc.authorize(company_id,'inventory_receive' if row.kind in {'supplier','po'} else 'inventory_count' if row.kind=='count' else 'business_settings_manage')
+    svc.authorize_record(row)
     return [{'request_id':str(cmd.request_id),'kind':cmd.kind,'result':cmd.result} for cmd in (await svc.db.execute(select(WorkflowCommand).where(WorkflowCommand.company_id==company_id,WorkflowCommand.record_id==record_id).order_by(WorkflowCommand.created_at.desc(),WorkflowCommand.request_id).limit(limit).offset(offset))).scalars()]
 
 @router.post('/purchase-orders/{po_id}/cancel')
@@ -76,4 +76,15 @@ async def capabilities(company_id:UUID,svc=Depends(service)):
     svc.authorize(company_id)
     owner=svc.actor.role in {'owner','administrator'}
     def allowed(permission):return owner if svc.actor.actor_type=='user' else has_permission(svc.actor.permissions or {},permission)
-    return {'actor_id':str(svc.actor.user.id if svc.actor.user else svc.actor.employee.id),'manage_purchasing':owner,'receive':allowed('inventory_receive'),'return':allowed('inventory_adjust'),'count':allowed('inventory_count'),'approve_count':owner and allowed('inventory_count'),'templates':owner and allowed('business_settings_manage')}
+    from app.products.router import can_view_product_cost
+    costs=can_view_product_cost(svc.actor)
+    return {'actor_id':str(svc.actor.user.id if svc.actor.user else svc.actor.employee.id),'manage_purchasing':owner,'receive':allowed('inventory_receive') and costs,'return':allowed('inventory_adjust') and costs,'count':allowed('inventory_count'),'approve_count':owner and allowed('inventory_count'),'templates':owner and allowed('business_settings_manage')}
+
+from .schema import CancellationInput
+from .recovery import RecoveryService
+def recovery(db=Depends(get_db),actor=Depends(get_auth_actor)):return RecoveryService(db,actor)
+@router.post('/commands/{request_id}/cancel')
+async def cancel_request(request_id:UUID,data:CancellationInput,svc=Depends(recovery)):
+    from fastapi import HTTPException
+    if request_id!=data.request_id:raise HTTPException(409,'Cancellation request identities differ')
+    return await svc.cancel_uncommitted(data)

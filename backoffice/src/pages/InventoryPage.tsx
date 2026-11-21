@@ -1,3 +1,4 @@
+import StockWorkflowPanel from "./StockWorkflowPanel";
 import ProductSelector from "../../../pos-web/src/components/ProductSelector";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
@@ -61,6 +62,7 @@ type InventoryTab =
   | "overview"
   | "grn"
   | "adjustment"
+  | "workflows"
   | "stocktake"
   | "transfers"
   | "valuation"
@@ -386,6 +388,7 @@ export default function InventoryPage({
           ["grn", "Goods Received"],
           ["adjustment", "Stock Adjustment"],
           ["stocktake", "Stock Take"],
+          ["workflows", "Purchasing & Counts"],
           ["transfers", "Branches & Transfers"],
           ["valuation", "Valuation"],
           ["history", "History"],
@@ -669,6 +672,8 @@ export default function InventoryPage({
         </section>
       )}
 
+
+      {tab === "workflows" && <StockWorkflowPanel key={`${companyId}:${selectedBranchId}`} companyId={companyId} branchId={selectedBranchId} onChanged={() => {void loadInventory();onDataChanged?.();}}/>}
 
       {tab === "stocktake" && (
         <StockTakePanel

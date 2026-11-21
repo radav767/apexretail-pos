@@ -3,7 +3,7 @@ from decimal import Decimal
 from datetime import datetime,timezone
 import hashlib
 from fastapi import HTTPException
-from sqlalchemy import select,text
+from sqlalchemy import select,text,or_,and_
 from sqlalchemy.dialects.postgresql import insert
 from app.models import (WorkflowRecord,Product,ProductVariant,InventoryBalance,VariantInventoryBalance,ProductBatch,BatchReturnHold,BatchReturnInspection,InventoryMovement,StockRevision,Category)
 from app.inventory.service import InventoryService
@@ -32,17 +32,22 @@ class CountService(WorkflowService):
     async def catalog(self,company,branch,category=None,products=None):
         await self.branch(company,branch)
         if category and not (await self.db.execute(select(Category.id).where(Category.id==category,Category.company_id==company))).scalar_one_or_none():raise HTTPException(404,'Count category not found')
-        query=select(Product).where(Product.company_id==company)
+        concrete=select(InventoryBalance.product_id).where(InventoryBalance.company_id==company,InventoryBalance.branch_id==branch)
+        variant_positions=select(VariantInventoryBalance.product_id).where(VariantInventoryBalance.company_id==company,VariantInventoryBalance.branch_id==branch)
+        query=select(Product).where(Product.company_id==company,or_(and_(Product.track_inventory.is_(True),Product.active.is_(True),Product.deleted.is_(False)),Product.id.in_(concrete),Product.id.in_(variant_positions)))
         if category:query=query.where(Product.category_id==category)
         if products:query=query.where(Product.id.in_(products))
-        goods=(await self.db.execute(query.order_by(Product.id).execution_options(populate_existing=True))).scalars().all()
-        base={r.product_id:r for r in (await self.db.execute(select(InventoryBalance).where(InventoryBalance.company_id==company,InventoryBalance.branch_id==branch).execution_options(populate_existing=True))).scalars()}
-        variants=(await self.db.execute(select(ProductVariant).where(ProductVariant.company_id==company).order_by(ProductVariant.id).execution_options(populate_existing=True))).scalars().all()
-        vb={r.variant_id:r for r in (await self.db.execute(select(VariantInventoryBalance).where(VariantInventoryBalance.company_id==company,VariantInventoryBalance.branch_id==branch).execution_options(populate_existing=True))).scalars()}
-        lots=(await self.db.execute(select(ProductBatch).where(ProductBatch.company_id==company,ProductBatch.branch_id==branch).order_by(ProductBatch.id).execution_options(populate_existing=True))).scalars().all()
-        holds=(await self.db.execute(select(BatchReturnHold,InventoryMovement.variant_id).join(InventoryMovement,InventoryMovement.id==BatchReturnHold.movement_id).outerjoin(BatchReturnInspection,BatchReturnInspection.hold_id==BatchReturnHold.id).where(BatchReturnHold.company_id==company,BatchReturnHold.branch_id==branch,BatchReturnInspection.id.is_(None)))).all()
-        known_base=set((await self.db.execute(select(InventoryBalance.product_id).where(InventoryBalance.company_id==company))).scalars())
-        known_variant=set((await self.db.execute(select(VariantInventoryBalance.product_id).where(VariantInventoryBalance.company_id==company))).scalars())
+        goods=(await self.db.execute(query.order_by(Product.id).limit(5001).execution_options(populate_existing=True))).scalars().all()
+        if len(goods)>5000:raise HTTPException(422,'Count scope exceeds 5000 products; choose a narrower scope')
+        pids=[p.id for p in goods]
+        base={r.product_id:r for r in (await self.db.execute(select(InventoryBalance).where(InventoryBalance.company_id==company,InventoryBalance.branch_id==branch,InventoryBalance.product_id.in_(pids)).execution_options(populate_existing=True))).scalars()}
+        variants=(await self.db.execute(select(ProductVariant).where(ProductVariant.company_id==company,ProductVariant.product_id.in_(pids)).order_by(ProductVariant.id).limit(5001).execution_options(populate_existing=True))).scalars().all()
+        vb={r.variant_id:r for r in (await self.db.execute(select(VariantInventoryBalance).where(VariantInventoryBalance.company_id==company,VariantInventoryBalance.branch_id==branch,VariantInventoryBalance.product_id.in_(pids)).execution_options(populate_existing=True))).scalars()}
+        lots=(await self.db.execute(select(ProductBatch).where(ProductBatch.company_id==company,ProductBatch.branch_id==branch,ProductBatch.product_id.in_(pids)).order_by(ProductBatch.id).limit(5001).execution_options(populate_existing=True))).scalars().all()
+        holds=(await self.db.execute(select(BatchReturnHold,InventoryMovement.variant_id).join(InventoryMovement,InventoryMovement.id==BatchReturnHold.movement_id).outerjoin(BatchReturnInspection,BatchReturnInspection.hold_id==BatchReturnHold.id).where(BatchReturnHold.company_id==company,BatchReturnHold.branch_id==branch,BatchReturnInspection.id.is_(None),BatchReturnHold.product_id.in_(pids)).limit(5001))).all()
+        known_base=set((await self.db.execute(select(InventoryBalance.product_id).where(InventoryBalance.company_id==company,InventoryBalance.product_id.in_(pids)).distinct())).scalars())
+        known_variant=set((await self.db.execute(select(VariantInventoryBalance.product_id).where(VariantInventoryBalance.company_id==company,VariantInventoryBalance.product_id.in_(pids)).distinct())).scalars())
+        if max(len(variants),len(vb),len(lots),len(holds))>5000:raise HTTPException(422,'Count dimensions exceed 5000 positions; narrow the scope')
         rows=[]
         for p in goods:
             if not p.track_inventory and not any(r.product_id==p.id and r.quantity for r in [*base.values(),*vb.values()]):continue

@@ -16,6 +16,19 @@ class DurableCountTests(unittest.IsolatedAsyncioTestCase):
     stock=procurement_fixtures.ProcurementTests.stock
     async def open_count(self,scope='partial'):
         return await self.post('/counts',{'branch_id':str(self.b),'scope':scope,**({'product_ids':[str(self.p)]} if scope=='partial' else {})})
+    async def test_variant_scope_query_has_no_cartesian_product(self):
+        import warnings
+        from sqlalchemy.exc import SAWarning
+        from app.models import ProductVariant,VariantInventoryBalance
+        variant=ProductVariant(company_id=self.c,product_id=self.p,name='Synthetic counted variant',cost_price=2)
+        self.db.add(variant);await self.db.flush()
+        self.db.add(VariantInventoryBalance(company_id=self.c,shop_id=self.shop.id,branch_id=self.b,product_id=self.p,variant_id=variant.id,quantity=7,reorder_level=0))
+        await self.db.commit();vid=str(variant.id)
+        with warnings.catch_warnings():
+            warnings.simplefilter('error',SAWarning)
+            row=await self.open_count()
+        position=next(e for e in row['payload']['rows'] if e['variant_id']==vid)
+        self.assertEqual(Decimal(position['baseline']),7)
     async def submit_count(self,row,delta=-3):
         measurements=[{'key':e['key'],'quantity':str(Decimal(e['baseline'])+(Decimal(delta) if e['kind'] not in {'unassigned','hold'} else 0))} for e in row['payload']['rows']]
         row=await self.post(f"/counts/{row['id']}/measure",{'version':row['version'],'measurements':measurements})
@@ -96,3 +109,19 @@ class DurableCountTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rejected['state'],'rejected');self.assertEqual(await self.stock(),100)
         history=await self.client.get(f"/api/inventory/workflows/{self.c}/{row['id']}/history")
         self.assertEqual(history.status_code,200,history.text);self.assertIn('count_reject',{e['kind'] for e in history.json()})
+
+    async def test_return_inspection_invalidates_cutoff_without_changing_total_stock(self):
+        from test_phase7e_recovery_returns import RecoveryReturnTests
+        from app.business_operations.returns import ReturnService,InspectionInput
+        hold,_=await RecoveryReturnTests.returned(self)
+        row=await self.open_count()
+        self.assertTrue(any(e['kind']=='hold' for e in row['payload']['rows']))
+        row=await self.post(f"/counts/{row['id']}/measure",{'version':row['version'],'measurements':[{'key':e['key'],'quantity':e['baseline']} for e in row['payload']['rows']]})
+        row=await self.post(f"/counts/{row['id']}/submit",{'version':row['version']})
+        before=await self.stock()
+        await ReturnService(self.db,self.owner).inspect(InspectionInput(request_id=uuid4(),hold_id=hold.id,code='SYN-INSPECTED',expires_on=date.today()+timedelta(days=30),disposition='restock',reason='Synthetic physical inspection',confirmed=True))
+        self.assertEqual(await self.stock(),before)
+        await self.post(f"/counts/{row['id']}/approve",{'version':row['version'],'reason':'Stale held disposition'},409)
+        recounted=await self.post(f"/counts/{row['id']}/recount",{'version':row['version'],'reason':'Recount inspected lot'})
+        self.assertFalse(any(e['kind']=='hold' for e in recounted['payload']['rows']))
+        self.assertTrue(all(e['measured'] is None for e in recounted['payload']['rows']))

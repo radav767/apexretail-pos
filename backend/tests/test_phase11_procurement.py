@@ -113,3 +113,17 @@ class ProcurementTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as error:await ProcurementService(self.db,actor).supplier(data)
             self.assertEqual(error.exception.status_code,expected)
         self.assertEqual(await self.stock(),100)
+
+    async def test_receiver_without_cost_visibility_cannot_read_or_post_cost_bearing_po(self):
+        from app.employees.permissions import normalize_permissions
+        po=await self.prepare()
+        template=await self.post('/templates',{'paper':'80mm','blocks':[{'kind':'title','text':'Synthetic purchasing'}]})
+        document=await self.post('/documents',{'template_id':template['id'],'source_kind':'purchase_order','source_id':po['id']})
+        await self.db.refresh(self.employee);self.employee.role='inventory_clerk';self.employee.permissions=normalize_permissions('inventory_clerk',{'product_costs_view':False});await self.db.commit()
+        bearer=create_employee_access_token(employee_id=str(self.e),company_id=str(self.c),role='inventory_clerk')
+        headers={'Authorization':'Bearer '+bearer}
+        read=await self.client.get(f"/api/inventory/workflows/{self.c}/{po['id']}",headers=headers);self.assertEqual(read.status_code,403,read.text)
+        for path in [f"/{self.c}/{po['id']}/history",f"/{self.c}/{document['id']}",f"/{self.c}/{document['id']}/history",f"/documents/{self.c}/{document['id']}/html"]:
+            read=await self.client.get('/api/inventory/workflows'+path,headers=headers);self.assertEqual(read.status_code,403,read.text)
+        response=await self.client.post(f"/api/inventory/workflows/purchase-orders/{po['id']}/receive",headers=headers,json={'company_id':str(self.c),'request_id':str(uuid4()),'version':po['version'],'reference':'DENIED-COST','lines':[{'line_id':self.line,'quantity':'1'}]})
+        self.assertEqual(response.status_code,403,response.text);self.assertEqual(await self.stock(),100)

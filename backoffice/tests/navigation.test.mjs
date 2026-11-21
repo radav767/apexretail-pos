@@ -12,11 +12,11 @@ test("Dashboard and Sales History remain separate destinations", () => {
   assert.match(app, /page === "sales" && \(\s*<SalesHistoryPage/);
 });
 
-test("login survives reload and logout clears persisted identity", () => {
-  assert.match(app, /Boolean\(localStorage\.getItem\("backoffice_token"\)\)/);
-  assert.match(app, /localStorage\.getItem\("backoffice_company_id"\)/);
-  assert.match(app, /localStorage\.removeItem\("backoffice_token"\)/);
-  assert.match(app, /localStorage\.removeItem\("backoffice_company_id"\)/);
+test("login restores tab identity and logout uses the shared revocation context", () => {
+  assert.match(app, /Boolean\(sessionStorage\.getItem\('backoffice_token'\)\)/);
+  assert.match(app, /sessionStorage\.getItem\('backoffice_company_id'\)/);
+  assert.match(app, /await api\.post\('\/auth\/logout'/);
+  assert.match(app, /clearBusinessContext\(\)/);
 });
 
 test("mobile menu opens, closes after navigation, and contains Logout", () => {

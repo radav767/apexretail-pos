@@ -70,3 +70,9 @@ class SupplierUpdate(VersionCommand):
     name:str=Field(min_length=1,max_length=160)
     contact:str=Field(default='',max_length=500)
     active:bool=True
+
+class CancellationInput(Command):
+    original_kind:str=Field(min_length=1,max_length=40)
+    original_payload:dict
+    record_id:UUID|None=None
+    reason:str=Field(min_length=1,max_length=500)

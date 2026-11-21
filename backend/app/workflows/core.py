@@ -14,6 +14,20 @@ class WorkflowService:
         actor_identity(self.actor,company)
         if owner and self.actor.role not in {'owner','administrator'}:raise HTTPException(403,'Business owner or administrator approval is required')
         if permission:permit(self.actor,permission)
+    def costs(self,company):
+        self.authorize(company)
+        from app.products.router import can_view_product_cost
+        if not can_view_product_cost(self.actor):raise HTTPException(403,'Product cost visibility is required for this purchasing workflow')
+    def authorize_record(self,row):
+        if row.kind in {'supplier','po'}:
+            self.authorize(row.company_id,'inventory_receive')
+            if row.kind=='po':self.costs(row.company_id)
+        elif row.kind=='count':self.authorize(row.company_id,'inventory_count')
+        elif row.kind=='document':
+            from .documents import PERMISSIONS
+            self.authorize(row.company_id,PERMISSIONS[row.payload['source_kind']])
+            if row.payload['source_kind'] in {'purchase_order','supplier_receipt','supplier_return'}:self.costs(row.company_id)
+        else:self.authorize(row.company_id,'business_settings_manage')
     async def record(self,company,record_id,kind=None,lock=False):
         self.authorize(company)
         query=select(WorkflowRecord).where(WorkflowRecord.company_id==company,WorkflowRecord.id==record_id)
@@ -28,15 +42,20 @@ class WorkflowService:
         if not row:raise HTTPException(404,'Branch not found')
         return row
     def view(self,row):return {'id':str(row.id),'kind':row.kind,'state':row.state,'version':row.version,'company_id':str(row.company_id),'branch_id':str(row.branch_id) if row.branch_id else None,'payload':row.payload}
-    async def begin(self,data,kind,branch=None,record_id=None,license_required=True):
+    async def current_context(self,company,branch=None):
+        self.authorize(company)
         entity=self.actor.user if self.actor.actor_type=='user' else self.actor.employee
         await self.db.refresh(entity)
         if self.actor.pos_session:
             original_hash=self.actor.pos_session.token_hash
             await self.db.refresh(self.actor.pos_session)
             if self.actor.pos_session.token_hash!=original_hash:raise HTTPException(401,'POS session rotated; sign in again')
-        proof=await context(self.db,self.actor,data.company_id,branch)
+        return await context(self.db,self.actor,company,branch)
+    async def begin(self,data,kind,branch=None,record_id=None,license_required=True):
+        proof=await self.current_context(data.company_id,branch)
         await self.db.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))'),{'key':'phase11-workflow:'+str(data.request_id)})
+        from app.models import WorkflowCancellation
+        if await self.db.get(WorkflowCancellation,(data.request_id,data.company_id,self.actor.actor_type,proof['actor_id'])):raise HTTPException(409,'Workflow request was cancelled before posting; use reviewed replacement input')
         old=await self.db.get(WorkflowCommand,data.request_id)
         if old:
             if old.company_id!=data.company_id or old.kind!=kind or record_id and old.record_id!=record_id or old.payload_hash!=fingerprint(data):raise HTTPException(409,'Workflow command identity has different values')
@@ -60,6 +79,7 @@ class WorkflowService:
         if row.version!=data.version or row.state not in states:raise HTTPException(409,'Workflow changed or is locked; reload before a new command')
     async def list(self,company,kind,branch=None):
         self.authorize(company,'inventory_receive' if kind in {'supplier','po'} else 'inventory_count' if kind=='count' else 'business_settings_manage')
+        if kind=='po':self.costs(company)
         query=select(WorkflowRecord).where(WorkflowRecord.company_id==company,WorkflowRecord.kind==kind)
         if kind!='supplier' and self.actor.employee and self.actor.role not in {'owner','administrator'}:branch=self.actor.employee.branch_id
         if branch and kind!='supplier':await self.branch(company,branch);query=query.where(WorkflowRecord.branch_id==branch)

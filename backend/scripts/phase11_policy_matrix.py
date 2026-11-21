@@ -138,6 +138,22 @@ def assess(row):
         gap = 'fresh_nonce_signed_current_opaque_actor_register_actions_bounded_browser_lease_verified_installed_device_acceptance_pending'
     if path.endswith('/employees/session/logout'):
         gap = 'legacy_user_employee_jwt_opaque_revocation_and_pin_races_verified_device_acceptance_pending'
+    if path.startswith('/api/inventory/workflows'):
+        sources = 'workflows/core.py;workflows/procurement.py;workflows/counts.py;workflows/documents.py;workflows/recovery.py;inventory/service.py'
+        observed = 'workflow_service_command_policy'
+        gap = 'synthetic_api_service_races_rollback_browser_subset_verified_hardware_finance_media_acceptance_pending'
+        if read:
+            policy = 'scoped_workflow_evidence_read'
+            replay = 'Current tenant/branch/role and source document permissions; purchasing costs require existing cost visibility. Bounded records/history; no stock/payment effect.'
+        elif '/commands/' in path and path.endswith('/cancel'):
+            policy = 'workflow_original_recovery_or_cancellation_fence'
+            replay = 'Serialize original UUID; recover committed full-input/actor/register proof with current permission, or permanently fence that actor/company uncommitted UUID before replacement. Survives expiry; no stock/payment replay.'
+        elif path.endswith('/documents'):
+            policy = 'immutable_historical_document_render'
+            replay = 'Full UUID/input/actor/register proof; immutable escaped source/template snapshot permitted after expiry with current source permissions. No new sale/payment/stock/print/fiscal/provider action.'
+        else:
+            policy = 'workflow_exact_command_or_licensed_write'
+            replay = 'Current actor epoch/tenant/branch/role/register before full immutable UUID/input replay; current license/modules for new work. Draft/approval has no movement. Receipt/return/count stock and parent/child evidence commit once atomically; cutoff changes require explicit recount.'
     return domain, policy, description, replay, sources, observed + ':' + gap
 
 

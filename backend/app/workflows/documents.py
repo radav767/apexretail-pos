@@ -85,6 +85,7 @@ class DocumentService(WorkflowService):
     @atomic
     async def create_document(self,data):
         self.authorize(data.company_id,PERMISSIONS[data.source_kind])
+        if data.source_kind in {'purchase_order','supplier_receipt','supplier_return'}:self.costs(data.company_id)
         old,proof=await self.begin(data,'document_render',license_required=False)
         if old:return old
         template=await self.record(data.company_id,data.template_id,'template')
@@ -100,6 +101,8 @@ class DocumentService(WorkflowService):
         self.db.add(row);return await self.finish(data,'document_render',row,proof)
     async def read_html(self,company,document_id):
         row=await self.record(company,document_id,'document')
-        self.authorize(company,PERMISSIONS[row.payload['source_kind']]);await context(self.db,self.actor,company,row.branch_id)
+        self.authorize(company,PERMISSIONS[row.payload['source_kind']])
+        if row.payload['source_kind'] in {'purchase_order','supplier_receipt','supplier_return'}:self.costs(company)
+        await context(self.db,self.actor,company,row.branch_id)
         if digest(row.payload['html'])!=row.payload['content_digest']:raise HTTPException(409,'Stored document digest requires review')
         return row.payload['html']

@@ -1,0 +1,19 @@
+{
+  "backend/app/models/__init__.py": "b5c2ddec3c7156082643fa4a7fd8a24543e3f04e8b3e80bb5c6a37779c1a4e3f",
+  "backend/app/models/workflow_cancellation.py": "f87056363f12646fe12b29e2ca126b90da1c9eaa79037441e528ad8d5c4b1ebc",
+  "backend/app/workflows/core.py": "ba853fa595864d0e440ed40f90e7ea2f5f0d44d1c90a8c2e16c40e0beb205b46",
+  "backend/app/workflows/counts.py": "205d269108f9cbd10854c1238fece178807b4d261a28a927abbef2c1298e4553",
+  "backend/app/workflows/documents.py": "678b00df60551f15c492f3293e9084d5afdc0a06d5b1df2e4cd223515f6fbc9e",
+  "backend/app/workflows/procurement.py": "20eb004cb09da92ff6a833ad7218cc42c97167928a16c1849eb014d51dc5ee69",
+  "backend/app/workflows/recovery.py": "864543b695f32071c0818e581ede61e47c489a3c368a4ae7eb2bdf3a399e1062",
+  "backend/app/workflows/router.py": "11d5a4ea9bc99fe3d152022d018cd081695f404d4548f017c0e9f664dfd38fc3",
+  "backend/app/workflows/schema.py": "8493bbc609e5c164b254794d560a198738bbb49e73434dce20e3089719650d17",
+  "backend/migrations/versions/p11q_workflow_cancellation_fences.py": "b17ea5a15c0e279f1fff7260c16247850bfa16145d0e516814c117d1982b37d5",
+  "backend/scripts/phase11_policy_matrix.py": "f97d520368ca8b7667f1ec09449f6ec1580f6da8308b9bf1349285d2619e6789",
+  "backend/tests/test_phase11_durable_counts.py": "7b15c38d54c5e14ff7a43023c5aab2d084319cad94d4d83c2b47a8a8d9b58e3e",
+  "backend/tests/test_phase11_procurement.py": "2a7c1bb8eb77f71d06be4b96743acda4965886ad6b028a364e1180047ecf6c69",
+  "backend/tests/test_phase11_workflow_recovery.py": "5d18288fed35b0a2c31de38a813a946fa243cff6109f23119f8831d161ca9773",
+  "backoffice/src/pages/InventoryPage.tsx": "91d6ed66daa0cc440a069cd2321826e0b7000c3b914229bad29719329262c6f7",
+  "backoffice/src/pages/StockWorkflowPanel.tsx": "991ce81beedd66e8fb33e4f063a1b0fe0a6fcc3be6428a2ff0efdafd435e8a57",
+  "backoffice/tests/navigation.test.mjs": "1f37d6886afec14abd6c17a0ae9477c26a71132c3ab731c0e85e1193373fb1c2"
+}

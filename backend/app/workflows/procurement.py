@@ -128,7 +128,7 @@ class ProcurementService(WorkflowService):
         return (await self.db.execute(select(WorkflowCommand).where(WorkflowCommand.company_id==row.company_id,WorkflowCommand.record_id==row.id,WorkflowCommand.kind==kind))).scalars().all()
     @atomic
     async def receive(self,po_id,data):
-        self.authorize(data.company_id,'inventory_receive')
+        self.authorize(data.company_id,'inventory_receive');self.costs(data.company_id)
         old,proof=await self.begin(data,'po_receive',record_id=po_id)
         if old:return old
         row=await self.record(data.company_id,po_id,'po',True);await self.branch(data.company_id,row.branch_id);await self.check_register(row.branch_id)
@@ -175,7 +175,7 @@ class ProcurementService(WorkflowService):
         return await self.finish(data,'po_receive',row,proof,{'order':self.view(row),'lines':results,'reference':data.reference})
     @atomic
     async def supplier_return(self,po_id,data):
-        self.authorize(data.company_id,'inventory_adjust')
+        self.authorize(data.company_id,'inventory_adjust');self.costs(data.company_id)
         old,proof=await self.begin(data,'supplier_return',record_id=po_id)
         if old:return old
         row=await self.record(data.company_id,po_id,'po',True);await self.branch(data.company_id,row.branch_id);await self.check_register(row.branch_id)

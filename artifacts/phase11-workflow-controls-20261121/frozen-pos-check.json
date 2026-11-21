@@ -1,0 +1,30 @@
+{
+  "src/App.tsx": {
+    "exists": true,
+    "matches_manifest": true
+  },
+  "src/api/client.ts": {
+    "exists": true,
+    "matches_manifest": true
+  },
+  "src/device.ts": {
+    "exists": true,
+    "matches_manifest": true
+  },
+  "src/api/authLifecycle.ts": {
+    "exists": true,
+    "matches_manifest": true
+  },
+  "tests/authLifecycle.test.ts": {
+    "exists": true,
+    "matches_manifest": true
+  },
+  "scripts/run-auth-lifecycle-tests.mjs": {
+    "exists": true,
+    "matches_manifest": true
+  },
+  "scripts/reproduce-baseline-startup-races.mjs": {
+    "exists": true,
+    "matches_manifest": true
+  }
+}
