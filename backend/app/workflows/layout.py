@@ -13,6 +13,10 @@ def render_layout(template,snapshot):
         parts.append('</tbody></table>')
     def totals():
         for label,value in snapshot.get('totals',{}).items():parts.append('<p>'+text(label)+': '+text(value)+'</p>')
+        if snapshot.get('payment_rows'):
+            parts.append('<table><caption>Recorded payment allocations</caption><tbody>')
+            for label,value in snapshot['payment_rows']:parts.append('<tr><th scope="row">'+text(label)+'</th><td>'+text(value)+'</td></tr>')
+            parts.append('</tbody></table>')
     placed=set()
     for block in template['blocks']:
         kind=block['kind']

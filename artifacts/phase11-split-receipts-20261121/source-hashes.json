@@ -1,0 +1,17 @@
+{
+  "backend/app/printing/service.py": "6b090d177303bc4d65bbadae288c0614263272d2fd3f40bd15d1d3a618a58b0c",
+  "backend/app/sales/schema.py": "4bc1a6b3fcbc3d524cfd9a24ded5d97e33043d6f249711adbcf8304e491fb8e6",
+  "backend/app/sales/service.py": "db2a8a7d3aad817fe5f8bb7657f7d91aa0064b58dc0188419b28661c615b10e4",
+  "backend/app/sales/split_receipts.py": "b2b21a9c96621c9ec86244f0d982a0b05a0f22b512f233e94427fcc47c7152a3",
+  "backend/app/workflows/documents.py": "21e6e24a5e7ba553e1d57d31c18d9bb66401156b354e1f785a83da693e9b2de7",
+  "backend/app/workflows/layout.py": "cb06f539d18a99b05fefeb1cd3f3eb6131f26db00197d24f85f14babaa00a5cd",
+  "backend/app/workflows/outputs.py": "5454f285904542c34f4fb5ac4cec19b7520eed4bc02a2d55fe16f5f843fc6598",
+  "backend/scripts/phase11_policy_matrix.py": "8eab4ff617f1f6e8060959deadc1c21e7eee89ab5ac4ad769a0bcf5f0cce15be",
+  "backend/tests/test_phase11_split_receipts.py": "d85302f22d455212b00c249d375a5d1997d43816ab8f63cc7b2ea9de6bdf309e",
+  "pos-web/scripts/run-split-receipt-tests.mjs": "605aaed5c660f9a1c9a56b8805d1d6323cca34bf260a6f53e4aa5fabeb7fed50",
+  "pos-web/src/App.tsx": "6c3ed301492c7c34c8d7b1f12f742efdddf137d17e883949ff109f90559d09f1",
+  "pos-web/src/printing/receiptFormatter.ts": "f44accf5cd1fe28ff0d0e4347c508c28a03cbdf076edad5e5f3eab6b85948da0",
+  "pos-web/src/printing/splitReceipt.ts": "4f18ad34875e3e6e931798f0fd3f229c2603c87d540a38b6f19a8ead1c81125c",
+  "pos-web/src/printing/types.ts": "2acd6e39d499964f253c5c96c30b9109936c8bdf9bfde658c0db5e8f6f5c11c3",
+  "pos-web/tests/splitReceipts.test.ts": "a2644d796e526860fa319a52e60915b963435036f681c95e2dc302954f28dccf"
+}

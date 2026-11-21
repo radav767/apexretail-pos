@@ -1,0 +1,43 @@
+test_new_58_80_a4_documents_and_pdfs_keep_original_disclosures_and_saved_bytes (test_phase11_split_receipts.SplitReceiptTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.225 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.354 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.232 seconds
+FAIL
+test_original_api_and_queued_print_metadata_survive_collections_refunds_and_replay (test_phase11_split_receipts.SplitReceiptTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.240 seconds
+Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.442 seconds
+ok
+test_pdf_frozen_download_parser_replay_and_expired_history (test_phase11_document_outputs.DocumentOutputTests) ... Executing <Task pending name='Task-9' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.244 seconds
+ok
+test_qr_roundtrip_purpose_and_current_permission_resolution (test_phase11_document_outputs.DocumentOutputTests) ... Executing <Task pending name='Task-13' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.239 seconds
+ok
+test_unsupported_font_and_page_bound_fail_without_artifact_or_proof (test_phase11_document_outputs.DocumentOutputTests) ... Executing <Task pending name='Task-17' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.238 seconds
+ok
+test_render_snapshot_escape_reprint_versions_and_expired_historical_render (test_phase11_workflow_documents.WorkflowDocumentTests) ... Executing <Task pending name='Task-21' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.244 seconds
+Executing <Task pending name='Task-21' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> cb=[WorkerThread.stop()] created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.173 seconds
+ok
+test_template_and_document_are_immutable_and_old_version_cannot_fork (test_phase11_workflow_documents.WorkflowDocumentTests) ... Executing <Task pending name='Task-25' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.242 seconds
+ok
+test_tenant_template_branch_and_unsafe_fields_denied (test_phase11_workflow_documents.WorkflowDocumentTests) ... Executing <Task pending name='Task-29' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.238 seconds
+ok
+
+======================================================================
+FAIL: test_new_58_80_a4_documents_and_pdfs_keep_original_disclosures_and_saved_bytes (test_phase11_split_receipts.SplitReceiptTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/async_case.py", line 64, in _callTestMethod
+    self._callMaybeAsync(method)
+  File "/usr/lib/python3.10/unittest/async_case.py", line 87, in _callMaybeAsync
+    return self._asyncioTestLoop.run_until_complete(fut)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/usr/lib/python3.10/unittest/async_case.py", line 101, in _asyncioLoopRunner
+    ret = await awaitable
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_split_receipts.py", line 44, in test_new_58_80_a4_documents_and_pdfs_keep_original_disclosures_and_saved_bytes
+    template=await self.workflow('/templates',paper=paper,blocks=[{'kind':'title','text':'Synthetic split receipt'},{'kind':'items','text':''},{'kind':'totals','text':''}])
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_split_receipts.py", line 40, in workflow
+    response=await self.client.post('/api/inventory/workflows'+path,json={'company_id':str(self.c),'request_id':str(uuid4()),**body});self.assertEqual(response.status_code,200,response.text);return response.json()
+AssertionError: 422 != 200 : {"detail":"blocks.1.TemplateBlock.kind: Input should be 'title', 'text', 'terms', 'footer' or 'contact'","message":"blocks.1.TemplateBlock.kind: Input should be 'title', 'text', 'terms', 'footer' or 'contact'","field_errors":[{"field":"blocks.1.TemplateBlock.kind","message":"Input should be 'title', 'text', 'terms', 'footer' or 'contact'"},{"field":"blocks.1.TemplateBlock.text","message":"String should have at least 1 character"},{"field":"blocks.1.LogoBlock.kind","message":"Input should be 'logo'"},{"field":"blocks.1.LogoBlock.media_id","message":"Field required"},{"field":"blocks.1.LogoBlock.text","message":"Extra inputs are not permitted"},{"field":"blocks.1.SourceBlock.text","message":"Extra inputs are not permitted"},{"field":"blocks.2.TemplateBlock.kind","message":"Input should be 'title', 'text', 'terms', 'footer' or 'contact'"},{"field":"blocks.2.TemplateBlock.text","message":"String should have at least 1 character"},{"field":"blocks.2.LogoBlock.kind","message":"Input should be 'logo'"},{"field":"blocks.2.LogoBlock.media_id","message":"Field required"},{"field":"blocks.2.LogoBlock.text","message":"Extra inputs are not permitted"},{"field":"blocks.2.SourceBlock.text","message":"Extra inputs are not permitted"}]}
+
+----------------------------------------------------------------------
+Ran 8 tests in 6.151s
+
+FAILED (failures=1)

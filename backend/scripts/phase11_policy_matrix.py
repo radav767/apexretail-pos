@@ -198,6 +198,10 @@ def assess(row):
         sources += ';accounting/tender_flows.py;shifts/split_accounting.py'
         replay = 'Current identity/revocation/revenue and collection permissions plus own event tenant/branch/shift. Aware UTC half-open <=366day window; one statement independently aggregates original/refund revenue, applied payments, debt and original cash units with frozen FX residuals. Exact committed commands contribute once. Historical read survives expiry; no provider/posting authority or current-rate reconstruction.'
         gap = 'synthetic_dates_boundaries_fx_replay_and_shift_close_lock_orders_verified_receipt_ui_full_device_acceptance_pending'
+    if path.startswith('/api/sales/receipt/'):
+        sources += ';sales/split_receipts.py'
+        replay = 'Native historical receipt/reprint scope; split original/refund disclosure additionally requires current direct-service actor/epoch/register context. Immutable original allocation/currency/change rows; no current debt/rate substitution, financial posting or provider confirmation. Reprint metadata is separate from original amounts.'
+        gap = 'split_api_print_queue_58_80_and_a4_software_disclosure_verified_whole_shell_hardware_acceptance_pending'
     return domain, policy, description, replay, sources, observed + ':' + gap
 
 

@@ -31,6 +31,7 @@ def pdf_bytes(template,snapshot):
     texts=[str(snapshot[k]) for k in ('title','identity','notice','source_id')]
     texts.extend(str(v) for r in snapshot['rows'] for v in r.values() if v is not None)
     texts.extend(str(k)+str(v) for k,v in snapshot.get('totals',{}).items())
+    texts.extend(str(k)+str(v) for k,v in snapshot.get('payment_rows',[]))
     texts.extend(b.get('text','') for b in template['blocks'])
     if any(ord(c) not in mapping or unicodedata.bidirectional(c) in {'R','AL','AN','RLE','RLO','LRE','LRO','PDF','RLI','LRI','FSI','PDI'} or unicodedata.category(c).startswith('M') for t in texts for c in unicodedata.normalize('NFC',t) if c not in '\n\r\t'):raise HTTPException(422,'PDF font does not cover source text; retain original HTML and review font support')
     width={'58mm':58,'80mm':80,'A4':210}[template['paper']]*72/25.4;height=297*72/25.4
@@ -58,6 +59,7 @@ def pdf_bytes(template,snapshot):
         for r in snapshot['rows']:line(str(r['name'])+' | '+str(r.get('quantity','Unavailable'))+' | '+str(r.get('amount','Unavailable')))
     def totals():
         for k,v in snapshot.get('totals',{}).items():line(str(k)+': '+str(v))
+        for k,v in snapshot.get('payment_rows',[]):line(str(k)+': '+str(v))
     for key in ('title','identity','notice'):line(snapshot[key])
     placed=set()
     for block in template['blocks']:
@@ -78,7 +80,7 @@ def pdf_bytes(template,snapshot):
     if 'totals' not in placed:totals()
     line('Document source '+snapshot['source_id']);canvas.save();raw=output.getvalue()
     if len(raw)>MAX_BYTES:raise HTTPException(413,'PDF exceeds two million bytes')
-    return raw,'reportlab-'+reportlab.Version+';layout2;DejaVuSans-'+font_hash
+    return raw,'reportlab-'+reportlab.Version+(';layout3-split;' if snapshot.get('payment_rows') else ';layout2;')+'DejaVuSans-'+font_hash
 
 def qr_bytes(company,document):
     import qrcode

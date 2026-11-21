@@ -1,0 +1,40 @@
+{
+  "results": [
+    {
+      "kind": "original",
+      "width": "58mm",
+      "ordered_disclosure_matches_persisted_payload": true,
+      "no_scalar_paid": true,
+      "no_horizontal_clipping": true,
+      "software_print_pdf": true
+    },
+    {
+      "kind": "original",
+      "width": "80mm",
+      "ordered_disclosure_matches_persisted_payload": true,
+      "no_scalar_paid": true,
+      "no_horizontal_clipping": true,
+      "software_print_pdf": true
+    },
+    {
+      "kind": "refund",
+      "width": "58mm",
+      "ordered_disclosure_matches_persisted_payload": true,
+      "no_scalar_paid": true,
+      "no_horizontal_clipping": true,
+      "software_print_pdf": true
+    },
+    {
+      "kind": "refund",
+      "width": "80mm",
+      "ordered_disclosure_matches_persisted_payload": true,
+      "no_scalar_paid": true,
+      "no_horizontal_clipping": true,
+      "software_print_pdf": true
+    }
+  ],
+  "unexpected_requests": [],
+  "page_errors": [],
+  "hardware_acceptance": false,
+  "posting_enabled": false
+}

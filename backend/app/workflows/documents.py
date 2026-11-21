@@ -29,6 +29,7 @@ def render(template,snapshot):
     for row in snapshot['rows']:parts.append('<tr><td>'+text(row['name'])+'</td><td>'+text(row.get('quantity'))+'</td><td>'+text(row.get('amount'))+'</td></tr>')
     parts.append('</tbody></table>')
     for label,value in snapshot.get('totals',{}).items():parts.append('<p>'+text(label)+': '+text(value)+'</p>')
+    for label,value in snapshot.get('payment_rows',[]):parts.append('<p>'+text(label)+': '+text(value)+'</p>')
     parts.append('<p>Document source '+text(snapshot['source_id'])+'</p></body></html>')
     return ''.join(parts)
 
@@ -66,10 +67,15 @@ class DocumentService(WorkflowService):
             if not row:raise HTTPException(404,'Sale document source not found')
             await context(self.db,self.actor,data.company_id,row.branch_id)
             items=(await self.db.execute(select(SaleItem).where(SaleItem.sale_id==row.id).order_by(SaleItem.id))).scalars().all()
-            return row.branch_id,{'title':'Refund document' if row.original_sale_id else 'Sale document','identity':row.receipt_number,'source_id':str(row.id),
+            result={'title':'Refund document' if row.original_sale_id else 'Sale document','identity':row.receipt_number,'source_id':str(row.id),
                 'notice':'Snapshot of recorded sale. Rendering does not process payment, print or fiscalise.',
                 'rows':[{'name':i.product_name,'quantity':str(i.quantity),'amount':str(i.line_total)} for i in items],
                 'totals':{'Status':row.status,'Currency':row.base_currency_code,'Subtotal':str(row.subtotal_amount),'Tax':str(row.tax_amount),'Total':str(row.total_amount)}}
+            if row.payment_method in {'split','split_refund'}:
+                from app.sales.split_receipts import snapshot
+                result['split_accounting']=await snapshot(self.db,row)
+                result['payment_rows']=result['split_accounting']['rows']
+            return row.branch_id,result
         if data.source_kind=='quotation':
             row=(await self.db.execute(select(CommerceOrder).where(CommerceOrder.company_id==data.company_id,CommerceOrder.id==data.source_id,CommerceOrder.kind=='quotation'))).scalar_one_or_none()
             if not row:raise HTTPException(404,'Quotation source not found')
@@ -106,7 +112,7 @@ class DocumentService(WorkflowService):
         if len(snapshot['rows'])>5000:raise HTTPException(422,'Document exceeds 5000 rows; use a narrower source')
         rendered=render(template.payload,snapshot)
         if len(rendered.encode('utf8'))>2_000_000:raise HTTPException(413,'Document exceeds safe rendering size')
-        payload={'renderer_version':4 if template.payload.get('layout_version')==2 else 1,'template_snapshot':template.payload,'template_id':str(template.id),'template_digest':template.payload['template_digest'],'template_version':template.payload['document_version'],
+        payload={'renderer_version':5 if snapshot.get('payment_rows') else 4 if template.payload.get('layout_version')==2 else 1,'template_snapshot':template.payload,'template_id':str(template.id),'template_digest':template.payload['template_digest'],'template_version':template.payload['document_version'],
             'source_kind':data.source_kind,'source_id':str(data.source_id),'source_snapshot':snapshot,'source_digest':digest(canonical(snapshot)),
             'html':rendered,'content_digest':digest(rendered)}
         row=WorkflowRecord(id=uuid4(),company_id=data.company_id,branch_id=branch,kind='document',state='rendered',payload=payload)

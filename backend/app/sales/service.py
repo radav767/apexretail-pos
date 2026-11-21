@@ -1413,6 +1413,12 @@ class SalesService:
                 }
             )
 
+        split_snapshot=None
+        if sale.payment_method in {'split','split_refund'}:
+            from app.workflows.core import WorkflowService
+            await WorkflowService(self.repo.db,actor).current_context(company_id,sale.branch_id)
+            from .split_receipts import snapshot
+            split_snapshot=await snapshot(self.repo.db,sale)
         if mark_reprint:
             sale.reprint_count = int(sale.reprint_count or 0) + 1
             sale.last_reprinted_at = datetime.now(timezone.utc)
@@ -1421,7 +1427,6 @@ class SalesService:
                 if hasattr(self.repo.db, "commit"):
                     await self.repo.db.commit()
 
-        return {
-            **sale.__dict__,
-            "items": receipt_items,
-        }
+        result={**sale.__dict__,"items":receipt_items}
+        if split_snapshot is not None:result['split_accounting']=split_snapshot
+        return result

@@ -1,0 +1,240 @@
+{
+  "original": {
+    "title": "SALES RECEIPT",
+    "order_number": "APR-20261121-95B46064",
+    "created_at": "2026-11-21T22:15:09.699608+00:00",
+    "cashier_name": null,
+    "waiter": null,
+    "table": "",
+    "notes": "",
+    "business_name": "Synthetic Kitchen",
+    "shop_name": "Synthetic shop",
+    "branch_name": "Main",
+    "reprint": false,
+    "items": [
+      {
+        "product_id": "2436f926-ff03-4ce7-9315-589d2db4446f",
+        "name": "Synthetic meal",
+        "quantity": "1.000",
+        "selling_unit": "each",
+        "unit_price": "12.00",
+        "line_total": "12.00",
+        "line_discount_amount": null,
+        "notes": ""
+      }
+    ],
+    "id": "95b46064-1f83-44c9-9ac1-d6d8aa0b4382",
+    "company_id": "82546943-ae2c-41d6-b07c-063e9d4ae075",
+    "receipt_number": "APR-20261121-95B46064",
+    "subtotal_amount": "12.00",
+    "discount_amount": null,
+    "sale_discount_amount": null,
+    "tax_name": "VAT",
+    "tax_rate": "0.000",
+    "tax_amount": "0.00",
+    "tax_inclusive": false,
+    "total_amount": "12.00",
+    "amount_received": "10.00",
+    "change_due": "2.00",
+    "payment_method": "split",
+    "base_currency_code": "USD",
+    "payment_currency_code": null,
+    "payment_amount_original": null,
+    "tendered_amount_original": null,
+    "change_amount_original": null,
+    "exchange_rate_snapshot": null,
+    "status": "completed",
+    "receipt_footer": null,
+    "is_duplicate": false,
+    "split_accounting": {
+      "version": "split-receipt-v2",
+      "scope": "recorded accounting only",
+      "provider_confirmed": false,
+      "original_sale_id": null,
+      "base_code": "USD",
+      "legs": [
+        {
+          "id": "0e81d361-72fa-43e4-899b-4ba7845cf128",
+          "kind": "cash_payment",
+          "method": "cash",
+          "currency_code": "USD",
+          "currency_places": 2,
+          "applied_base": "8.00",
+          "applied_original": "8.0000",
+          "tendered_original": "10.0000",
+          "change_original": "2.0000",
+          "rate": "1.0000000000",
+          "currency_config_version": 1
+        },
+        {
+          "id": "d8b8c2b5-d289-4b16-8618-e8808a874964",
+          "kind": "unpaid_credit",
+          "method": "credit",
+          "currency_code": "USD",
+          "currency_places": 2,
+          "applied_base": "4.00",
+          "applied_original": "4.0000",
+          "tendered_original": null,
+          "change_original": null,
+          "rate": "1.0000000000",
+          "currency_config_version": 1
+        }
+      ],
+      "rows": [
+        [
+          "Payment",
+          "SPLIT"
+        ],
+        [
+          "Scope",
+          "Recorded accounting only"
+        ],
+        [
+          "Cash payment",
+          "8.00 USD"
+        ],
+        [
+          "Applied base",
+          "8.00 USD"
+        ],
+        [
+          "Tendered",
+          "10.00 USD"
+        ],
+        [
+          "Change",
+          "2.00 USD"
+        ],
+        [
+          "Original unpaid credit",
+          "4.00 USD"
+        ],
+        [
+          "Applied base",
+          "4.00 USD"
+        ]
+      ]
+    },
+    "printer": {
+      "transport": "system",
+      "address": "",
+      "paper_width": "80mm",
+      "name": "Receipt"
+    }
+  },
+  "refund": {
+    "title": "SALES RECEIPT",
+    "order_number": "RFD-20261121-93EA44FE",
+    "created_at": "2026-11-21T22:15:10.230417+00:00",
+    "cashier_name": null,
+    "waiter": null,
+    "table": "",
+    "notes": "",
+    "business_name": "Synthetic Kitchen",
+    "shop_name": "Synthetic shop",
+    "branch_name": "Main",
+    "reprint": false,
+    "items": [
+      {
+        "product_id": "2436f926-ff03-4ce7-9315-589d2db4446f",
+        "name": "Synthetic meal",
+        "quantity": "0.500",
+        "selling_unit": "each",
+        "unit_price": "12.00",
+        "line_total": "-6.00",
+        "line_discount_amount": null,
+        "notes": ""
+      }
+    ],
+    "id": "93ea44fe-be4c-4084-8e0d-78e52d5560ff",
+    "company_id": "82546943-ae2c-41d6-b07c-063e9d4ae075",
+    "receipt_number": "RFD-20261121-93EA44FE",
+    "subtotal_amount": "-6.00",
+    "discount_amount": null,
+    "sale_discount_amount": null,
+    "tax_name": "VAT",
+    "tax_rate": "0.000",
+    "tax_amount": "0.00",
+    "tax_inclusive": false,
+    "total_amount": "-6.00",
+    "amount_received": "0.00",
+    "change_due": "0.00",
+    "payment_method": "split_refund",
+    "base_currency_code": "USD",
+    "payment_currency_code": null,
+    "payment_amount_original": null,
+    "tendered_amount_original": null,
+    "change_amount_original": null,
+    "exchange_rate_snapshot": null,
+    "status": "refunded",
+    "receipt_footer": null,
+    "is_duplicate": false,
+    "split_accounting": {
+      "version": "split-receipt-v2",
+      "scope": "recorded accounting only",
+      "provider_confirmed": false,
+      "original_sale_id": "95b46064-1f83-44c9-9ac1-d6d8aa0b4382",
+      "base_code": "USD",
+      "legs": [
+        {
+          "id": "0e81d361-72fa-43e4-899b-4ba7845cf128",
+          "kind": "cash_refund",
+          "method": "cash",
+          "currency_code": "USD",
+          "currency_places": 2,
+          "applied_base": "3.00",
+          "applied_original": "3.0000",
+          "tendered_original": null,
+          "change_original": null,
+          "rate": "1.0000000000",
+          "currency_config_version": 1
+        },
+        {
+          "id": "d8b8c2b5-d289-4b16-8618-e8808a874964",
+          "kind": "debt_reduction",
+          "method": "credit",
+          "currency_code": "USD",
+          "currency_places": 2,
+          "applied_base": "3.00",
+          "applied_original": "3.0000",
+          "tendered_original": null,
+          "change_original": null,
+          "rate": "1.0000000000",
+          "currency_config_version": 1
+        }
+      ],
+      "rows": [
+        [
+          "Payment",
+          "SPLIT REFUND"
+        ],
+        [
+          "Scope",
+          "Recorded accounting only"
+        ],
+        [
+          "Cash refund",
+          "3.00 USD"
+        ],
+        [
+          "Base reversal",
+          "3.00 USD"
+        ],
+        [
+          "Debt reduction",
+          "3.00 USD"
+        ],
+        [
+          "Base reversal",
+          "3.00 USD"
+        ]
+      ]
+    },
+    "printer": {
+      "transport": "system",
+      "address": "",
+      "paper_width": "80mm",
+      "name": "Receipt"
+    }
+  }
+}

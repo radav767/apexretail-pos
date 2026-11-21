@@ -130,6 +130,7 @@ class SaleItemOut(BaseModel):
 
 class SaleReceiptOut(SaleOut):
     items: list[SaleItemOut]
+    split_accounting: dict | None = None
 
 
 class RefundItemCreate(BaseModel):

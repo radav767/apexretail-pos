@@ -130,6 +130,9 @@ class PrintingService:
         existing = (await self.db.execute(select(PrintJob).where(PrintJob.station_id == station.id, PrintJob.request_key == key))).scalar_one_or_none()
         # Original has one identity per sale/station, independent of network retries.
         if existing:
+            if existing.payload.get('payment_method') in {'split','split_refund'}:
+                from app.workflows.core import WorkflowService
+                await WorkflowService(self.db,self.actor).current_context(self.actor.company_id,station.branch_id)
             if self.actor.employee and not has_permission(self.actor.permissions or {}, "printers_manage") and existing.requested_employee_id != self.actor.employee.id:
                 raise HTTPException(403, "Print job belongs to another employee")
             return self.job_out(existing)
@@ -140,6 +143,9 @@ class PrintingService:
             sale = await self.db.get(Sale, data.sale_id) if data.sale_id else None
             if not sale or sale.company_id != self.actor.company_id:
                 raise HTTPException(404, "Sale not found")
+            if sale.payment_method in {'split','split_refund'}:
+                from app.workflows.core import WorkflowService
+                await WorkflowService(self.db,self.actor).current_context(sale.company_id,sale.branch_id)
             enforce_actor_branch(self.actor, sale.branch_id)
             if sale.branch_id != station.branch_id or sale.shop_id != station.shop_id or sale.device_id != station.device_id:
                 raise HTTPException(403, "Sale belongs to another register")
@@ -186,6 +192,9 @@ class PrintingService:
                         "subtotal_amount", "discount_amount", "sale_discount_amount", "tax_name", "tax_rate", "tax_amount", "tax_inclusive", "total_amount", "amount_received", "change_due", "payment_method", "base_currency_code", "payment_currency_code", "payment_amount_original", "tendered_amount_original", "change_amount_original", "exchange_rate_snapshot", "status")},
                     "receipt_footer": sale.receipt_footer_snapshot,
                     "is_duplicate": data.reprint})
+                if sale.payment_method in {'split','split_refund'}:
+                    from app.sales.split_receipts import snapshot
+                    payload['split_accounting']=await snapshot(self.db,sale)
         # Printer settings are snapshotted, so editing a station cannot silently
         # redirect previously queued work to another piece of hardware.
         payload["printer"] = {k: getattr(station, k) for k in ("transport", "address", "paper_width", "name")}

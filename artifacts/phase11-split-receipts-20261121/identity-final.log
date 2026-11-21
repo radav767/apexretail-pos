@@ -1,0 +1,15 @@
+test_direct_receipt_and_cached_split_print_replay_require_current_identity (test_phase11_split_receipts.SplitReceiptTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.199 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.274 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.156 seconds
+ok
+test_new_58_80_a4_documents_and_pdfs_keep_original_disclosures_and_saved_bytes (test_phase11_split_receipts.SplitReceiptTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.244 seconds
+Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> cb=[WorkerThread.stop()] created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.198 seconds
+ok
+test_original_api_and_queued_print_metadata_survive_collections_refunds_and_replay (test_phase11_split_receipts.SplitReceiptTests) ... Executing <Task pending name='Task-9' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.241 seconds
+Executing <Task pending name='Task-9' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.312 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.794s
+
+OK

@@ -1,3 +1,4 @@
+import type { SplitAccounting } from "./splitReceipt.ts";
 export type PrinterConnectionType =
   | "bluetooth"
   | "usb"
@@ -88,6 +89,7 @@ export type ReceiptSnapshot = {
   amount_received: string;
   change_due: string;
   payment_method: string;
+  split_accounting?: SplitAccounting | null;
   base_currency_code?: string | null;
   payment_currency_code?: string | null;
   exchange_rate_id?: string | null;

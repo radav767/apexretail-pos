@@ -1,0 +1,29 @@
+test_new_58_80_a4_documents_and_pdfs_keep_original_disclosures_and_saved_bytes (test_phase11_split_receipts.SplitReceiptTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.170 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.245 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.143 seconds
+FAIL
+test_original_api_and_queued_print_metadata_survive_collections_refunds_and_replay (test_phase11_split_receipts.SplitReceiptTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.250 seconds
+Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.153 seconds
+Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.310 seconds
+ok
+
+======================================================================
+FAIL: test_new_58_80_a4_documents_and_pdfs_keep_original_disclosures_and_saved_bytes (test_phase11_split_receipts.SplitReceiptTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/unittest/async_case.py", line 64, in _callTestMethod
+    self._callMaybeAsync(method)
+  File "/usr/lib/python3.10/unittest/async_case.py", line 87, in _callMaybeAsync
+    return self._asyncioTestLoop.run_until_complete(fut)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/usr/lib/python3.10/unittest/async_case.py", line 101, in _asyncioLoopRunner
+    ret = await awaitable
+  File "/tmp/apexpos-phase11/backend/tests/test_phase11_split_receipts.py", line 49, in test_new_58_80_a4_documents_and_pdfs_keep_original_disclosures_and_saved_bytes
+    for label in ('Cash payment','Original unpaid credit','Tendered','Change','Recorded accounting only'):self.assertIn(label,text)
+AssertionError: 'Recorded accounting only' not found in 'Sale document APR-20261121-BD005DED Snapshot of recorded sale. Render ing does not process payment, pri nt or fiscalise. Synthetic split receipt Item / quantity / amount or review Synthetic meal | 1.000 | 12.00 Tax: 0.00 Total: 12.00 Status: completed 2. Scope: Recorded accounting onl y Currency: USD Subtotal: 12.00 6. Change: 2.00 USD 1. Payment: SPLIT 5. Tendered: 10.00 USD 3. Cash payment: 8.00 USD 4. Applied base: 8.00 USD 8. Applied base: 4.00 USD 7. Original unpaid credit: 4.00 USD Document source bd005ded-dd61- 48e6-ad9a-8d7e30b57d06 '
+
+----------------------------------------------------------------------
+Ran 2 tests in 2.318s
+
+FAILED (failures=1)

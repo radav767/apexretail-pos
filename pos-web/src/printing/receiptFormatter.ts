@@ -3,6 +3,7 @@ import type {
   ReceiptLineItem,
   ReceiptSnapshot,
 } from "./types.ts";
+import { splitPaymentRows } from "./splitReceipt.ts";
 import {
   formatCents,
   multiplyPriceByQuantity,
@@ -18,6 +19,10 @@ function snapshotAmount(value: string | number | null | undefined) {
 }
 
 function snapshotPaymentLines(snapshot: ReceiptSnapshot, width: number) {
+  if (["split", "split_refund"].includes(snapshot.payment_method)) return [
+    alignLine(`TOTAL (${snapshot.base_currency_code || "BASE"})`, money(snapshot.total_amount), width),
+    ...splitPaymentRows(snapshot.split_accounting, snapshot.total_amount, snapshot.payment_method).flatMap(([label,value]) => label.length+value.length+1<=width ? [alignLine(label,value,width)] : [label,value.padStart(width)]),
+  ];
   const baseCode = snapshot.base_currency_code || "";
   const paymentCode = snapshot.payment_currency_code || baseCode;
   const foreign = Boolean(paymentCode && baseCode && paymentCode !== baseCode);
@@ -414,6 +419,10 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
             text-align: center;
             font-size: 12px;
           }
+          .split-payment { margin: 0; }
+          .split-payment > div { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px; padding: 4px 0; }
+          .split-payment dt, .split-payment dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+          .split-payment dd { text-align: right; }
           @media print {
             body {
               padding: 0;
@@ -482,7 +491,7 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
               <span>Total${snapshot.base_currency_code ? ` (${escapeHtml(snapshot.base_currency_code)})` : ""}</span>
               <span>${money(snapshot.total_amount)}</span>
             </div>
-            <div class="summary-row">
+            ${["split", "split_refund"].includes(snapshot.payment_method) ? `<dl class="split-payment" aria-label="Recorded split allocations">${splitPaymentRows(snapshot.split_accounting, snapshot.total_amount, snapshot.payment_method).map(([label,value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>` : `<div class="summary-row">
               <span>Payment</span>
               <span>${escapeHtml(snapshot.payment_method.toUpperCase())}</span>
             </div>
@@ -497,7 +506,7 @@ export function buildReceiptHtml(snapshot: ReceiptSnapshot, config: PrinterConfi
               <span>Change</span>
               <span>${escapeHtml(snapshotAmount(snapshot.change_amount_original ?? snapshot.change_due))}${snapshot.payment_currency_code ? ` ${escapeHtml(snapshot.payment_currency_code)}` : ""}</span>
             </div>
-            ${snapshot.payment_method.toLowerCase() === "credit" ? `<div class="summary-row"><span>Credit sale outstanding</span><span>${money(snapshot.credit_outstanding_balance || snapshot.total_amount)}</span></div>` : ""}
+            ${snapshot.payment_method.toLowerCase() === "credit" ? `<div class="summary-row"><span>Credit sale outstanding</span><span>${money(snapshot.credit_outstanding_balance || snapshot.total_amount)}</span></div>` : ""}`}
           </div>
           ${snapshot.receipt_footer ? `<p class="footer">${escapeHtml(snapshot.receipt_footer)}</p>` : ""}
         </div>

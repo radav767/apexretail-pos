@@ -140,6 +140,7 @@ type CartItem = Product & {
 };
 
 type Receipt = {
+  split_accounting?: ReceiptSnapshot["split_accounting"];
   id: string;
   receipt_number: string;
   shift_id?: string | null;
@@ -1138,6 +1139,7 @@ const [loggedIn, setLoggedIn] = useState(
       payment_amount_original: sale.payment_amount_original || null,
       tendered_amount_original: sale.tendered_amount_original || null,
       change_amount_original: sale.change_amount_original || null,
+      ...(sale.split_accounting ? { split_accounting: sale.split_accounting } : {}),
       cashier_name: cashierName || cashier?.name || null,
       customer_name: sale.customer_name_snapshot || null,
       customer_code: sale.customer_code_snapshot || null,
