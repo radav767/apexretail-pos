@@ -1,0 +1,13 @@
+{
+  "backend/app/core/config.py": "f4456062fedb75196412747d6dbd4d3a090f8bcdd895d53d05b049fcbd28e6d9",
+  "backend/app/main.py": "cd73aa3be0d524fb0d4a2e605580d88f0ec3dca94a6a2d91c5295c566f665604",
+  "backend/app/workflows/core.py": "9fcb8de1ba90f8ede940592d02585ed654d8909d78228b1563d1901582a00b0c",
+  "backend/app/workflows/delivery.py": "8299f4d504c6f3fef8879522400a6add59e0015eb5a83527452bc760ffe8a1f2",
+  "backend/app/workflows/outputs.py": "5ebc66c7cf58ae16cfe9dfc007f4be3f3a1643c28c900705484de2a85039c242",
+  "backend/app/workflows/recovery.py": "73b0f3ed5354d8d28ef35ab96faceda2aaa9aaa2fffa4daa53c7cf6b9b302618",
+  "backend/app/workflows/schema.py": "ce317cb9b54c4f125988acf4f294b43753745f476db3538ce184b786e87738ba",
+  "backend/migrations/versions/p11s_document_sink_evidence.py": "db10ff8c3f977fe0e233fe91d9b87988df0994f96a4ddc0a392c0fe2efe4e989",
+  "backend/scripts/phase11_policy_matrix.py": "07b40a314b65cdee99c82db6b0284dc8e291b0f24d5e677d11443acfc0a288f1",
+  "backend/tests/test_phase11_document_delivery.py": "97259eaaf4c54fefd9a0e0b7ec41f688bc25e3791ac700704f86ad3f35dca58e",
+  "backoffice/src/pages/StockWorkflowPanel.tsx": "71ccc8fdaa928d30c05dc36d61f849980b4da370a06bdf1d9729a75755297dcf"
+}

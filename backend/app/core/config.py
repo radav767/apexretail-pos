@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     backoffice_origin: str = 'https://backoffice.apexpos.cloud'
     business_email_mode: Literal['disabled', 'sink'] = 'disabled'
     business_email_key: SecretStr | None = None
+    document_delivery_mode: Literal['disabled','sink'] = 'disabled'
+    document_delivery_key: SecretStr | None = None
 
     @model_validator(mode='after')
     def validate_jwt_configuration(self):
@@ -68,6 +70,11 @@ class Settings(BaseSettings):
             from cryptography.fernet import Fernet
             try: Fernet(self.business_email_key.get_secret_value().encode())
             except (ValueError, TypeError): raise ValueError('BUSINESS_EMAIL_KEY must be a valid Fernet key') from None
+        if self.document_delivery_mode=='sink':
+            if self.app_env!='test' or not self.document_delivery_key:raise ValueError('Document sink requires APP_ENV=test and an explicit test encryption key')
+            from cryptography.fernet import Fernet
+            try:Fernet(self.document_delivery_key.get_secret_value().encode())
+            except (ValueError,TypeError):raise ValueError('DOCUMENT_DELIVERY_KEY must be a valid Fernet key') from None
         return self
 
     class Config:

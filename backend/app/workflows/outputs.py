@@ -106,7 +106,7 @@ class OutputService(WorkflowService):
         else:raw,engine=qr_bytes(data.company_id,document);mime='image/png'
         if len(raw)>MAX_BYTES:raise HTTPException(413,'Output exceeds safe byte bound')
         row=WorkflowRecord(id=uuid4(),company_id=data.company_id,branch_id=document.branch_id,kind='document_output',state='generated',payload={'document_id':str(document.id),'source_kind':document.payload['source_kind'],'source_digest':document.payload['content_digest'],'format':data.format,'content_type':mime,'engine':engine,'data_base64':base64.b64encode(raw).decode('ascii'),'content_digest':hashlib.sha256(raw).hexdigest(),'size_bytes':len(raw)})
-        self.db.add(row);return await self.finish(data,'document_output',row,proof,self.metadata(row))
+        self.db.add(row);await self.db.flush();return await self.finish(data,'document_output',row,proof,self.metadata(row))
     async def download(self,company,output_id):
         row=await self.record(company,output_id,'document_output');self.authorize_record(row)
         raw=base64.b64decode(row.payload['data_base64'],validate=True)

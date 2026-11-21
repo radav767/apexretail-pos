@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel,ConfigDict,Field
+from pydantic import BaseModel,ConfigDict,Field,EmailStr
 
 class Strict(BaseModel):model_config=ConfigDict(extra='forbid')
 class Command(Strict):
@@ -96,3 +96,13 @@ class LookupInput(Strict):
     document_id:UUID
     purpose:Literal['authenticated_document_lookup']
     content_digest:str=Field(pattern=r'^[0-9a-f]{64}$')
+class ConsentInput(Command):
+    branch_id:UUID|None=None
+    recipient:EmailStr
+    purpose:Literal['document_copy']
+    confirmed:bool
+class DeliveryInput(Command):
+    output_id:UUID
+    consent_id:UUID
+class DeliveryAction(Command):
+    reason:str=Field(min_length=1,max_length=500)

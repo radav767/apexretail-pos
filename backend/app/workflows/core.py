@@ -27,6 +27,12 @@ class WorkflowService:
             from .documents import PERMISSIONS
             self.authorize(row.company_id,PERMISSIONS[row.payload['source_kind']])
             if row.payload['source_kind'] in {'purchase_order','supplier_receipt','supplier_return'}:self.costs(row.company_id)
+        elif row.kind.startswith('delivery_'):
+            self.authorize(row.company_id,'business_settings_manage',owner=True)
+            if row.kind=='delivery_outbox':
+                from .documents import PERMISSIONS
+                self.authorize(row.company_id,PERMISSIONS[row.payload['source_kind']])
+                if row.payload['source_kind'] in {'purchase_order','supplier_receipt','supplier_return'}:self.costs(row.company_id)
         else:self.authorize(row.company_id,'business_settings_manage')
     async def record(self,company,record_id,kind=None,lock=False):
         self.authorize(company)

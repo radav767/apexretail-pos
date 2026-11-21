@@ -139,9 +139,9 @@ def assess(row):
     if path.endswith('/employees/session/logout'):
         gap = 'legacy_user_employee_jwt_opaque_revocation_and_pin_races_verified_device_acceptance_pending'
     if path.startswith('/api/inventory/workflows'):
-        sources = 'workflows/core.py;workflows/procurement.py;workflows/counts.py;workflows/documents.py;workflows/recovery.py;inventory/service.py'
+        sources = 'workflows/core.py;workflows/procurement.py;workflows/counts.py;workflows/documents.py;workflows/media.py;workflows/outputs.py;workflows/delivery.py;workflows/recovery.py;inventory/service.py'
         observed = 'workflow_service_command_policy'
-        gap = 'synthetic_api_service_races_rollback_browser_subset_verified_hardware_finance_media_acceptance_pending'
+        gap = 'real_panel_api_persistence_races_rollback_media_pdf_qr_sink_subset_verified_full_shell_device_provider_finance_acceptance_pending'
         if read:
             policy = 'scoped_workflow_evidence_read'
             replay = 'Current tenant/branch/role and source document permissions; purchasing costs require existing cost visibility. Bounded records/history; no stock/payment effect.'
@@ -151,6 +151,15 @@ def assess(row):
         elif path.endswith('/documents'):
             policy = 'immutable_historical_document_render'
             replay = 'Full UUID/input/actor/register proof; immutable escaped source/template snapshot permitted after expiry with current source permissions. No new sale/payment/stock/print/fiscal/provider action.'
+        elif '/outputs' in path:
+            policy = 'immutable_historical_output_or_authenticated_lookup'
+            replay = 'Current source/tenant/branch/cost authority. Identified PDF/authenticated-lookup QR coalesce by original document/format; immutable stored bytes and full actor/register command proof. Lookup requires authentication and exact digest. No public/payment/fiscal QR or stock/payment/provider effect.'
+        elif '/delivery/' in path:
+            policy = 'consent_bound_test_only_sink'
+            replay = 'Current owner/settings/source authority; immutable request proof; original queue actor/session/register and granted consent rechecked under locks before new licensed capture. Consent revoke/cancel and captured recovery survive expiry. Explicit APP_ENV=test/encryption key/synthetic recipients only, encrypted sink captured status never provider delivery. Distinct enqueue/capture IDs coalesce; no transport exists.'
+        elif path.endswith('/media'):
+            policy = 'licensed_private_normalized_media'
+            replay = 'Current owner/settings/tenant/branch and license before bounded decode/metadata-free raster archive. Full input/actor/register UUID replay; immutable assets and serialized tenant quota, no public URL/file access or official branding.'
         else:
             policy = 'workflow_exact_command_or_licensed_write'
             replay = 'Current actor epoch/tenant/branch/role/register before full immutable UUID/input replay; current license/modules for new work. Draft/approval has no movement. Receipt/return/count stock and parent/child evidence commit once atomically; cutoff changes require explicit recount.'

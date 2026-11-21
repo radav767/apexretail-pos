@@ -1,0 +1,20 @@
+{
+  "synthetic_only": true,
+  "stock": "208.000",
+  "record_counts": {
+    "delivery_consent": 4,
+    "delivery_capture": 3,
+    "supplier": 1,
+    "count": 1,
+    "document_media": 1,
+    "po": 1,
+    "template": 1,
+    "document": 1,
+    "document_output": 2,
+    "delivery_outbox": 4
+  },
+  "captures_unique_per_outbox_and_attempt": true,
+  "encrypted_recipient_and_capture_at_rest": true,
+  "captured_bytes_match_immutable_output": true,
+  "provider_calls": 0
+}
