@@ -106,3 +106,7 @@ class DeliveryInput(Command):
     consent_id:UUID
 class DeliveryAction(Command):
     reason:str=Field(min_length=1,max_length=500)
+class MediaRetentionInput(Command):
+    media_id:UUID
+    archived:bool
+    reason:str=Field(min_length=1,max_length=500)

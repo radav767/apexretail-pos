@@ -5,6 +5,7 @@ from .core import WorkflowService,atomic
 from . import schema
 from app.sales.commands import fingerprint
 INPUTS={
+ "media_retention":schema.MediaRetentionInput,
  "media_upload":schema.MediaInput,
  "document_output":schema.OutputInput,
  "delivery_consent":schema.ConsentInput,"delivery_revoke":schema.VersionCommand,"delivery_enqueue":schema.DeliveryInput,"delivery_capture":schema.DeliveryAction,"delivery_cancel":schema.DeliveryAction,
@@ -33,7 +34,7 @@ class RecoveryService(WorkflowService):
                 elif committed.kind=='po_receive':self.authorize(data.company_id,'inventory_receive');self.costs(data.company_id)
                 elif committed.kind=='supplier_return':self.authorize(data.company_id,'inventory_adjust');self.costs(data.company_id)
                 elif committed.kind.startswith('count_'):self.authorize(data.company_id,'inventory_count',owner=committed.kind in {'count_approve','count_reject'})
-                elif committed.kind in {'template_publish','media_upload'}:self.authorize(data.company_id,'business_settings_manage',owner=True)
+                elif committed.kind in {'template_publish','media_upload','media_retention'}:self.authorize(data.company_id,'business_settings_manage',owner=True)
                 elif committed.kind=='document_render':
                     from .documents import PERMISSIONS
                     self.authorize(data.company_id,PERMISSIONS[original.source_kind])

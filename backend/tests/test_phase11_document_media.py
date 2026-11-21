@@ -26,7 +26,7 @@ class DocumentMediaTests(unittest.IsolatedAsyncioTestCase):
         with Image.open(io.BytesIO(raw)) as decoded:self.assertNotIn('private',decoded.info);self.assertEqual(decoded.size,(40,20))
         template=await self.post('/templates',{'branch_id':str(self.b),'paper':'58mm','blocks':[{'kind':'logo','media_id':asset['id'],'width_mm':30,'alignment':'right'},{'kind':'contact','text':'<script>private</script>'},{'kind':'items'},{'kind':'tax'},{'kind':'totals'}]})
         doc=await self.post('/documents',{'template_id':template['id'],'source_kind':'sale','source_id':str(self.sale.id)})
-        body=doc['payload']['html'];self.assertIn('data:image/png;base64,',body);self.assertIn('&lt;script&gt;',body);self.assertNotIn('<script>',body);self.assertEqual(doc['payload']['renderer_version'],3)
+        body=doc['payload']['html'];self.assertIn('data:image/png;base64,',body);self.assertIn('&lt;script&gt;',body);self.assertNotIn('<script>',body);self.assertEqual(doc['payload']['renderer_version'],4)
         self.assertEqual(template['payload']['media'][asset['id']]['sha256'],asset['payload']['sha256'])
         with self.assertRaises(DBAPIError):
             async with self.db.begin_nested():await self.db.execute(text("UPDATE workflow_records SET payload='{}'::jsonb,version=version+1 WHERE id=:id"),{'id':UUID(asset['id'])})
@@ -51,7 +51,7 @@ class DocumentMediaTests(unittest.IsolatedAsyncioTestCase):
         await self.post('/templates',{'paper':'58mm','blocks':[{'kind':'logo','media_id':asset['id'],'width_mm':80}]},422)
         await self.post('/templates',{'blocks':[{'kind':'logo','media_id':asset['id']},{'kind':'logo','media_id':asset['id']}]},422)
         for i in range(62):self.db.add(WorkflowRecord(company_id=self.c,kind='document_media',state='validated',payload=asset['payload']))
-        await self.db.commit();await self.post('/media',{'content_type':'image/png','data_base64':base64.b64encode(png()).decode()},409)
+        await self.db.commit();await self.post('/media',{'content_type':'image/png','data_base64':base64.b64encode(png((41,20))).decode()},409)
     async def test_legacy_template_fingerprint_keeps_original_shape(self):
         from app.sales.commands import normalized
         import hashlib,json

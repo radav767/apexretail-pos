@@ -106,7 +106,7 @@ class DocumentService(WorkflowService):
         if len(snapshot['rows'])>5000:raise HTTPException(422,'Document exceeds 5000 rows; use a narrower source')
         rendered=render(template.payload,snapshot)
         if len(rendered.encode('utf8'))>2_000_000:raise HTTPException(413,'Document exceeds safe rendering size')
-        payload={'renderer_version':3 if template.payload.get('layout_version')==2 else 1,'template_snapshot':template.payload,'template_id':str(template.id),'template_digest':template.payload['template_digest'],'template_version':template.payload['document_version'],
+        payload={'renderer_version':4 if template.payload.get('layout_version')==2 else 1,'template_snapshot':template.payload,'template_id':str(template.id),'template_digest':template.payload['template_digest'],'template_version':template.payload['document_version'],
             'source_kind':data.source_kind,'source_id':str(data.source_id),'source_snapshot':snapshot,'source_digest':digest(canonical(snapshot)),
             'html':rendered,'content_digest':digest(rendered)}
         row=WorkflowRecord(id=uuid4(),company_id=data.company_id,branch_id=branch,kind='document',state='rendered',payload=payload)

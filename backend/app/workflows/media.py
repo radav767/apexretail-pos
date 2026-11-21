@@ -47,6 +47,12 @@ class MediaService(WorkflowService):
         except (ValueError,binascii.Error):raise HTTPException(422,'Invalid logo base64') from None
         png,width,height=normalize(raw,data.content_type)
         await self.db.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))'),{'key':'document-media-quota:'+str(data.company_id)})
+        from .retention import ensure_active
+        sha=hashlib.sha256(png).hexdigest()
+        duplicate=(await self.db.execute(select(WorkflowRecord).where(WorkflowRecord.company_id==data.company_id,WorkflowRecord.branch_id==data.branch_id,WorkflowRecord.kind=='document_media',WorkflowRecord.payload['sha256'].as_string()==sha).order_by(WorkflowRecord.created_at,WorkflowRecord.id).limit(1))).scalar_one_or_none()
+        if duplicate:
+            await ensure_active(self.db,data.company_id,duplicate.id)
+            return await self.finish(data,'media_upload',duplicate,proof)
         count=(await self.db.execute(select(func.count()).select_from(WorkflowRecord).where(WorkflowRecord.company_id==data.company_id,WorkflowRecord.kind=='document_media'))).scalar_one()
         if count>=64:raise HTTPException(409,'Tenant logo archive has reached its 64-asset bound; reviewed retention work is required')
         row=WorkflowRecord(id=uuid4(),company_id=data.company_id,branch_id=data.branch_id,kind='document_media',state='validated',payload={'content_type':'image/png','data_base64':base64.b64encode(png).decode('ascii'),'sha256':hashlib.sha256(png).hexdigest(),'width':width,'height':height,'size_bytes':len(png),'validation_version':1})
@@ -54,6 +60,9 @@ class MediaService(WorkflowService):
     async def asset(self,company,media_id,branch):
         self.authorize(company,'business_settings_manage')
         row=await self.record(company,media_id,'document_media')
+        from .retention import quota_lock,ensure_active
+        await quota_lock(self.db,company)
+        await ensure_active(self.db,company,media_id)
         if row.branch_id and row.branch_id!=branch:raise HTTPException(403,'Logo belongs to another branch')
         raw=base64.b64decode(row.payload['data_base64'],validate=True)
         if hashlib.sha256(raw).hexdigest()!=row.payload['sha256']:raise HTTPException(409,'Logo digest requires review')

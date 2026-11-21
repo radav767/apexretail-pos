@@ -1,5 +1,5 @@
 """Immutable PDF and non-credential authenticated lookup QR from frozen evidence."""
-import base64,hashlib,hmac,io,json
+import base64,hashlib,hmac,io,json,unicodedata
 from pathlib import Path
 from uuid import uuid4,UUID
 from fastapi import HTTPException,APIRouter,Depends,Response
@@ -19,8 +19,11 @@ def pdf_bytes(template,snapshot):
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.lib.utils import ImageReader
-    font='Phase11Vera'
-    if font not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont(font,str(Path(reportlab.__file__).parent/'fonts/Vera.ttf')))
+    font='Phase11DejaVuV2'
+    font_path=Path(__file__).parent/'fonts/DejaVuSans.ttf'
+    font_hash=hashlib.sha256(font_path.read_bytes()).hexdigest()
+    if font_hash!='690243adfefe0ce154b547db6205794bd30ac4277275179517a90994f4980648':raise HTTPException(503,'Pinned document font differs; preserve existing output and review')
+    if font not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont(font,str(font_path)))
     mapping=pdfmetrics.getFont(font).face.charToGlyph
     # Unicode outside the bundled font is explicit review, never replacement.
     value=canonical(snapshot)+canonical(template)
@@ -29,7 +32,7 @@ def pdf_bytes(template,snapshot):
     texts.extend(str(v) for r in snapshot['rows'] for v in r.values() if v is not None)
     texts.extend(str(k)+str(v) for k,v in snapshot.get('totals',{}).items())
     texts.extend(b.get('text','') for b in template['blocks'])
-    if any(ord(c) not in mapping for t in texts for c in t if c not in '\n\r\t'):raise HTTPException(422,'PDF font does not cover source text; retain original HTML and review font support')
+    if any(ord(c) not in mapping or unicodedata.bidirectional(c) in {'R','AL','AN','RLE','RLO','LRE','LRO','PDF','RLI','LRI','FSI','PDI'} or unicodedata.category(c).startswith('M') for t in texts for c in unicodedata.normalize('NFC',t) if c not in '\n\r\t'):raise HTTPException(422,'PDF font does not cover source text; retain original HTML and review font support')
     width={'58mm':58,'80mm':80,'A4':210}[template['paper']]*72/25.4;height=297*72/25.4
     output=io.BytesIO();canvas=Canvas(output,pagesize=(width,height),pageCompression=1,invariant=1);canvas.setTitle('Recorded business document');canvas.setAuthor('');canvas.setCreator('ApexRetail document renderer 1')
     margin=12;size=8;leading=11;y=height-margin;pages=1
@@ -40,7 +43,7 @@ def pdf_bytes(template,snapshot):
     canvas.setFont(font,size)
     def line(value):
         nonlocal y
-        for paragraph in str('Unavailable' if value is None else value).replace('\t',' ').split('\n'):
+        for paragraph in unicodedata.normalize('NFC',str('Unavailable' if value is None else value)).replace('\t',' ').split('\n'):
             row='';used=0
             for ch in paragraph.replace('\r',''):
                 step=pdfmetrics.stringWidth(ch,font,size)
@@ -75,7 +78,7 @@ def pdf_bytes(template,snapshot):
     if 'totals' not in placed:totals()
     line('Document source '+snapshot['source_id']);canvas.save();raw=output.getvalue()
     if len(raw)>MAX_BYTES:raise HTTPException(413,'PDF exceeds two million bytes')
-    return raw,'reportlab-'+reportlab.Version
+    return raw,'reportlab-'+reportlab.Version+';layout2;DejaVuSans-'+font_hash
 
 def qr_bytes(company,document):
     import qrcode

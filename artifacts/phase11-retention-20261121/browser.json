@@ -1,0 +1,41 @@
+{
+  "synthetic_only": true,
+  "real_api_and_persistence": true,
+  "tenant": "ccca3ba3-52b9-4f58-9ca2-924492ffb04f",
+  "product_id": "16ef918e-3353-4d42-937e-7139cbda63fa",
+  "po_id": "aaf1e2ee-b399-4e99-b53d-12a7f839cfb0",
+  "count_id": "1036bae8-0178-41a4-ba0f-12445821969e",
+  "final_stock": 208,
+  "partial_final_receipts": true,
+  "return_original_receipt": true,
+  "lost_receipt_response_same_uuid_once": true,
+  "older_real_receipt_page": true,
+  "concurrent_final_receipt_statuses": [
+    200,
+    409
+  ],
+  "net_zero_cutoff_rejected": true,
+  "explicit_recount": true,
+  "lost_count_approval_committed_recovery": true,
+  "uncommitted_cancellation_late_packet_denied": true,
+  "tenant_cashier_isolation": true,
+  "reload_persistence": true,
+  "page_errors": [],
+  "unexpected_requests": [],
+  "private_logo_real_upload_and_safe_layout": true,
+  "pdf_real_download": true,
+  "lookup_qr_real_output": true,
+  "sink_lost_response_reload_recovery": true,
+  "distinct_output_enqueue_capture_ids_coalesce": true,
+  "revoke_vs_capture_statuses": [
+    200,
+    403
+  ],
+  "cancel_vs_capture_statuses": [
+    200,
+    409
+  ],
+  "retention_archive_reactivate": true,
+  "keyboard_navigation_and_semantic_preview": true,
+  "real_provider_actions": false
+}
