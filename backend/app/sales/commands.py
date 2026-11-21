@@ -1,7 +1,7 @@
 """Exact committed sale replay before mutable pricing/shift/license checks."""
 import hashlib
 import json
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from uuid import UUID
 from fastapi import HTTPException
@@ -19,6 +19,7 @@ def normalized(value):
     if isinstance(value, datetime):
         if value.tzinfo is None: raise HTTPException(422, 'Capture timestamps require a timezone')
         return value.astimezone(timezone.utc).isoformat()
+    if isinstance(value, date): return value.isoformat()
     if isinstance(value, dict): return {key: normalized(item) for key, item in value.items() if key not in CREDENTIAL_FIELDS}
     if isinstance(value, list): return [normalized(item) for item in value]
     return value

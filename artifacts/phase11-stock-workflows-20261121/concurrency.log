@@ -1,0 +1,1 @@
+{"synthetic_only": true, "equal_receipts_one_grn": true, "distinct_final_receipt_statuses": [200, 409], "equal_supplier_returns_one_movement": true, "return_budget_race_statuses": [409, 200], "equal_count_approvals_one_movement": true, "count_vs_grn_statuses": [409, 200], "stock": "106.000", "movements": 6, "expired_exact_replay": true, "providers_messages_production": false}
