@@ -50,3 +50,15 @@ class RevisionTests(unittest.IsolatedAsyncioTestCase):
         from app.auth.security import create_employee_access_token
         token=create_employee_access_token(employee_id=str(self.employee.id),company_id=str(self.company.id),role='cashier')
         response=await self.client.post(f"/api/operations/orders/{self.order['id']}/quotation-revision",headers={'Authorization':'Bearer '+token},json={'request_id':str(uuid4()),'version':self.order['version'],'reason':'Denied cashier'});self.assertEqual(response.status_code,403)
+    async def test_clone_failure_rolls_back_child_items_and_proof(self):
+        from unittest.mock import patch
+        from app.models import QuotationCommand,InventoryBalance
+        await self.accept();source_id=self.order['id'];source_terms=self.order['quotation_terms'];pid=self.product.id
+        before=(await self.db.execute(select(func.count(CommerceOrder.id)).where(CommerceOrder.company_id==self.c))).scalar_one()
+        command=QuotationRevision(version=self.order['version'],request_id=uuid4(),reason='Synthetic failure before revision commit')
+        with patch.object(self.svc,'commit_operation',side_effect=RuntimeError('Synthetic revision commit failure')):
+            with self.assertRaises(RuntimeError):await revise(self.svc,source_id,command)
+        self.assertIsNone(await self.db.get(QuotationCommand,command.request_id))
+        self.assertEqual((await self.db.execute(select(func.count(CommerceOrder.id)).where(CommerceOrder.company_id==self.c))).scalar_one(),before)
+        original=await self.db.get(CommerceOrder,source_id);self.assertEqual(original.quotation_terms,source_terms)
+        self.assertEqual((await self.db.execute(select(InventoryBalance.quantity).where(InventoryBalance.product_id==pid))).scalar_one(),100)

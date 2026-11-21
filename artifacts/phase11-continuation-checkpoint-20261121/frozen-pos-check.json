@@ -1,0 +1,9 @@
+{
+  "src/App.tsx": true,
+  "src/api/client.ts": true,
+  "src/device.ts": true,
+  "src/api/authLifecycle.ts": true,
+  "tests/authLifecycle.test.ts": true,
+  "scripts/run-auth-lifecycle-tests.mjs": true,
+  "scripts/reproduce-baseline-startup-races.mjs": true
+}
