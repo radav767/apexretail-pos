@@ -1,5 +1,7 @@
 import { RefundCommands, refundActorStorageId } from "./refundCommand";
 import { createBootstrapScope } from "./api/authLifecycle";
+import AllocationDetails from './printing/AllocationDetails';
+import type { SplitAccounting } from './printing/splitReceipt';
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api, getApiErrorMessage } from "./api/client";
@@ -82,6 +84,7 @@ type SaleReceiptItem = {
 };
 
 type SaleReceipt = Sale & {
+  split_accounting?: SplitAccounting | null;
   subtotal_amount?: string | number;
   tax_amount?: string | number;
   amount_received?: string | number;
@@ -1635,7 +1638,7 @@ export default function PosModulePage({
                               Reprint
                             </button>
                           )}
-                          {canViewSalesReceipts && (isRefundableSale(sale) || hasPendingRefund(sale)) && (
+                          {canViewSalesReceipts && sale.payment_method!=='split' && (isRefundableSale(sale) || hasPendingRefund(sale)) && (
                             <button
                               type="button"
                               className="pos-inline-button danger"
@@ -1777,6 +1780,7 @@ export default function PosModulePage({
                 <strong>{money(receiptDialog.receipt.total_amount)}</strong>
               </div>
 
+              <AllocationDetails accounting={receiptDialog.receipt.split_accounting} total={String(receiptDialog.receipt.total_amount)} method={receiptDialog.receipt.payment_method || ''}/>
               {receiptDialog.mode === "refund" && (
                 <label className="pos-refund-reason">
                   Refund reason

@@ -248,6 +248,14 @@ class PrintingService:
         await self.db.commit()
         return self.job_out(job)
 
+    async def ready(self,job_id,data):
+        job=await self.job(job_id)
+        from app.workflows.core import WorkflowService
+        station=await self.station(job.station_id)
+        await WorkflowService(self.db,self.actor).current_context(job.company_id,station.branch_id)
+        if job.status!='sending' or job.claim_hash!=digest(data.token):raise HTTPException(409,'Original print claim is not current; retain job for review')
+        return self.job_out(job)
+
     async def result(self, job_id, data):
         job = await self.job(job_id)
         if not job.claim_hash or not hmac.compare_digest(job.claim_hash, digest(data.token)):

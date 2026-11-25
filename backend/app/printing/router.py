@@ -68,6 +68,10 @@ async def claim(job_id: UUID, data: ClaimInput, svc=Depends(service)):
 async def result(job_id: UUID, data: ResultInput, svc=Depends(service)):
     return await svc.result(job_id, data)
 
+@router.post('/jobs/{job_id}/ready')
+async def ready(job_id:UUID,data:ClaimInput,svc=Depends(service)):
+    return await svc.ready(job_id,data)
+
 
 @router.post("/jobs/{job_id}/retry")
 async def retry(job_id: UUID, data: RetryInput, svc=Depends(service)):

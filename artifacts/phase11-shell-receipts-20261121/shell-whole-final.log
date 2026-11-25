@@ -1,0 +1,8 @@
+POS actual navigation/auth/persisted original and refund receipts passed
+Backoffice actual navigation/auth/persisted original and refund receipts passed
+Backoffice lost identity rejects delayed receipt response
+Backoffice shell lost document/PDF responses recover exact identities and bytes; logout cancels delayed download
+Backoffice shell print enqueue lost response survives reload with exact key/payload; concurrent original requests coalesce
+Concurrent authenticated Backoffice tab replaces old context; late output cannot install in signed-out shell
+POS actual print claim held across logout: no transport; revoked session cannot obtain readiness
+{"errors":[],"unexpected":[]}

@@ -1,0 +1,17 @@
+{
+  "synthetic_only": true,
+  "counts": {
+    "sales": 3,
+    "sale_tenders": 2,
+    "sale_tender_refunds": 2,
+    "print_jobs": 1
+  },
+  "stock": "98.500",
+  "debt_original": "4.00",
+  "debt_credited": "4.00",
+  "debt_outstanding": "0.00",
+  "job_status": "sending",
+  "job_attempts": 1,
+  "output_digest_verified": true,
+  "output_bytes": 23054
+}

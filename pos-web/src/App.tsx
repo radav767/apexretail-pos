@@ -10,6 +10,7 @@ import FiscalSaleStatus from './components/FiscalSaleStatus';
 import {offlineCartLicenseError} from './offline/licensedCart';
 import { canProcessSales, canAccessOperations } from "./business/access";
 import { flushPrintIntents, scheduleSalePrint } from "./printing/queue";
+import {createPrintScope} from './printing/context';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
@@ -1586,14 +1587,20 @@ const [loggedIn, setLoggedIn] = useState(
     saleId: string,
     receiptNumber?: string,
   ) {
+    const scope = createPrintScope();
     try {
       const archivedReceipt =
         await getArchivedReceiptSnapshot(
           saleId,
           receiptNumber,
         );
-
+      if (!scope.isCurrent()) return;
       if (archivedReceipt) {
+        if (archivedReceipt.status !== 'offline_pending') {
+          // Retain archived bytes, but authorize historical delivery with the current server identity.
+          await api.get(`/sales/receipt/${archivedReceipt.company_id}/${saleId}`, {params:{mark_reprint:false}});
+          if (!scope.isCurrent()) return;
+        }
         await printReceiptSnapshot({
           ...archivedReceipt,
           is_duplicate: true,
@@ -1602,6 +1609,7 @@ const [loggedIn, setLoggedIn] = useState(
           reprint_at: new Date().toISOString(),
           reprint_count: (archivedReceipt.reprint_count || 0) + 1,
         });
+        if (!scope.isCurrent()) return;
         setPrinterNotice(
           `Reprinted ${archivedReceipt.receipt_number}`,
         );
@@ -1614,6 +1622,7 @@ const [loggedIn, setLoggedIn] = useState(
       );
 
       const sale = response.data as SaleReceiptResponse;
+      if (!scope.isCurrent()) return;
       const snapshot = buildReceiptSnapshot(
         sale,
         sale.items.map((item) => ({
@@ -1634,11 +1643,14 @@ const [loggedIn, setLoggedIn] = useState(
       snapshot.reprint_count = sale.reprint_count || 1;
 
       await archiveReceiptSnapshot(snapshot);
+      if (!scope.isCurrent()) return;
       await printReceiptSnapshot(snapshot);
+      if (!scope.isCurrent()) return;
       setPrinterNotice(
         `Reprinted ${snapshot.receipt_number}`,
       );
     } catch (error) {
+      if (!scope.isCurrent()) return;
       setPrinterNotice(
         getApiErrorMessage(
           error,

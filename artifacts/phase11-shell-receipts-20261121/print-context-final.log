@@ -1,0 +1,1 @@
+{"synthetic_only":true,"cases":["late claim employee_token: no transport or result","late claim device_id: no transport or result","late claim company_id: no transport or result","lost claim: no automatic retry or transport","identity changes during fake transport: no false submitted/uncertain result under new identity"],"real_transport_invoked":false,"hardware_acceptance":false}

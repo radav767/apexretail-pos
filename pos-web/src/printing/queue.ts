@@ -2,6 +2,7 @@ import { api } from "../api/client";
 import { buildReceiptHtml, buildEscPosPayload, encodeBase64 } from "./receiptFormatter";
 import { sendReceiptToPrinter } from "./printerConfig";
 import type { PrinterConfig, ReceiptSnapshot } from "./types";
+import { createPrintScope } from "./context";
 
 export type Station = {
   id: string; name: string; purpose: "receipt" | "kitchen" | "bar";
@@ -43,10 +44,15 @@ export async function deliverJob(job: PrintJob, dependencies?: { transport?: typ
   let claimed = false;
   const client = dependencies?.client || api;
   const transport = dependencies?.transport || sendReceiptToPrinter;
+  const scope = createPrintScope();
   try {
     // A claim response timeout is NOT permission to print or claim again.
     await client.post(`/printing/jobs/${job.id}/claim`, { token });
     claimed = true;
+    if (!scope.isCurrent()) throw new Error('Print context changed; retain original job for review');
+    // Revocation may commit while the original claim response is in flight.
+    await client.post(`/printing/jobs/${job.id}/ready`, { token });
+    if (!scope.isCurrent()) throw new Error('Print context changed; retain original job for review');
     const p = job.payload.printer;
     const config: PrinterConfig = { enabled: true, connectionType: p.transport, selectedPrinterId: p.address,
       selectedPrinterName: p.name, paperWidth: p.paper_width, copies: 1, autoPrint: false, cutPaper: false };
@@ -68,10 +74,11 @@ export async function deliverJob(job: PrintJob, dependencies?: { transport?: typ
       rawDataBase64 = encodeBase64(new TextEncoder().encode(`\x1b@${wrapped}\n\n\n`));
     }
     await transport({ config, html, rawDataBase64, jobName: `Print ${job.id}` });
+    if (!scope.isCurrent()) throw new Error('Print context changed; delivery remains unconfirmed');
     // "submitted" deliberately does not claim that paper physically printed.
     await client.post(`/printing/jobs/${job.id}/result`, { token, outcome: "submitted" });
   } catch (error) {
-    if (claimed) {
+    if (claimed && scope.isCurrent()) {
       try { await client.post(`/printing/jobs/${job.id}/result`, { token, outcome: "uncertain", error: "Delivery unconfirmed. Inspect printer before an authorized retry." }); } catch { /* Sending remains visible; never auto-repeat. */ }
     }
     throw error;
@@ -115,10 +122,13 @@ let flushing = false;
 export async function flushPrintIntents() {
   if (flushing || !navigator.onLine) return;
   flushing = true;
+  const scope = createPrintScope();
   try {
     for (const intent of readIntents()) {
+      if (!scope.isCurrent()) return;
       if (intent.cashier !== (localStorage.getItem("employee_id") || "") || intent.device !== (localStorage.getItem("device_id") || "") || intent.company !== localStorage.getItem("company_id")) continue;
       const { data: stations } = await api.get<Station[]>(`/printing/stations/${intent.company}`);
+      if (!scope.isCurrent()) return;
       // An offline receipt may already have printed locally, even in older
       // clients. No evidence means no automatic second receipt after sync.
       // Kitchen tickets also need review when delayed by an offline period.
@@ -126,6 +136,7 @@ export async function flushPrintIntents() {
       for (const station of stations.filter(s => s.active && s.auto_print && s.device_id === intent.device)) {
         try {
           const { data: job } = await api.post<PrintJob>(`/printing/station/${station.id}/jobs`, { sale_id: intent.sale, kind: station.purpose === "receipt" ? "receipt" : "kot", request_key: "original" });
+          if (!scope.isCurrent()) return;
           await deliverJob(job);
         } catch (error: unknown) {
           const status = (error as { response?: { status?: number; data?: { detail?: string } } }).response;
@@ -135,6 +146,7 @@ export async function flushPrintIntents() {
         }
       }
       // Re-read so an intent appended during I/O is never lost.
+      if (!scope.isCurrent()) return;
       localStorage.setItem(OUTBOX, JSON.stringify(readIntents().filter(i => !(i.company === intent.company && i.sale === intent.sale))));
     }
   } finally { flushing = false; }

@@ -1,5 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import {contextGeneration} from '../api/businessSession';
+import AllocationDetails from '../../../pos-web/src/printing/AllocationDetails';
+import type {SplitAccounting} from '../../../pos-web/src/printing/splitReceipt';
 import "./reports.css";
 
 type Metric = { available: boolean; value: string | null; reason?: string | null };
@@ -21,6 +24,7 @@ const views = [
 function localDate(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
+function reportingDate(timeZone:string){const parts=new Intl.DateTimeFormat('en',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const value=(kind:string)=>parts.find(p=>p.type===kind)!.value;return `${value('year')}-${value('month')}-${value('day')}`;}
 
 function initialFilters(monthStart: Date, today: Date) {
   const defaults = { view: "individual", date_from: localDate(monthStart), date_to: localDate(today), shop_id: "", branch_id: "", cashier_id: "", product_id: "", category_id: "", payment_method: "", sort_by: "date", sort_dir: "desc", limit: "25", offset: "0" };
@@ -42,15 +46,23 @@ export default function SalesHistoryPage({ companyId }: { companyId: string }) {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [receipt,setReceipt]=useState<{receipt_number:string;payment_method:string;total_amount:string;split_accounting?:SplitAccounting|null;items:Array<{id:string;product_name:string;quantity:string;line_total:string}>}|null>(null);
+  const sequence=useRef(0);
+  const receiptSequence=useRef(0),[contextTick,setContextTick]=useState(0);
+  const defaultDates=useRef(!new URLSearchParams(window.location.search).has('sales_date_from')&&!new URLSearchParams(window.location.search).has('sales_date_to'));
+  function guard(){const epoch=contextGeneration(),token=sessionStorage.getItem('backoffice_token');return ()=>epoch===contextGeneration()&&token===sessionStorage.getItem('backoffice_token')&&companyId===sessionStorage.getItem('backoffice_company_id');}
+  useEffect(()=>{setReceipt(null);setReport(null);const clear=()=>{sequence.current++;receiptSequence.current++;setReceipt(null);setReport(null);setContextTick(value=>value+1)};window.addEventListener('business-context-changed',clear);return()=>{sequence.current++;receiptSequence.current++;window.removeEventListener('business-context-changed',clear)}},[companyId]);
+  async function viewReceipt(id:string){const current=guard(),request=++receiptSequence.current;try{const {data}=await api.get(`/sales/receipt/${companyId}/${id}`,{params:{mark_reprint:false}});if(current()&&request===receiptSequence.current)setReceipt(data)}catch{if(current()&&request===receiptSequence.current)setError('Cannot read this receipt with the current account.')}}
 
   const params = useCallback(() => Object.fromEntries(Object.entries(filters).filter(([, value]) => value !== "")), [filters]);
   const load = useCallback(async () => {
     if (!companyId || filters.date_from > filters.date_to) { setError("Choose a valid date range."); return; }
     setLoading(true); setError("");
-    try { const response = await api.get(`/reports/sales-history/${companyId}`, { params: params() }); setReport(response.data); }
-    catch (requestError: any) { setReport(null); setError(requestError?.response?.status === 403 ? "You do not have reports permission." : requestError?.response?.data?.detail || "Failed to load Sales History."); }
-    finally { setLoading(false); }
-  }, [companyId, filters.date_from, filters.date_to, params]);
+    const current=guard(),request=++sequence.current;
+    try { const response = await api.get(`/reports/sales-history/${companyId}`, { params: params() }); if(current()&&request===sequence.current){if(defaultDates.current){defaultDates.current=false;const date=reportingDate(response.data.reporting_timezone);if(date!==filters.date_to){setFilters(old=>({...old,date_to:date,date_from:date.slice(0,7)+'-01',offset:'0'}));return}}setReport(response.data);} }
+    catch (requestError: any) { if(current()&&request===sequence.current){setReport(null); setError(requestError?.response?.status === 403 ? "You do not have reports permission." : requestError?.response?.data?.detail || "Failed to load Sales History.");} }
+    finally { if(current()&&request===sequence.current)setLoading(false); }
+  }, [companyId, filters.date_from, filters.date_to, params,contextTick]);
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
@@ -58,7 +70,7 @@ export default function SalesHistoryPage({ companyId }: { companyId: string }) {
     Object.entries(filters).forEach(([key, value]) => value ? search.set(`sales_${key}`, value) : search.delete(`sales_${key}`));
     window.history.replaceState(null, "", `${window.location.pathname}?${search.toString()}${window.location.hash}`);
   }, [filters]);
-  function update(name: string, value: string, resetPage = true) { setFilters(current => ({ ...current, [name]: value, ...(resetPage ? { offset: "0" } : {}) })); }
+  function update(name: string, value: string, resetPage = true) { if(name==='date_from'||name==='date_to')defaultDates.current=false;setFilters(current => ({ ...current, [name]: value, ...(resetPage ? { offset: "0" } : {}) })); }
   async function exportCsv() {
     try {
       const response = await api.get(`/reports/sales-history/${companyId}/export.csv`, { params: params(), responseType: "blob" });
@@ -88,6 +100,7 @@ export default function SalesHistoryPage({ companyId }: { companyId: string }) {
       <div className="reports-presets"><button onClick={() => void load()} disabled={loading}>{loading ? "Loading…" : "Run report"}</button><button onClick={() => void exportCsv()} disabled={loading}>Export CSV</button></div>
     </section>
     {error && <p className="reports-message" role="alert">{error}</p>}
+    {receipt&&<section role="dialog" aria-label={`Receipt ${receipt.receipt_number}`}><h2>Receipt {receipt.receipt_number}</h2><p>{receipt.payment_method} · Total {receipt.total_amount}</p><ul>{receipt.items.map(item=><li key={item.id}>{item.product_name} · {item.quantity} · {item.line_total}</li>)}</ul><AllocationDetails accounting={receipt.split_accounting} total={receipt.total_amount} method={receipt.payment_method}/><button type="button" onClick={()=>{receiptSequence.current++;setReceipt(null)}}>Close receipt</button></section>}
     {loading && <section className="reports-panel reports-empty">Loading Sales History…</section>}
     {!loading && report && <>
       <section className="reports-summary-grid">
@@ -99,7 +112,7 @@ export default function SalesHistoryPage({ companyId }: { companyId: string }) {
       </section>
       <section className="reports-panel"><div className="reports-panel-header"><div><h2>{views.find(([key]) => key === report.view)?.[1]}</h2><p>{report.total} matching row{report.total === 1 ? "" : "s"}</p></div></div>
         <div className="reports-table-wrapper"><table><thead><tr><th>Name / receipt</th><th>Date</th><th>Transactions</th><th>Quantity</th><th>Amount</th><th>Cost</th><th>Gross profit</th><th>Discount</th><th>Status / payment</th></tr></thead>
-          <tbody>{report.rows.length ? report.rows.map((row,index) => <tr key={String(row.dimension_id || index)}><td><strong>{String(row.label || "Unavailable")}</strong></td><td>{row.created_at ? new Date(row.created_at).toLocaleString() : "—"}</td><td>{row.transactions}</td><td>{row.quantity ?? "—"}</td><td>{report.currency_symbol}{Number(row.amount).toFixed(report.decimal_places)}</td><td>{showMetric(row.cost, report)}</td><td>{showMetric(row.gross_profit, report)}</td><td>{showMetric(row.discount, report)}</td><td>{[row.status,row.payment_method].filter(Boolean).join(" / ") || "—"}</td></tr>) : <tr><td colSpan={9} className="reports-empty">No sales match these filters.</td></tr>}</tbody></table></div>
+          <tbody>{report.rows.length ? report.rows.map((row,index) => <tr key={String(row.dimension_id || index)}><td><strong>{String(row.label || "Unavailable")}</strong>{report.view==="individual"&&row.dimension_id&&<button type="button" onClick={()=>void viewReceipt(String(row.dimension_id))}>View receipt</button>}</td><td>{row.created_at ? new Date(row.created_at).toLocaleString() : "—"}</td><td>{row.transactions}</td><td>{row.quantity ?? "—"}</td><td>{report.currency_symbol}{Number(row.amount).toFixed(report.decimal_places)}</td><td>{showMetric(row.cost, report)}</td><td>{showMetric(row.gross_profit, report)}</td><td>{showMetric(row.discount, report)}</td><td>{[row.status,row.payment_method].filter(Boolean).join(" / ") || "—"}</td></tr>) : <tr><td colSpan={9} className="reports-empty">No sales match these filters.</td></tr>}</tbody></table></div>
         <div className="reports-pagination"><span>{report.total ? `${offset + 1}–${Math.min(offset + limit, report.total)} of ${report.total}` : "0 results"}</span><button disabled={offset === 0} onClick={() => update("offset", String(Math.max(0, offset-limit)), false)}>Previous</button><button disabled={offset + limit >= report.total} onClick={() => update("offset", String(offset+limit), false)}>Next</button></div>
       </section>
     </>}

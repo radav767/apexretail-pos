@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Station, PrintJob } from "./queue";
+import {createPrintScope} from './context';
 import "./printers.css";
 
 type Api = { get: <T = any>(url: string) => Promise<{ data: T }>; post: <T = any>(url: string, data?: unknown) => Promise<{ data: T }>; put: (url: string, data: unknown) => Promise<unknown> };
@@ -39,11 +40,13 @@ export default function PrinterManagement({ companyId, api, canManage = false, d
     restore(); window.addEventListener("popstate", restore); return () => window.removeEventListener("popstate", restore);
   }, []);
   const refresh = useCallback(async () => {
+    const scope=createPrintScope();
     const { data } = await api.get<Station[]>(`/printing/stations/${companyId}`);
+    if(!scope.isCurrent())return;
     const visible = deviceId ? data.filter(s => s.device_id === deviceId) : data;
     setStations(visible);
     if (!selected && visible.length) setSelected(visible[0].id);
-    if (canManage) setOptions((await api.get<Options>(`/printing/options/${companyId}`)).data);
+    if (canManage){const result=await api.get<Options>(`/printing/options/${companyId}`);if(scope.isCurrent())setOptions(result.data);}
   }, [api, companyId, deviceId, canManage, selected]);
   useEffect(() => { void refresh().catch(e => setError(message(e))); }, [refresh]);
   useEffect(() => {
@@ -51,9 +54,10 @@ export default function PrinterManagement({ companyId, api, canManage = false, d
   }, [api, selected, view]);
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
+    const scope=createPrintScope();
     setBusy(true); setError(""); setNotice("");
-    try { await action(); await refresh(); if (selected) setJobs((await api.get<PrintJob[]>(`/printing/station/${selected}/jobs`)).data); }
-    catch (e) { setError(message(e)); } finally { setBusy(false); }
+    try { await action();if(!scope.isCurrent())return;await refresh(); if (selected){const result=await api.get<PrintJob[]>(`/printing/station/${selected}/jobs`);if(scope.isCurrent())setJobs(result.data);} }
+    catch (e) { if(scope.isCurrent())setError(message(e)); } finally { if(scope.isCurrent())setBusy(false); }
   }
   async function save() {
     if (editing && selected) await api.put(`/printing/station/${selected}`, form);
@@ -61,10 +65,21 @@ export default function PrinterManagement({ companyId, api, canManage = false, d
     setNotice("Printer station saved"); setEditing(false);
   }
   async function queue(kind: "receipt" | "kot" | "test", reprint = false, token?: string) {
+    const scope=createPrintScope();
     const identity = `${selected}:${saleId}:${kind}:${reprint}`;
-    const request_key = requestKeys.current.get(identity) || crypto.randomUUID();
+    const actor=localStorage.getItem('employee_id')||sessionStorage.getItem('backoffice_user_id');
+    if(!actor)throw Error('Current printing identity is required');
+    const durableKey=`apexretail_print_request_v2:${companyId}:${actor}:${identity}`;
+    const body={kind,sale_id:kind==='test'?null:saleId,reprint,table,notes};
+    const retained=sessionStorage.getItem(durableKey);const frame=retained?JSON.parse(retained):null;
+    if(frame&&JSON.stringify(frame.body)!==JSON.stringify(body))throw Error('Original print request retained; restore its inputs or review the existing job');
+    const request_key = frame?.request_key || requestKeys.current.get(identity) || crypto.randomUUID();
+    sessionStorage.setItem(durableKey,JSON.stringify({request_key,body}));
     requestKeys.current.set(identity, request_key);
     const { data } = await api.post<PrintJob>(`/printing/station/${selected}/jobs`, { kind, sale_id: kind === "test" ? null : saleId, request_key, reprint, table, notes, manager_authorization: token });
+    if(!scope.isCurrent())return;
+    if(data.station_id!==selected||data.sale_id!==(kind==='test'?null:saleId)||data.kind!==kind)throw Error('Print acknowledgement differs; original request retained');
+    sessionStorage.removeItem(durableKey);
     if (deliver) await deliver(data);
     requestKeys.current.delete(identity);
     setNotice(deliver ? "Submitted to printer. Check paper output." : "Queued for the assigned POS register.");

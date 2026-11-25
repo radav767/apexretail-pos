@@ -1,0 +1,22 @@
+{
+  "company": "74ead408-9d92-45fd-b28b-f1b9c359b585",
+  "product": "ba3b5e65-3aa2-4ce9-ae9d-e67ed268e438",
+  "original": "0b61ca8b-e5b8-4f31-ab3f-68681c4d7300",
+  "refund": "e3b57ad1-5de2-43af-9252-5a9f143c92f5",
+  "document": "0e4f7af0-4e3b-4fb7-abdd-5387b9854da6",
+  "output": "fdc074f7-c528-4cee-a19a-59adad1b14bb",
+  "job": "6ee2b23d-d675-4c1a-99ca-7eb24bfaf8cb",
+  "actual_shell_navigation_authentication": true,
+  "persisted_split_original_refund": true,
+  "exact_lost_document_output_and_print_recovery": true,
+  "concurrent_original_requests_coalesce": true,
+  "logout_drops_receipt_reprint_and_download": true,
+  "concurrent_tab_replacement_drops_output": true,
+  "claim_logout_no_transport_and_readiness_revoked": true,
+  "saved_output_bytes_unchanged": true,
+  "real_transport_invoked": false,
+  "physical_printer_acceptance": false,
+  "split_posting_release_enabled": false,
+  "errors": [],
+  "unexpected": []
+}
