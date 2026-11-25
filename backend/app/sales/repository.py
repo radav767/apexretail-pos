@@ -95,6 +95,10 @@ class SalesRepository:
             branch,
             product,
         )
+    async def quotation_refund_currency(self,original,data,total):
+        from .quotation_refunds import currency
+        return await currency(self.db,original,data,total)
+
     async def get_variant(self,company_id,product_id,variant_id):
         return (await self.db.execute(select(ProductVariant).where(ProductVariant.company_id==company_id,ProductVariant.product_id==product_id,ProductVariant.id==variant_id,ProductVariant.active==True,ProductVariant.deleted==False).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
 

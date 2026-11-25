@@ -78,7 +78,6 @@ async def frozen(svc,row,draft=False):
 
 def payment(row,payment):
     mode();p=row.quotation_terms
-    if p['display_currency']!=p['currency']:raise HTTPException(409,'Foreign quotation conversion awaits original-currency refund acceptance')
     if payment.payment_method not in {'cash','credit'}:raise HTTPException(409,'Saved quote acceptance covers cash/credit only')
     if payment.payment_method=='cash' and payment.payment_currency_code not in (None,p['display_currency']):raise HTTPException(409,'Use accepted quotation payment currency')
     return payment.model_copy(update={'items':[SaleItemCreate(product_id=r['product_id'],variant_id=r['variant_id'],quantity=r['base_quantity'],selling_unit=r['base_unit'],unit_price=r['price'],line_total=r['net'],line_discount_amount=r['line_discount']) for r in p['items']],

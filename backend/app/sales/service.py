@@ -1041,6 +1041,7 @@ class SalesService:
         previous = {key: await self.repo.list_refund_items_for_original_item(key) for key in sale_items}
         plan = refund_plan(original_sale, sale_items, previous, data.items)
         planned_total = sum((line if original_sale.tax_inclusive else line+tax for line,tax,cost in plan.values()), Decimal(0))
+        frozen_quote_currency = await self.repo.quotation_refund_currency(original_sale,data,planned_total) if hasattr(self.repo,'quotation_refund_currency') else None
         credit_receivable = None
         if original_sale.payment_method == 'credit':
             if data.payment_currency_code and data.payment_currency_code.strip().upper() != original_sale.base_currency_code:
@@ -1258,7 +1259,7 @@ class SalesService:
 
         refund_total = -(total if original_sale.tax_inclusive else total + refund_tax)
         refund_method = 'split_refund' if is_split_refund else data.refund_method or original_sale.payment_method
-        refund_currency = None if is_split_refund else await self.currency_from_base(
+        refund_currency = None if is_split_refund else frozen_quote_currency or await self.currency_from_base(
             data.company_id, refund_method, data.payment_currency_code, abs(refund_total),
             at=datetime.now(timezone.utc),
         )

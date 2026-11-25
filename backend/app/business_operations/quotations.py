@@ -139,6 +139,8 @@ async def validate_sale(svc,row,sale):
     frozen=row.quotation_terms
     if frozen.get('version')==2:
         if sale.total_amount!=Decimal(frozen['total']) or sale.tax_amount!=Decimal(frozen['tax']) or sale.discount_amount!=Decimal(frozen['discount']) or sale.tax_inclusive!=frozen['tax_inclusive'] or sale.tax_name!=frozen['tax_name'] or Decimal(sale.tax_rate)!=Decimal(frozen['tax_rate']) or sale.base_currency_code!=frozen['currency']:raise HTTPException(409,'Accepted pricing differs from final sale')
+        if sale.payment_method=='cash' and (sale.payment_currency_code!=frozen['display_currency'] or sale.payment_amount_original!=Decimal(frozen['display_total']) or sale.exchange_rate_snapshot!=Decimal(frozen['exchange_rate_snapshot']) or (str(sale.exchange_rate_id) if sale.exchange_rate_id else None)!=frozen['exchange_rate_id']):
+            raise HTTPException(409,'Sale differs from accepted original currency/rounding evidence')
         return
     if (sale.total_amount!=Decimal(frozen['total']) or sale.tax_amount!=Decimal(frozen['tax']) or Decimal(sale.discount_amount or 0)!=0 or
         sale.tax_inclusive!=frozen['tax_inclusive'] or sale.tax_name!=frozen['tax_name'] or Decimal(sale.tax_rate)!=Decimal(frozen['tax_rate']) or sale.base_currency_code!=frozen['currency']):
