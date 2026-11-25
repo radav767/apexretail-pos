@@ -82,6 +82,12 @@ class DocumentService(WorkflowService):
             await context(self.db,self.actor,data.company_id,row.branch_id)
             items=(await self.db.execute(select(CommerceOrderItem).where(CommerceOrderItem.order_id==row.id).order_by(CommerceOrderItem.id))).scalars().all()
             from app.business_operations.quotations import state
+            if row.quotation_terms and row.quotation_terms.get('version')==2:
+                p=row.quotation_terms
+                return row.branch_id,{'title':'Quotation','identity':row.number,'source_id':str(row.id),
+                    'notice':'NOT A PAYMENT RECEIPT. Frozen saved pricing v2; validity '+str(row.quotation_valid_until),
+                    'rows':[{'name':r['name'],'quantity':r['entered_quantity']+' '+r['entered_unit']+' ('+r['base_quantity']+' '+r['base_unit']+')','amount':r['net']+' net; discount '+r['discount']+'; tax '+r['tax']} for r in p['items']],
+                    'totals':{'State':state(row),'Currency':p['currency'],'Subtotal':p['subtotal'],'Discount':p['discount'],'Tax':p['tax'],'Total':p['total'],'Display currency':p['display_currency'],'Display total':p['display_total'],'Frozen FX':p['exchange_rate_snapshot']}}
             return row.branch_id,{'title':'Quotation','identity':row.number,'source_id':str(row.id),'notice':'NOT A PAYMENT RECEIPT. '+('Frozen terms; validity '+str(row.quotation_valid_until) if row.quotation_terms else 'Draft estimate; terms not frozen.'),
                 'rows':[{'name':i.name,'quantity':str(i.quantity),'amount':str(i.price)+' unit price'} for i in items if i.quantity>0],
                 'totals':{'State':state(row),**({'Total':row.quotation_terms['total'],'Tax':row.quotation_terms['tax'],'Currency':row.quotation_terms['currency']} if row.quotation_terms else {})}}

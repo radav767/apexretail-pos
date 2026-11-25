@@ -74,6 +74,7 @@ class CommerceOrder(Base):
     quotation_status = Column(String(20))
     quotation_valid_until = Column(DateTime(timezone=True))
     quotation_terms = Column(JSONB)
+    quotation_pricing = Column(JSONB)
     quotation_root_id = Column(UUID(as_uuid=True), ForeignKey("commerce_orders.id"))
     quotation_revision = Column(Integer, nullable=False, default=0)
     last_dispatch_context = Column(JSONB, nullable=True)

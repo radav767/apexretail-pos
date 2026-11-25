@@ -207,6 +207,7 @@ class BusinessService(PrintingService):
         return (await self.db.execute(select(CommerceOrderItem).where(CommerceOrderItem.order_id == row.id).order_by(CommerceOrderItem.id))).scalars().all()
 
     async def order_out(self, row):
+        from .saved_pricing import public_plan
         from .quotations import state
         from .quotation_revisions import superseded
         is_superseded=await superseded(self,row) if row.kind=='quotation' and row.status!='settled' else False
@@ -214,7 +215,7 @@ class BusinessService(PrintingService):
         waiter = await self.db.get(Employee, row.waiter_id) if row.waiter_id else None
         items = await self.order_items(row)
         return {**row_dict(row, ("id", "number", "kind", "status", "version", "branch_id", "device_id", "table_id", "waiter_id", "guest_id", "customer_id", "parent_id", "sale_id", "notes", "created_at")),
-            'quotation_status': ('superseded' if is_superseded else state(row)) if row.kind=='quotation' else None, 'quotation_root_id':str(row.quotation_root_id or row.id) if row.kind=='quotation' else None,'quotation_revision':row.quotation_revision, 'quotation_valid_until':row.quotation_valid_until, 'quotation_terms':row.quotation_terms,
+            'quotation_status': ('superseded' if is_superseded else state(row)) if row.kind=='quotation' else None, 'quotation_root_id':str(row.quotation_root_id or row.id) if row.kind=='quotation' else None,'quotation_revision':row.quotation_revision, 'quotation_valid_until':row.quotation_valid_until, 'quotation_terms':public_plan(row.quotation_terms), 'quotation_pricing':public_plan(row.quotation_pricing),
             "table_name": table.name if table else "Takeaway", "waiter_name": waiter.name if waiter else "Unassigned",
             "items": [row_dict(i, ("id", "product_id", "variant_id", "name", "quantity", "sent_quantity", "price", "unit", "notes")) for i in items],
             "estimated_subtotal": str(sum((i.quantity * i.price for i in items), Decimal("0"))), "estimate_only": row.quotation_terms is None}
@@ -486,9 +487,13 @@ class BusinessService(PrintingService):
         payment = data.payment.model_copy(update={"company_id": row.company_id, "branch_id": row.branch_id, "device_id": row.device_id,
             "client_sale_id": row.id, "customer_id": customer_id,
             "items": [SaleItemCreate(product_id=p, variant_id=v, quantity=q, selling_unit=u) for (p, v, u), q in grouped.items()]})
-        if row.kind == 'quotation': payment = payment.model_copy(update={'discount_amount': Decimal('0'), 'sale_discount_amount': Decimal('0')})
+        repository=SalesRepository(self.db,commit_on_save=False)
+        if row.kind=='quotation' and row.quotation_terms.get('version')==2:
+            from .saved_pricing import payment as quote_payment,QuoteRepository
+            payment=quote_payment(row,payment);repository=QuoteRepository(self.db,row.quotation_terms)
+        elif row.kind == 'quotation': payment = payment.model_copy(update={'discount_amount': Decimal('0'), 'sale_discount_amount': Decimal('0')})
         try:
-            sale = await SalesService(SalesRepository(self.db, commit_on_save=False)).create_sale(payment, actor=self.actor)
+            sale = await SalesService(repository).create_sale(payment, actor=self.actor)
             if row.kind == 'quotation':
                 from .quotations import validate_sale
                 await validate_sale(self,row,sale)

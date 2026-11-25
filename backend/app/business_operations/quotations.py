@@ -27,6 +27,9 @@ def state(row):
 
 
 async def terms(svc,row):
+    if row.quotation_pricing:
+        from .saved_pricing import frozen
+        return await frozen(svc,row,draft=True)
     db=svc.db
     # Read estimates without acquiring checkout locks ahead of its shift lock.
     # Raw mapping snapshots leave the ORM identity map untouched; checkout
@@ -126,11 +129,17 @@ async def require_conversion(svc,row,payment):
     await require_current(svc,row,conversion=True)
     if state(row)!='accepted' or not row.quotation_terms:raise HTTPException(409,'Only accepted, unexpired quotations with frozen terms may convert')
     if any(Decimal(getattr(payment,key,None) or 0) for key in ('discount_amount','sale_discount_amount')):raise HTTPException(409,'Quotation discount terms are frozen')
+    if row.quotation_terms.get('version')==2:
+        from .saved_pricing import frozen
+        await frozen(svc,row);return
     if await terms(svc,row)!=row.quotation_terms:raise HTTPException(409,'Quotation terms changed; create and accept a new draft before conversion')
 
 
 async def validate_sale(svc,row,sale):
     frozen=row.quotation_terms
+    if frozen.get('version')==2:
+        if sale.total_amount!=Decimal(frozen['total']) or sale.tax_amount!=Decimal(frozen['tax']) or sale.discount_amount!=Decimal(frozen['discount']) or sale.tax_inclusive!=frozen['tax_inclusive'] or sale.tax_name!=frozen['tax_name'] or Decimal(sale.tax_rate)!=Decimal(frozen['tax_rate']) or sale.base_currency_code!=frozen['currency']:raise HTTPException(409,'Accepted pricing differs from final sale')
+        return
     if (sale.total_amount!=Decimal(frozen['total']) or sale.tax_amount!=Decimal(frozen['tax']) or Decimal(sale.discount_amount or 0)!=0 or
         sale.tax_inclusive!=frozen['tax_inclusive'] or sale.tax_name!=frozen['tax_name'] or Decimal(sale.tax_rate)!=Decimal(frozen['tax_rate']) or sale.base_currency_code!=frozen['currency']):
         raise HTTPException(409,'Sale differs from frozen quotation terms; nothing was posted')

@@ -16,15 +16,15 @@ class ReviewLine(BaseModel):
     item_id:UUID
     quantity:Decimal=Field(gt=0,max_digits=12,decimal_places=3)
     unit:str=Field(min_length=1,max_length=20)
-    discount:Decimal=Field(default=0,ge=0,max_digits=16,decimal_places=4)
+    discount:Decimal=Field(default=Decimal(0),ge=0,max_digits=16,decimal_places=4)
 class PricingReview(BaseModel):
     model_config=ConfigDict(extra='forbid')
     version:int=Field(ge=1)
     lines:list[ReviewLine]=Field(min_length=1,max_length=500)
-    sale_discount:Decimal=Field(default=0,ge=0,max_digits=16,decimal_places=4)
+    sale_discount:Decimal=Field(default=Decimal(0),ge=0,max_digits=16,decimal_places=4)
     currency_code:str|None=Field(default=None,min_length=3,max_length=8)
 
-async def review(svc,order_id,data):
+async def review(svc,order_id,data,*,internal=False):
     from app.sales.commands import actor_identity
     actor_identity(svc.actor,svc.actor.company_id)
     row=await svc.order(order_id);permit(svc.actor,'quotations_manage')
@@ -36,7 +36,7 @@ async def review(svc,order_id,data):
     if not base or not settings:raise HTTPException(409,'Configured currency/tax policy is required')
     customer=await svc.db.get(Customer,row.customer_id) if row.customer_id else None
     if customer and (not customer.active or customer.deleted or customer.company_id!=row.company_id):raise HTTPException(409,'Quotation customer requires review')
-    prepared=[];dimensions={};quantities={}
+    prepared=[];dimensions={};quantities={};positions=[]
     for line in data.lines:
         item=original[line.item_id];p=await svc.db.get(Product,item.product_id,populate_existing=True)
         if not p or p.company_id!=row.company_id or not p.active or p.deleted:raise HTTPException(409,'Active tenant product required')
@@ -54,6 +54,8 @@ async def review(svc,order_id,data):
         price=level.price if level else v.selling_price if v and v.selling_price is not None else p.selling_price
         if price is None:raise HTTPException(409,'Configured price is unavailable')
         prepared.append({'id':line.item_id,'quantity':line.quantity,'factor':factor,'price':price,'discount':line.discount,'tax_rate':0 if p.tax_exempt else p.tax_rate if p.tax_rate is not None else settings.tax_rate or 0})
+        cost=v.cost_price if v and v.cost_price is not None else p.cost_price
+        positions.append({'id':str(line.item_id),'product_id':str(p.id),'variant_id':str(v.id) if v else None,'name':item.name,'base_unit':p.unit,'entered_unit':line.unit,'entered_quantity':str(line.quantity),'factor':str(factor),'price':str(price),'tax_rate':str(prepared[-1]['tax_rate']),'tax_exempt':bool(p.tax_exempt),'cost':str(cost) if cost is not None else None,'product_type':p.product_type,'line_discount':str(line.discount)})
     result=pricing(prepared,base.decimal_places,settings.tax_inclusive,data.sale_discount)
     currency=await repo.by_code(row.company_id,(data.currency_code or base.code).strip().upper())
     if not currency:raise HTTPException(409,'Requested display currency is inactive or unknown')
@@ -63,4 +65,4 @@ async def review(svc,order_id,data):
         rate_row=await repo.current_rate(row.company_id,currency.id,datetime.now(timezone.utc))
         if not rate_row:raise HTTPException(409,'No effective display currency rate')
         rate=Decimal(rate_row.foreign_units_per_base);rate_id=str(rate_row.id)
-    return {**result,'order_id':str(row.id),'version':row.version,'base_currency':base.code,'display_currency':currency.code,'display_total':str(quantize_currency(Decimal(result['total'])*rate,currency.decimal_places)),'exchange_rate_snapshot':str(rate),'exchange_rate_id':rate_id,'currency_config_version':settings.currency_config_version,'accepted_terms_changed':False,'conversion_enabled':False,'contract':'pricing-review-v2; not a posted sale or accepted quotation'}
+    return {**result,**({'positions':positions} if internal else {}),'tax_name':settings.tax_name,'tax_rate':str(settings.tax_rate or 0),'tax_inclusive':settings.tax_inclusive,'display_places':currency.decimal_places,'order_id':str(row.id),'version':row.version,'base_currency':base.code,'display_currency':currency.code,'display_total':str(quantize_currency(Decimal(result['total'])*rate,currency.decimal_places)),'exchange_rate_snapshot':str(rate),'exchange_rate_id':rate_id,'currency_config_version':settings.currency_config_version,'accepted_terms_changed':False,'conversion_enabled':False,'contract':'pricing-review-v2; not a posted sale or accepted quotation'}

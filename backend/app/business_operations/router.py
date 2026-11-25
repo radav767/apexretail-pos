@@ -271,3 +271,9 @@ from .pricing_review import PricingReview
 async def pricing_review(order_id:UUID,data:PricingReview,svc=Depends(service)):
     from .pricing_review import review
     return await review(svc,order_id,data)
+
+from .saved_pricing import SavePricing
+@router.post('/orders/{order_id}/quotation-pricing')
+async def save_quotation_pricing(order_id:UUID,data:SavePricing,svc=Depends(service)):
+    from .saved_pricing import save
+    return await save(svc,order_id,data)

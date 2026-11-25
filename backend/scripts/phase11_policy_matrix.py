@@ -85,13 +85,20 @@ def assess(row):
     if policy == 'new_business_write':
         gap = 'service_direct_call_and_exact_replay_acceptance_pending'
         if observed == 'service_or_exception_policy': gap = 'write_license_gap_requires_transaction_specific_guard'
+    if method=='POST' and path.endswith('/ready') and domain=='printing':
+        replay='Current actor/epoch/register/station and original sending claim nonce; read-only authorization before transport, no attempt or delivery result mutation'
+        gap='physical_printer_and_installed_device_acceptance_pending'
+    if method=='POST' and path.endswith('/quotation-pricing'):
+        sources+=';business_operations/saved_pricing.py'
+        policy='test_only_saved_quotation_plan'
+        replay='Current identity/epoch/register and full UUID/payload proof before original saved result; new plans require licensed current draft and explicit test mode; no stock/payment effect'
     exact = method == 'POST' and (
         path in {'/api/customers/checkout', '/api/sales', '/api/sales/refunds', '/api/expenses', '/api/credit/settlements', '/api/inventory/stock-take',
                  '/api/inventory/transfers', '/api/operations/orders', '/api/operations/offline/drafts',
                  '/api/operations/offline/edits', '/api/operations/offline/kitchen', '/api/operations/offline/kds',
                  '/api/operations/batches/stock', '/api/operations/batches/returns/inspect', '/api/operations/tips/entries',
                  '/api/shifts/open', '/api/shifts/current/cash-movements', '/api/shifts/offline-resolutions'}
-        or path.startswith('/api/operations/orders/') and path.endswith(('/settle','/quotation-transition','/quotation-revision'))
+        or path.startswith('/api/operations/orders/') and path.endswith(('/settle','/quotation-transition','/quotation-revision','/quotation-pricing'))
         or domain == 'shifts' and path.endswith(('/cash-movements','/close','/manager-close')))
     if exact:
         observed = 'transaction_service_replay_policy'

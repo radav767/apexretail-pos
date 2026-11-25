@@ -450,7 +450,7 @@ class SalesService:
 
             line_total = (
                 selling_price * item.quantity
-                if level is not None
+                if level is not None and not getattr(self.repo,'quotation_pricing_capable',False)
                 else Decimal(item.line_total)
                 if item.line_total is not None
                 else selling_price * item.quantity
@@ -705,6 +705,7 @@ class SalesService:
             tax_amount = Decimal("0.00")
             total_amount = subtotal_amount
 
+        if getattr(self.repo,'quotation_pricing_capable',False):subtotal_amount,tax_amount,total_amount=self.repo.totals(sale_items)
         total = total_amount
 
         currency_snapshot = await self.currency_from_base(
@@ -768,6 +769,7 @@ class SalesService:
 
         from .refund_accounting import reconcile_sale_tax
         reconcile_sale_tax(sale_items, tax_amount, tax_inclusive)
+        if getattr(self.repo,'quotation_pricing_capable',False):self.repo.check(sale_items)
 
         credit_total=split_plan["credit"] if is_split else total
         if has_credit and customer is not None and not customer.unlimited_credit:

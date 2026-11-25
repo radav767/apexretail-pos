@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     document_delivery_mode: Literal['disabled','sink'] = 'disabled'
     document_delivery_key: SecretStr | None = None
     split_checkout_mode: Literal['disabled','test'] = 'disabled'
+    quotation_pricing_mode: Literal['disabled','test'] = 'disabled'
 
     @model_validator(mode='after')
     def validate_jwt_configuration(self):
@@ -77,6 +78,7 @@ class Settings(BaseSettings):
             try:Fernet(self.document_delivery_key.get_secret_value().encode())
             except (ValueError,TypeError):raise ValueError('DOCUMENT_DELIVERY_KEY must be a valid Fernet key') from None
         if self.split_checkout_mode=='test' and self.app_env!='test':raise ValueError('Split checkout test mode requires APP_ENV=test; production acceptance remains disabled')
+        if self.quotation_pricing_mode=='test' and self.app_env!='test':raise ValueError('Saved quotation pricing test mode requires APP_ENV=test')
         return self
 
     class Config:
