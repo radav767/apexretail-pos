@@ -14,3 +14,8 @@
 .product-selector-cards article { border:1px solid #cbd5e1; border-radius:8px; padding:12px; min-width:0; overflow-wrap:anywhere; }
 .product-selector-cards dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; }
 .product-selector-cards dd { margin:0; }
+@media (max-width:480px) {
+ .product-selector-cards dl { grid-template-columns:minmax(0,1fr); }
+ .product-selector-cards dt { font-weight:600; }
+ .product-selector-cards dd { margin-bottom:6px; }
+}

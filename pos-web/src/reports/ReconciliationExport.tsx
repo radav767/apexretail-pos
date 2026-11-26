@@ -1,9 +1,11 @@
+import {useToolAppearance} from "../preferences/appearance";
 import {useEffect,useRef,useState} from 'react';
 import {createPrintScope} from '../printing/context';
 
-type Client={get:(path:string,config:{params:Record<string,string>;responseType:'blob'})=>Promise<{data:Blob}>};
+type Client={get:<T=Blob>(path:string,config:{params:Record<string,string>;responseType?:'blob';signal?:AbortSignal})=>Promise<{data:T}>};
 /** Read-only download; a late response must retain the requesting identity. */
 export default function ReconciliationExport({companyId,branchId='',client}:{companyId:string;branchId?:string;client:Client}){
+ const theme=useToolAppearance(companyId,branchId,'reconciliation-export',client);
  const [start,setStart]=useState(()=>new Date(Date.now()-86400000).toISOString().slice(0,19));
  const [end,setEnd]=useState(()=>new Date().toISOString().slice(0,19));
  const [busy,setBusy]=useState(false),[message,setMessage]=useState('');
@@ -20,14 +22,14 @@ export default function ReconciliationExport({companyId,branchId='',client}:{com
   lock.current=true;setBusy(true);setMessage('');
   try{
    const params:Record<string,string>={start:from.toISOString(),end:to.toISOString()};if(branchId)params.branch_id=branchId;
-   const {data}=await client.get(`/reports/reconciliation/${companyId}/export.zip`,{params,responseType:'blob'});
+   const {data}=await client.get<Blob>(`/reports/reconciliation/${companyId}/export.zip`,{params,responseType:'blob'});
    if(!current())return;
    const url=URL.createObjectURL(data),link=document.createElement('a');link.href=url;link.download='reconciliation-v1.zip';link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
    setMessage('Snapshot downloaded. Review manifest and unknown historical values before reconciliation.');
   }catch{if(current())setMessage('Export unavailable. Check permissions, connection and interval; narrow intervals exceeding 10,000 events or receipts.');}
   finally{if(current()){lock.current=false;setBusy(false)}}
  }
- return <section aria-label="Read-only reconciliation export" className="reconciliation-export">
+ return <section aria-label="Read-only reconciliation export" className="reconciliation-export shared-tool-theme" data-tool-theme={theme}>
   <h3>Reconciliation snapshot</h3>
   <p>Read-only CSV/JSON bundle. Revenue, tax, payments, collections, debt, refunds, change and FX variance remain separate. No posting or live accounting integration.</p>
   <p>{branchId?'Selected branch only.':'All authorized branches; employees remain scoped to their branch.'} UTC start inclusive, end exclusive; maximum 366 days and 10,000 events/receipts.</p>

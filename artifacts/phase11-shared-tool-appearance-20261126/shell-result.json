@@ -1,0 +1,71 @@
+{
+  "company_id": "2f9f3898-e962-42b2-9403-8d756ceca20c",
+  "sale_id": "f3541457-27cb-4bca-98ec-e0c89ccf53ea",
+  "real_auth_navigation_PIN": true,
+  "legacy_acknowledgement_unchanged": true,
+  "lost_v2_save_exact_recovery": true,
+  "independent_key_device_inheritance_and_clear": true,
+  "system_light_dark_without_writes": true,
+  "normal_text_control_contrast_minimum": 4.5,
+  "focus_contrast_minimum": 3,
+  "control_min_height": 44,
+  "mobile390_large_text28_reflow": true,
+  "forced_colors_and_reduced_motion": true,
+  "native_receipt_JSON_unchanged": true,
+  "stale_appearance_read_after_logout_suppressed": true,
+  "darkColors": {
+    "root": {
+      "color": "rgb(243, 244, 246)",
+      "background": "rgb(17, 24, 39)",
+      "height": 562.21875,
+      "outline": "rgb(243, 244, 246)",
+      "width": "3px",
+      "outlineStyle": "none"
+    },
+    "input": {
+      "color": "rgb(243, 244, 246)",
+      "background": "rgb(11, 18, 32)",
+      "height": 44,
+      "outline": "rgb(243, 244, 246)",
+      "width": "3px",
+      "outlineStyle": "none"
+    },
+    "button": {
+      "color": "rgb(5, 46, 38)",
+      "background": "rgb(110, 231, 183)",
+      "height": 44,
+      "outline": "rgb(5, 46, 38)",
+      "width": "3px",
+      "outlineStyle": "none"
+    }
+  },
+  "lightColors": {
+    "root": {
+      "color": "rgb(21, 34, 56)",
+      "background": "rgb(255, 255, 255)",
+      "height": 562.21875,
+      "outline": "rgb(21, 34, 56)",
+      "width": "3px",
+      "outlineStyle": "none"
+    },
+    "input": {
+      "color": "rgb(21, 34, 56)",
+      "background": "rgb(255, 255, 255)",
+      "height": 44,
+      "outline": "rgb(21, 34, 56)",
+      "width": "3px",
+      "outlineStyle": "none"
+    },
+    "button": {
+      "color": "rgb(255, 255, 255)",
+      "background": "rgb(6, 95, 70)",
+      "height": 44,
+      "outline": "rgb(255, 255, 255)",
+      "width": "3px",
+      "outlineStyle": "none"
+    }
+  },
+  "page_errors": [],
+  "unexpected_origins": [],
+  "full_workspace_native_AT_hardware_provider_acceptance": false
+}

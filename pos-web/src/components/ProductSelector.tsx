@@ -1,3 +1,4 @@
+import {validToolScheme,useResolvedToolTheme,type ToolScheme} from "../preferences/appearance";
 import {createPrintScope} from "../printing/context";
 import { useEffect, useId, useRef, useState } from "react";
 import "./product-selector.css";
@@ -9,16 +10,17 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
   companyId: string; branchId: string; scopeKey: string; value: string; selectedLabel?: string;
   onChange: (id: string, product: SelectionProduct) => void; client: Client; disabled?: boolean; label?: string; categoryId?: string;
 }) {
-  const [preference,setPreference] = useState<{scope:string;view:"table"|"cards"}|null>(null),[preferenceEpoch,setPreferenceEpoch]=useState(0);
+  const [preference,setPreference] = useState<{scope:string;view:"table"|"cards";scheme:ToolScheme}|null>(null),[preferenceEpoch,setPreferenceEpoch]=useState(0);
   const preferenceScope=JSON.stringify([companyId,branchId,scopeKey,disabled]);
   const view=preference?.scope===preferenceScope?preference.view:"table";
+  const theme=useResolvedToolTheme(preference?.scope===preferenceScope?preference.scheme:"light");
   useEffect(()=>{const changed=()=>setPreferenceEpoch(n=>n+1);window.addEventListener("selector-preferences-changed",changed);window.addEventListener("business-context-changed",changed);return()=>{window.removeEventListener("selector-preferences-changed",changed);window.removeEventListener("business-context-changed",changed)}},[]);
   useEffect(()=>{
     const controller=new AbortController(),context=createPrintScope();setPreference(null);
     if(companyId&&branchId&&!disabled){
       const device=localStorage.getItem("branch_id")===branchId&&!sessionStorage.getItem("backoffice_user_id")?localStorage.getItem("device_id"):null;
-      void client.get<{effective:{selector_view?:unknown}}>(`/settings/preferences/${companyId}`,{params:{branch_id:branchId,...(device?{device_id:device}:{})},signal:controller.signal}).then(({data})=>{
-        if(!controller.signal.aborted&&context.isCurrent()&&(data.effective?.selector_view==="table"||data.effective?.selector_view==="cards"))setPreference({scope:preferenceScope,view:data.effective.selector_view});
+      void client.get<{effective:{selector_view?:unknown;tool_color_scheme?:unknown}}>(`/settings/preferences/${companyId}`,{params:{branch_id:branchId,...(device?{device_id:device}:{})},signal:controller.signal}).then(({data})=>{
+        if(!controller.signal.aborted&&context.isCurrent()&&(data.effective?.selector_view==="table"||data.effective?.selector_view==="cards"))setPreference({scope:preferenceScope,view:data.effective.selector_view,scheme:validToolScheme(data.effective.tool_color_scheme)||"light"});
       }).catch(()=>{});
     }
     return()=>controller.abort();
@@ -48,7 +50,7 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
   }, [client, companyId, branchId, scopeKey, query, categoryId, page, disabled, retry, scope]);
   function choose(product: SelectionProduct) { if (busy || disabled || !visible || !resultGuard.current?.isCurrent()) return; setChoice(product); onChange(product.id, product); searchInput.current?.focus(); }
   const rows = visible?.items || [];
-  return <div className="product-selector">
+  return <div className="product-selector shared-tool-theme" data-tool-theme={theme}>
     <label htmlFor={id}>{label}: search name, SKU or barcode</label>
     <input id={id} ref={searchInput} type="search" autoComplete="off" value={query} disabled={disabled || !branchId} aria-controls={`${id}-results`} aria-describedby={`${id}-status`}
       onChange={e => { setQuery(e.target.value); setPage(1); }} onKeyDown={e => {

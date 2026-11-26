@@ -1,0 +1,63 @@
+{
+  "frozen_commit": "d704b4c",
+  "legacy_fingerprint_cases": [
+    {
+      "scope": "company",
+      "preferences": {},
+      "unchanged_hash": "61c77bd3a1b375dc726a2598e9b1b592be918e0abce3a7edbbd878a7de0b52ce"
+    },
+    {
+      "scope": "company",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "90cbb17ab456cfd3a15d5df55a572d2629a1a5ba23b90ce638667c84d0444836"
+    },
+    {
+      "scope": "company",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "61c77bd3a1b375dc726a2598e9b1b592be918e0abce3a7edbbd878a7de0b52ce"
+    },
+    {
+      "scope": "branch",
+      "preferences": {},
+      "unchanged_hash": "e7706755ff427975cc7aac3d898c1117ba9d3d0c8b1c8856c5a82e3f0967b90c"
+    },
+    {
+      "scope": "branch",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "3cd169875816dea9c3cd00773fc2f364991dfc3cd88dd92c7251d1e6c05b5162"
+    },
+    {
+      "scope": "branch",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "e7706755ff427975cc7aac3d898c1117ba9d3d0c8b1c8856c5a82e3f0967b90c"
+    },
+    {
+      "scope": "device",
+      "preferences": {},
+      "unchanged_hash": "da2aaa057d9722e8ad2c64d05b8a0aa03abaa4d3581fe8fe9daf13d6a0c3d195"
+    },
+    {
+      "scope": "device",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "e0bf974f637b6426edcf7eaae2a1435722a0a68dc40a406b9d0e626eeedeeb98"
+    },
+    {
+      "scope": "device",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "da2aaa057d9722e8ad2c64d05b8a0aa03abaa4d3581fe8fe9daf13d6a0c3d195"
+    }
+  ],
+  "database_connected": false
+}

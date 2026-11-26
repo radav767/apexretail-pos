@@ -17,7 +17,7 @@ class PresentationPreferenceTests(unittest.IsolatedAsyncioTestCase):
     async def read(self,**params):
         response=await self.client.get(f'/api/settings/preferences/{self.c}',params=params);self.assertEqual(response.status_code,200,response.text);return response.json()
     async def test_precedence_clear_scopes_and_current_device_revision(self):
-        self.assertEqual((await self.read())['effective'],{'selector_view':'table'})
+        self.assertEqual((await self.read())['effective'],{'selector_view':'table','tool_color_scheme':'light'})
         company,_=await self.put()
         self.assertEqual((await self.read(branch_id=str(self.b)))['sources']['selector_view'],'company')
         branch,_=await self.put('branch',branch_id=str(self.b),values={'selector_view':'table'})
@@ -69,3 +69,30 @@ class PresentationPreferenceTests(unittest.IsolatedAsyncioTestCase):
         await self.db.rollback()
         self.assertEqual((await self.read())['effective']['selector_view'],'table')
         await self.put()
+
+    async def test_v2_colour_precedence_preserves_legacy_fingerprints_acknowledgements_and_owned_keys(self):
+        from app.sales.commands import fingerprint
+        from app.business_settings.preferences import SavePreferences
+        original,legacy=await self.put()
+        old_hash=fingerprint(SavePreferences(**legacy))
+        async def v2(scope,version,values,**fields):
+            body={'contract_version':'presentation-preferences-v2','company_id':str(self.c),'request_id':str(uuid4()),'scope':scope,'version':version,'preferences':values,**fields}
+            response=await self.client.put(f'/api/settings/preferences/{self.c}',json=body);self.assertEqual(response.status_code,200,response.text);return response.json(),body
+        saved,body=await v2('company',1,{'selector_view':'cards','tool_color_scheme':'dark'})
+        self.assertEqual((await self.read())['effective'],{'selector_view':'cards','tool_color_scheme':'dark'})
+        replay=await self.client.put(f'/api/settings/preferences/{self.c}',json=legacy);self.assertEqual(replay.json(),original)
+        self.assertEqual((await self.db.get(WorkflowCommand,UUID(legacy['request_id']))).payload_hash,old_hash)
+        # Legacy calls continue to own only selector_view, not newer overrides.
+        await self.put(version=2,values={'selector_view':'table'})
+        self.assertEqual((await self.read())['effective'],{'selector_view':'table','tool_color_scheme':'dark'})
+        await v2('branch',0,{'tool_color_scheme':'system'},branch_id=str(self.b))
+        result=await self.read(branch_id=str(self.b));self.assertEqual(result['effective']['tool_color_scheme'],'system');self.assertEqual(result['sources']['tool_color_scheme'],'branch');self.assertEqual(result['sources']['selector_view'],'company')
+        await v2('device',0,{'tool_color_scheme':'light'},branch_id=str(self.b),device_id=str(self.device.id))
+        result=await self.read(branch_id=str(self.b),device_id=str(self.device.id));self.assertEqual(result['effective']['tool_color_scheme'],'light');self.assertEqual(result['sources']['tool_color_scheme'],'device')
+        await v2('device',1,{},branch_id=str(self.b),device_id=str(self.device.id))
+        self.assertEqual((await self.read(branch_id=str(self.b),device_id=str(self.device.id)))['effective']['tool_color_scheme'],'system')
+        await v2('company',3,{})
+        self.assertEqual((await self.read())['effective'],{'selector_view':'table','tool_color_scheme':'light'})
+        bad={**body,'request_id':str(uuid4()),'version':4,'preferences':{'tool_color_scheme':'url(https://provider.invalid)'}}
+        self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json=bad)).status_code,422)
+        self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json={**legacy,'preferences':{'tool_color_scheme':'dark'}})).status_code,422)
