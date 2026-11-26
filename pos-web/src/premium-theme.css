@@ -932,8 +932,7 @@ a:focus-visible {
 .pos-inventory-feature-stock-adjustments > .pos-module-card:first-child,
 .pos-inventory-feature-inventory-overview > .pos-module-card:nth-child(2),
 .pos-inventory-feature-inventory-activity > .pos-module-card:nth-child(3) { display: block; }
-.pos-inventory-feature-goods-received .pos-module-management-grid > .pos-module-subcard:nth-child(2),
-.pos-inventory-feature-stock-adjustments .pos-module-management-grid > .pos-module-subcard:first-child { display: none; }
+/* Each feature now renders only its authorized form; positional hiding would hide adjustments. */
 .pos-inventory-feature-goods-received .pos-module-management-grid,
 .pos-inventory-feature-stock-adjustments .pos-module-management-grid { grid-template-columns: minmax(0, 1fr); }
 

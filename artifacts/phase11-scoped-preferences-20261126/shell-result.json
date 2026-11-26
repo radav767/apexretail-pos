@@ -1,0 +1,20 @@
+{
+  "company_id": "64549fce-5383-4913-872c-d967d1cfcfae",
+  "branch_id": "de76cad3-f1b4-4476-9e4d-da26a16ee376",
+  "sale_id": "8141be4f-d244-4ca8-8684-f174085ddebf",
+  "real_shell_auth_navigation": true,
+  "lost_preference_response_exact_body": true,
+  "company_version": 1,
+  "device_version": 2,
+  "device_table_then_clear_company_cards": true,
+  "POS_receiving_and_adjustment_shared_selector": true,
+  "settings_deep_link_reload_back_and_receipts_preserved": true,
+  "selector_mobile390_keyboard_semantics": true,
+  "stale_preference_after_logout_suppressed": true,
+  "stale_product_search_after_POS_logout_suppressed": true,
+  "POS_logout_revoked_cached_owner_status": 401,
+  "BO_reauthenticated_before_independent_logout_case": true,
+  "page_errors": [],
+  "unexpected_origins": [],
+  "physical_provider_AT_acceptance": false
+}

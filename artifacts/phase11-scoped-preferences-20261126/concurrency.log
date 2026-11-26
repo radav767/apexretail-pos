@@ -1,0 +1,1 @@
+{"company_id": "f6777687-fd77-4f96-a44d-0b7f70ef53c6", "three_equal_requests_one_projection": true, "stale_distinct_writers_one_winner_one_409": true, "commands": 3, "device_reassignment_old_request_status": 409, "new_assignment_inherits": true, "stock_payment_effects": 0}

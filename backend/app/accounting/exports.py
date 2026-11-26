@@ -103,8 +103,9 @@ def package(snapshot):
             'Signed billed revenue/tax are separate from original payments, collections, refunds and debt deltas.',
             'Cash tender/change and frozen FX allocation/tender-change variance are distinct measures; never sum currencies.',
             'Null historical snapshots remain unknown, never zero. Raw JSON is lossless; CSV text is formula-neutralised.',
-            'All CSV pages belong to one SQL statement. Downloaded bytes are immutable locally; no server retention or resumable snapshot ID.',
+            'All CSV pages belong to one SQL statement. Preserve the original downloaded bundle; no server retention or resumable snapshot ID.',
             'Receipt discount/subtotal reflect stored evidence; unknown legacy discounts remain null.',
+            'Hashes detect changes relative to the supplied manifest; this unsigned bundle is not proof of authenticity.',
         ],
     }
     files['manifest.json'] = json.dumps(manifest,sort_keys=True,ensure_ascii=False,indent=2).encode('utf-8')

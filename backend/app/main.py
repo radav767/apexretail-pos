@@ -22,6 +22,7 @@ from app.devices import router as devices
 from app.employees import router as employees
 from app.reports import router as reports
 from app.business_settings import router as business_settings
+from app.business_settings.preferences import router as presentation_preferences_router
 from app.subscriptions import router as subscriptions
 from app.subscriptions.platform_router import platform, business as commercial_billing
 from app.customers import router as customers
@@ -111,6 +112,7 @@ app.include_router(devices.router, prefix="/api")
 app.include_router(employees.router, prefix="/api")
 app.include_router(reports, prefix="/api")
 app.include_router(business_settings.router, prefix="/api")
+app.include_router(presentation_preferences_router, prefix="/api")
 app.include_router(subscriptions.router, prefix="/api")
 app.include_router(platform, prefix="/api")
 app.include_router(commercial_billing, prefix="/api")

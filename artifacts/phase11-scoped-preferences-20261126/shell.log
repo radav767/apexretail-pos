@@ -1,0 +1,21 @@
+PREF GET  {"selector_view":"table"}
+PREF PUT  {"contract_version":"selector-preferences-v1","scope":"company","device_id":null,"assignment_revision":null,"preferences":{"selector_view":"cards"}}
+PREF PUT  {"scope":"company","device_id":null,"preferences":{"selector_view":"cards"},"contract_version":"selector-preferences-v1","assignment_revision":null}
+BO lost response recovered exact request
+PREF GET  {"selector_view":"cards"}
+POS settings navigation
+PREF GET  {"selector_view":"cards"}
+PREF GET ?branch_id=de76cad3-f1b4-4476-9e4d-da26a16ee376&device_id=a101db38-43fe-43c7-ac1f-a9543cda7c4f {"selector_view":"cards"}
+PREF PUT  {"contract_version":"selector-preferences-v1","scope":"device","device_id":"a101db38-43fe-43c7-ac1f-a9543cda7c4f","assignment_revision":1,"preferences":{"selector_view":"table"}}
+POS receiving selector
+PREF GET ?branch_id=de76cad3-f1b4-4476-9e4d-da26a16ee376&device_id=a101db38-43fe-43c7-ac1f-a9543cda7c4f {"selector_view":"table"}
+POS settings navigation
+PREF GET  {"selector_view":"cards"}
+PREF GET ?branch_id=de76cad3-f1b4-4476-9e4d-da26a16ee376&device_id=a101db38-43fe-43c7-ac1f-a9543cda7c4f {"selector_view":"table"}
+PREF PUT  {"contract_version":"selector-preferences-v1","scope":"device","device_id":"a101db38-43fe-43c7-ac1f-a9543cda7c4f","assignment_revision":1,"preferences":{}}
+POS receiving selector
+PREF GET ?branch_id=de76cad3-f1b4-4476-9e4d-da26a16ee376&device_id=a101db38-43fe-43c7-ac1f-a9543cda7c4f {"selector_view":"cards"}
+PREF GET ?branch_id=de76cad3-f1b4-4476-9e4d-da26a16ee376&device_id=a101db38-43fe-43c7-ac1f-a9543cda7c4f {"selector_view":"cards"}
+PREF GET  {"selector_view":"cards"}
+PREF GET ?branch_id=de76cad3-f1b4-4476-9e4d-da26a16ee376 {"selector_view":"cards"}
+{"company_id":"64549fce-5383-4913-872c-d967d1cfcfae","branch_id":"de76cad3-f1b4-4476-9e4d-da26a16ee376","sale_id":"8141be4f-d244-4ca8-8684-f174085ddebf","real_shell_auth_navigation":true,"lost_preference_response_exact_body":true,"company_version":1,"device_version":2,"device_table_then_clear_company_cards":true,"POS_receiving_and_adjustment_shared_selector":true,"settings_deep_link_reload_back_and_receipts_preserved":true,"selector_mobile390_keyboard_semantics":true,"stale_preference_after_logout_suppressed":true,"stale_product_search_after_POS_logout_suppressed":true,"POS_logout_revoked_cached_owner_status":401,"BO_reauthenticated_before_independent_logout_case":true,"page_errors":[],"unexpected_origins":[],"physical_provider_AT_acceptance":false}

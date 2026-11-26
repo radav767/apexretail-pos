@@ -1,3 +1,4 @@
+import PresentationPreferences from "../../../pos-web/src/components/PresentationPreferences";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api/client";
@@ -19,7 +20,8 @@ type SettingsSection =
   | "devices"
   | "printers"
   | "tips"
-  | "fiscal";
+  | "fiscal"
+  | "presentation";
 
 type AggregateSettings = {
   company_id: string;
@@ -224,8 +226,12 @@ export default function SettingsPage({
   companyId: string;
   onDataChanged?: () => void;
 }) {
-  const [section, setSection] =
-    useState<SettingsSection>("home");
+  const validSections = ["home","company","currencies","shops","receipts","subscription","devices","printers","tips","fiscal","presentation"];
+  function fromLocation():SettingsSection{const value=new URLSearchParams(window.location.search).get("settings_section")||"home";return validSections.includes(value)?value as SettingsSection:"home"}
+  const [section, changeSection] = useState<SettingsSection>(fromLocation);
+  const [settingsSearch,setSettingsSearch]=useState("");
+  function setSection(next:SettingsSection){changeSection(next);const url=new URL(window.location.href);if(next==="home")url.searchParams.delete("settings_section");else url.searchParams.set("settings_section",next);window.history.pushState(null,"",url)}
+  useEffect(()=>{const sync=()=>changeSection(fromLocation());window.addEventListener("popstate",sync);return()=>window.removeEventListener("popstate",sync)},[]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -265,6 +271,7 @@ export default function SettingsPage({
 
   const summaryCards = useMemo(
     () => [
+      { id: "presentation" as const, title: "Presentation", description: "Company, branch and device product search defaults." },
       { id: "fiscal" as const, title: "Fiscalisation", description: "Device setup, draft tax mappings and commissioning status." },
       { id: "tips" as const, title: "Tips & Service Charges", description: "Policies, entitlements, payouts and reports." },
       { id: "printers" as const, title: "Printers & kitchen", description: "Stations, product routing and print queue." },
@@ -728,9 +735,10 @@ export default function SettingsPage({
         </div>
       ) : null}
 
+      {section === "home" && <label>Find settings<input type="search" value={settingsSearch} onChange={e=>setSettingsSearch(e.target.value)} /></label>}
       {section === "home" ? (
         <section className="settings-home-grid">
-          {summaryCards.map((card) => (
+          {summaryCards.filter(card => `${card.title} ${card.description}`.toLowerCase().includes(settingsSearch.trim().toLowerCase())).map((card) => (
             <button
               key={card.id}
               className="settings-home-card"
@@ -744,6 +752,7 @@ export default function SettingsPage({
         </section>
       ) : null}
 
+      {section === "presentation" && <PresentationPreferences key={companyId} companyId={companyId} client={api}/>}
       {section === "printers" && <PrinterManagement companyId={companyId} api={api} canManage />}
       {section === "tips" && <TipsSettingsPanel companyId={companyId} />}
       {section === "fiscal" && <FiscalSettingsPanel key={companyId} companyId={companyId} />}

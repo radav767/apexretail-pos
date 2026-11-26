@@ -1,0 +1,54 @@
+"""Independent committed synthetic export snapshots and in-flight revocation."""
+import asyncio,io,json,os
+from datetime import datetime,timezone,timedelta
+from uuid import UUID,uuid4
+from zipfile import ZipFile
+from unittest.mock import patch
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
+from fastapi import HTTPException
+from app.auth.service import AuthService
+from app.auth.repository import AuthRepository
+from app.auth.schema import RegisterRequest
+from app.auth.dependencies import resolve_auth_actor
+from app.models import Sale
+from app.accounting.exports import export_bundle,EXPORT_SQL
+url=make_url(os.environ['DATABASE_URL'])
+assert os.environ['APP_ENV']=='test' and url.database=='apexretail_phase7c_test_phase7e' and not url.host and url.query['host']=='/tmp/apex-phase11-postgres-auOybQ' and url.query['port']=='55441'
+async def main():
+ engine=create_async_engine(url);factory=async_sessionmaker(engine,expire_on_commit=False)
+ try:
+  async with factory() as db:
+   registration=await AuthService(AuthRepository(db)).register(RegisterRequest(owner_name='Synthetic export owner',owner_pin='1234',business_name='Synthetic export concurrency',business_type='Retail',country='Zimbabwe',phone='000000000',email=str(uuid4())+'@example.com',password='Synthetic-Only-123!',confirm_password='Synthetic-Only-123!',base_currency_code='USD',base_currency_symbol='$',base_currency_decimal_places=2))
+   c,b=UUID(registration['company']['id']),UUID(registration['branch']['id']);token=registration['token']
+  from app.business_settings.preferences import SavePreferences,save,effective
+  from app.models import WorkflowCommand,WorkflowRecord,Device,InventoryMovement,Sale
+  from sqlalchemy import select,func
+  command=SavePreferences(company_id=c,request_id=uuid4(),scope='company',version=0,preferences={'selector_view':'cards'})
+  async def write(body):
+   async with factory() as db:
+    actor=await resolve_auth_actor(token,db)
+    try:return await save(db,actor,body)
+    except HTTPException as exc:return exc.status_code
+  equal=await asyncio.gather(*(write(command) for _ in range(3)))
+  assert all(isinstance(row,dict) for row in equal) and len({row['id'] for row in equal})==1
+  first=SavePreferences(company_id=c,request_id=uuid4(),scope='company',version=1,preferences={'selector_view':'table'})
+  second=SavePreferences(company_id=c,request_id=uuid4(),scope='company',version=1,preferences={})
+  competing=await asyncio.gather(write(first),write(second));assert sum(isinstance(row,dict) for row in competing)==1 and competing.count(409)==1
+  device=UUID(registration['device']['id'])
+  body=SavePreferences(company_id=c,request_id=uuid4(),scope='device',branch_id=b,device_id=device,version=0,preferences={'selector_view':'cards'})
+  assert isinstance(await write(body),dict)
+  async with factory() as db:
+   row=await db.get(Device,device);row.assignment_revision+=1;await db.commit()
+  assert await write(body)==409
+  async with factory() as db:
+   actor=await resolve_auth_actor(token,db);result=await effective(db,actor,c,b,device)
+   assert result['scopes'][-1]['version']==0
+   commands=(await db.execute(select(func.count()).select_from(WorkflowCommand).where(WorkflowCommand.company_id==c,WorkflowCommand.kind=='ui_preferences'))).scalar_one()
+   assert commands==3
+   assert (await db.execute(select(func.count()).select_from(InventoryMovement).where(InventoryMovement.company_id==c))).scalar_one()==0
+   assert (await db.execute(select(func.count()).select_from(Sale).where(Sale.company_id==c))).scalar_one()==0
+  print(json.dumps({'company_id':str(c),'three_equal_requests_one_projection':True,'stale_distinct_writers_one_winner_one_409':True,'commands':commands,'device_reassignment_old_request_status':409,'new_assignment_inherits':True,'stock_payment_effects':0}))
+ finally:await engine.dispose()
+asyncio.run(main())

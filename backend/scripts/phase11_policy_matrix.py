@@ -208,6 +208,11 @@ def assess(row):
         sources += ';accounting/tender_flows.py;shifts/split_accounting.py'
         replay = 'Current identity/revocation/revenue and collection permissions plus own event tenant/branch/shift. Aware UTC half-open <=366day window; one statement independently aggregates original/refund revenue, applied payments, debt and original cash units with frozen FX residuals. Exact committed commands contribute once. Historical read survives expiry; no provider/posting authority or current-rate reconstruction.'
         gap = 'synthetic_dates_boundaries_fx_replay_and_shift_close_lock_orders_verified_receipt_ui_full_device_acceptance_pending'
+    if path.startswith('/api/settings/preferences/'):
+        sources += ';business_settings/preferences.py;workflows/core.py'
+        policy = 'scoped_presentation_read_or_exact_command'
+        replay = 'Current epoch/tenant/authorized branch/register; company defaults require owner/admin for writes. Versioned company-branch-device presentation only, device assignment revision bound. New saves require business-settings permission/license; immutable exact UUID/body/actor/register acknowledgement recovery precedes license. Scope lock and expected version fence competing writes; no stock/payment/terminal authority.'
+        gap = 'synthetic_inheritance_clear_role_expiry_rollback_and_independent_equal_stale_assignment_races_verified_full_theme_and_canonical_ten_section_taxonomy_pending'
     if path.startswith('/api/reports/reconciliation/'):
         sources += ';accounting/exports.py;accounting/tender_flows.py'
         replay = 'Read-only current identity/epoch/revenue+credit authority and own event tenant/branch/shift; second revocation check before bytes. One statement snapshot; bounded internal CSV pages and lossless JSON preserve receipt revenue/tax independently from payments/debt/change/FX. Typed numeric columns and formula-neutralised text; no posting/provider/vendor integration or historical output mutation.'

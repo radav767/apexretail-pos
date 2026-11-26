@@ -1,3 +1,5 @@
+import PresentationPreferences from "./components/PresentationPreferences";
+import ProductSelector from "./components/ProductSelector";
 import ReconciliationExport from "./reports/ReconciliationExport";
 import { RefundCommands, refundActorStorageId } from "./refundCommand";
 import { createBootstrapScope } from "./api/authLifecycle";
@@ -267,7 +269,8 @@ type SettingsPageKey =
   | "printer"
   | "business"
   | "tax"
-  | "receipt";
+  | "receipt"
+  | "presentation";
 
 type ModuleFeature =
   | "home" | "transaction-history" | "cancel-void-sales" | "credit-settlement"
@@ -290,7 +293,7 @@ function featureFromLocation(moduleName: PosModuleName): ModuleFeature {
 
 function settingsPageFromLocation(): SettingsPageKey {
   const value = new URLSearchParams(window.location.search).get("feature");
-  return (["printer", "business", "tax", "receipt"] as SettingsPageKey[]).includes(value as SettingsPageKey)
+  return (["printer", "business", "tax", "receipt", "presentation"] as SettingsPageKey[]).includes(value as SettingsPageKey)
     ? value as SettingsPageKey : "home";
 }
 
@@ -2267,25 +2270,8 @@ export default function PosModulePage({
                     <p>{selectedBranchName}</p>
 
                     <div className="pos-module-form-grid">
-                      <label>
-                        Product
-                        <select
-                          value={receiveForm.product_id}
-                          onChange={(event) =>
-                            setReceiveForm((current) => ({
-                              ...current,
-                              product_id: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">Select product</option>
-                          {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                              {product.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <ProductSelector companyId={companyId} branchId={selectedBranchId} scopeKey={`${cashier?.id}:${localStorage.getItem("device_id") || ""}`} value={receiveForm.product_id} selectedLabel={products.find(product => product.id === receiveForm.product_id)?.name} onChange={id => setReceiveForm(current => ({...current,product_id:id}))} client={api} disabled={saving}/>
+
 
                       <label>
                         Quantity
@@ -2405,25 +2391,8 @@ export default function PosModulePage({
                     <p>Use this for removals, corrections, or physical counts.</p>
 
                     <div className="pos-module-form-grid">
-                      <label>
-                        Product
-                        <select
-                          value={adjustmentForm.product_id}
-                          onChange={(event) =>
-                            setAdjustmentForm((current) => ({
-                              ...current,
-                              product_id: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">Select product</option>
-                          {products.map((product) => (
-                            <option key={product.id} value={product.id}>
-                              {product.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <ProductSelector companyId={companyId} branchId={selectedBranchId} scopeKey={`${cashier?.id}:${localStorage.getItem("device_id") || ""}`} value={adjustmentForm.product_id} selectedLabel={products.find(product => product.id === adjustmentForm.product_id)?.name} onChange={id => setAdjustmentForm(current => ({...current,product_id:id}))} client={api} disabled={saving}/>
+
 
                       <label>
                         Adjustment type
@@ -2733,6 +2702,7 @@ export default function PosModulePage({
                 </div>
 
                 <div className="pos-settings-menu">
+                  {(cashier?.role === "owner" || cashier?.role === "administrator") && <button type="button" className="pos-settings-menu-item" onClick={()=>openSettingsPage("presentation")}><strong>Presentation</strong><span>Scoped product search defaults</span></button>}
                   <button
                     type="button"
                     className="pos-settings-menu-item"
@@ -2792,7 +2762,7 @@ export default function PosModulePage({
                   </button>
                   <div>
                     <h2>
-                      {activeSettingsPage === "printer"
+                      {activeSettingsPage === "presentation" ? "Presentation" : activeSettingsPage === "printer"
                         ? "Printer"
                         : activeSettingsPage === "business"
                           ? "Business"
@@ -2803,7 +2773,7 @@ export default function PosModulePage({
                   </div>
                 </div>
 
-                {activeSettingsPage === "printer" ? (
+                {activeSettingsPage === "presentation" ? (cashier?.role === "owner" || cashier?.role === "administrator" ? <PresentationPreferences key={`${companyId}:${cashier?.id}`} companyId={companyId} branchId={selectedBranchId} deviceId={localStorage.getItem("device_id") || ""} client={api}/> : <p>Presentation configuration requires owner or administrator access.</p>) : activeSettingsPage === "printer" ? (
                   <>
                     <PrinterPanel companyId={companyId} canManage={canManageSettings} />
                     {!canManageSettings && (

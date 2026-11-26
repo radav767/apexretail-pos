@@ -18,7 +18,7 @@ import test_phase11_tender_flows as fixtures
 
 class ExportEncodingTests(unittest.TestCase):
     def test_untrusted_text_and_typed_negative_money(self):
-        for value in ['=1+1','+cmd','-cmd','@SUM(A1)',' =1','\t harmless','\r=1','\n=1','\ufeff=1',' \t@cmd','\u2003=1',' \ufeff =1']:
+        for value in ['=1+1','+cmd','-cmd','@SUM(A1)',' =1','\t harmless','\r=1','\n=1','\ufeff=1',' \t@cmd','\u2003=1',' \ufeff =1','\x00=1',' \x00@cmd','\x7f=1']:
             self.assertTrue(csv_cell(value).startswith("'"),repr(value))
         rows=list(csv.reader(io.StringIO(csv_bytes([{'label':' \t=1','money':'-1.25'}],('label','money'),{'money'}).decode())))
         self.assertEqual(rows[1],["' \t=1",'-1.25'])
@@ -78,6 +78,19 @@ class ReconciliationExportTests(unittest.IsolatedAsyncioTestCase):
             if row['drawer_valuation'] is not None:
                 self.assertEqual(Decimal(row['drawer_valuation']),Decimal(row['applied_base'])-Decimal(row['allocation_variance'])+Decimal(row['tender_change_variance']))
 
+    async def test_tax_partial_final_refund_pennies_remain_separate_from_cash_and_debt(self):
+        await fixtures.fixtures.SplitRefundTests.test_original_fx_and_tax_penny_residuals_survive_configuration_change(self)
+        snapshot,_,archive=self.unpack(await self.download())
+        rows=[row for row in snapshot['receipts'] if row['base_code']=='USD']
+        self.assertEqual(len(rows),4)
+        self.assertEqual(sum(Decimal(row['tax']) for row in rows if row['kind']=='sale'),Decimal('.02'))
+        self.assertEqual(sum(Decimal(row['tax']) for row in rows if row['kind']=='refund'),Decimal('-.02'))
+        self.assertEqual(sum(Decimal(row['billed']) for row in rows),0)
+        totals=list(csv.DictReader(io.StringIO(archive.read('receipt-totals.csv').decode())))
+        self.assertEqual(sum(Decimal(row['billed']) for row in totals if row['base_code']=='USD'),0)
+        self.assertEqual(sum(Decimal(row['tax']) for row in totals if row['base_code']=='USD'),0)
+        self.assertEqual(await self.stock(),100)
+
     async def test_scope_permission_unknown_history_and_revocation(self):
         snapshot,_,_=self.unpack(await self.download())
         legacy=next(r for r in snapshot['events'] if r['source_id']==str(self.sale.id))
@@ -93,7 +106,12 @@ class ReconciliationExportTests(unittest.IsolatedAsyncioTestCase):
         employee=self.employee;employee.permissions={**employee.permissions,'revenue_view':True,'credit_settlements':True};await self.db.commit()
         own=await self.client.get(path,params=bounds,headers={'Authorization':'Bearer '+token})
         own_snapshot,_,_=self.unpack(own);self.assertEqual(own_snapshot['scope']['branch'],str(self.b))
-        other=Branch(company_id=self.c,shop_id=self.shop.id,name='Other synthetic branch');self.db.add(other);await self.db.commit()
+        other=Branch(company_id=self.c,shop_id=self.shop.id,name='Other synthetic branch');self.db.add(other);await self.db.flush()
+        self.db.add(Sale(company_id=self.c,branch_id=other.id,receipt_number='SCOPE-'+uuid4().hex,total_amount=999,subtotal_amount=999,tax_amount=0,payment_method='cash',created_at=datetime.now(timezone.utc)))
+        await self.db.commit()
+        all_branches,_,_=self.unpack(await self.download());self.assertEqual(all_branches['event_count'],2)
+        scoped,_,_=self.unpack(await self.client.get(path,params=bounds,headers={'Authorization':'Bearer '+token}));self.assertEqual(scoped['event_count'],1)
+        self.assertTrue(all(row['branch_id']==str(self.b) for row in scoped['receipts']))
         self.assertEqual((await self.client.get(path,params={**bounds,'branch_id':str(other.id)},headers={'Authorization':'Bearer '+token})).status_code,403)
         user=await self.db.get(User,self.u);user.session_version+=1;await self.db.commit()
         self.assertEqual((await self.download()).status_code,401)

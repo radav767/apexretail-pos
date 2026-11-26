@@ -9,3 +9,8 @@
 .product-selector button { min-height: 44px; }
 .product-selector-focused { background: #eff6ff; }
 .product-selector-pages { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+
+.product-selector-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:12px; max-height:420px; overflow:auto; }
+.product-selector-cards article { border:1px solid #cbd5e1; border-radius:8px; padding:12px; min-width:0; overflow-wrap:anywhere; }
+.product-selector-cards dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; }
+.product-selector-cards dd { margin:0; }
