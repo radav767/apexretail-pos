@@ -1,8 +1,10 @@
+import QuotationRecovery from "./QuotationRecovery";
+import {createPrintScope} from "../printing/context";
 import QuotationConversion from "./QuotationConversion";
 import type {PricingPlan} from "./QuotationPricing";
 import QuotationLifecycle from "./QuotationLifecycle";
 import ProductSelector from "../components/ProductSelector";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type SetStateAction } from "react";
 import type { PrintJob } from "../printing/queue";
 import "./business.css";
 import "./business-mobile.css";
@@ -40,12 +42,18 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
   const [view, setView] = useState<View>("home");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [options, setOptions] = useState<Record<string, Option[]>>({});
+  const [quoteOffset,setQuoteOffset]=useState(0);
+  const loadEpoch=useRef(0);
+  const [contextTick,setContextTick]=useState(0);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrderState] = useState<Order | null>(null);
+  const selectionScope=createPrintScope();
+  const setSelectedOrder=(value:SetStateAction<Order|null>)=>{if(selectionScope.isCurrent())setSelectedOrderState(value)};
+  const currentPage=useRef({view,quoteOffset});currentPage.current={view,quoteOffset};
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [splitQuantities, setSplitQuantities] = useState<Record<string, string>>({});
   const [error, setError] = useState(""); const [notice, setNotice] = useState(""); const [busy, setBusy] = useState(false);
@@ -99,19 +107,26 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
     restore(); window.addEventListener("popstate", restore); window.addEventListener("online", connectivity); window.addEventListener("offline", connectivity);
     return () => { window.removeEventListener("popstate", restore); window.removeEventListener("online", connectivity); window.removeEventListener("offline", connectivity); };
   }, []);
+  useEffect(()=>{const clear=()=>{loadEpoch.current++;setSelectedOrderState(null);setOrders([]);setOptions({});setProfile(null);setQuoteOffset(0);setContextTick(t=>t+1)};window.addEventListener('business-context-changed',clear);return()=>{loadEpoch.current++;window.removeEventListener('business-context-changed',clear)}},[]);
   useEffect(() => {
     if (!online) return;
-    void api.get<Profile>("/operations/profile").then(r => { setProfile(r.data); setProfileChoice(r.data.profile); setTip(r.data.tip_product_id || ""); setService(r.data.service_product_id || ""); setError(""); }).catch(e => setError(errorMessage(e)));
-  }, [api, companyId, online]);
+    const scope=createPrintScope();let active=true;
+    void api.get<Profile>("/operations/profile").then(r => { if(!active||!scope.isCurrent())return;setProfile(r.data); setProfileChoice(r.data.profile); setTip(r.data.tip_product_id || ""); setService(r.data.service_product_id || ""); setError(""); }).catch(e => {if(active&&scope.isCurrent())setError(errorMessage(e))});
+    return()=>{active=false};
+  }, [api, companyId, online,contextTick]);
   useEffect(() => {
     if (!online || !profile || (!profile.administrator && !["orders_manage", "orders_settle", "hospitality_manage", "batches_view", "batches_manage", "business_settings_manage", "quotations_manage"].some(p => profile.permissions[p]))) return;
-    void api.get<Record<string, Option[]>>("/operations/options").then(r => { setOptions(r.data); if (!branch && r.data.branches?.length) setBranch(r.data.branches[0].id); }).catch(e => setError(errorMessage(e)));
-  }, [api, branch, profile, online]);
+    const scope=createPrintScope();let active=true;
+    void api.get<Record<string, Option[]>>("/operations/options").then(r => { if(!active||!scope.isCurrent())return;setOptions(r.data); if (!branch && r.data.branches?.length) setBranch(r.data.branches[0].id); }).catch(e => {if(active&&scope.isCurrent())setError(errorMessage(e))});
+    return()=>{active=false};
+  }, [api, branch, profile, online,contextTick]);
   const load = useCallback(async () => {
     if (!online || !profile) return;
+    const scope=createPrintScope(),epoch=++loadEpoch.current;
     if (view === "tables") setTables((await api.get<Table[]>("/operations/tables")).data);
     if (view === "orders" || view === "quotations") {
-      const currentOrders=(await api.get<Order[]>(`/operations/orders${view === "quotations" ? "?kind=quotation" : ""}`)).data;
+      const currentOrders=(await api.get<Order[]>(`/operations/orders${view === "quotations" ? "?kind=quotation&limit=25&offset="+quoteOffset : ""}`)).data;
+      if(!scope.isCurrent()||epoch!==loadEpoch.current||currentPage.current.view!==view||currentPage.current.quoteOffset!==quoteOffset)return;
       setOrders(currentOrders);setSelectedOrder(previous=>previous?currentOrders.find(row=>row.id===previous.id)||previous:null);
       if (profile.features.includes("restaurant") && (allowed("orders_manage") || allowed("restaurant_manage"))) setTables((await api.get<Table[]>("/operations/tables")).data);
       if (profile.features.includes("hospitality") && allowed("hospitality_manage")) setRooms((await api.get<Room[]>("/operations/rooms")).data);
@@ -124,13 +139,13 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
     if (view === "rooms") setRooms((await api.get<Room[]>("/operations/rooms")).data);
     if (view === "batches") setBatches((await api.get<Batch[]>("/operations/batches")).data);
     setError("");
-  }, [api, view, profile, allowed, online, deviceId, kitchenCacheKey]);
+  }, [api, view, profile, allowed, online, deviceId, kitchenCacheKey,quoteOffset,companyId,contextTick]);
   useEffect(() => { void load().catch(e => setError(errorMessage(e))); }, [load]);
   useEffect(() => { if (view !== "kitchen" && view !== "bar") return; const timer = setInterval(() => { if (navigator.onLine) void load().catch(e => setError(errorMessage(e))); }, 10000); return () => clearInterval(timer); }, [load, view]);
   async function run(action: () => Promise<unknown>) {
     if (busy || !online) return;
-    setBusy(true); setError(""); setNotice("");
-    try { await action(); await load(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+    setBusy(true); setError(""); setNotice("");const scope=createPrintScope();
+    try { await action(); if(scope.isCurrent())await load(); } catch (e) { if(scope.isCurrent())setError(errorMessage(e)); } finally { setBusy(false); }
   }
   const disabled = busy || !online;
   const list = (key: string) => options[key] || [];
@@ -190,6 +205,7 @@ export default function BusinessOperations({ companyId, api, branchId = "", devi
     {view === "tables" && allowed("restaurant_manage") && <TableLayoutEditor tables={tables} disabled={disabled} save={draft => run(() => api.put(`/operations/tables/${draft.id}`, draft))} />}
     {(view === "orders" || view === "quotations") && <>{!selectedOrder ? <>
       {(allowed("orders_manage") || (view === "quotations" && allowed("quotations_manage"))) && <form className="business-form" onSubmit={e => { e.preventDefault(); void run(createOrder); }}>{selector("Branch", branch, setBranch, list("branches"), true)}{selector("Register", device || deviceId, setDevice, list("devices").filter(d => d.branch_id === branch), true)}{view !== "quotations" && selector("Table", table, setTable, tables.filter(t => t.branch_id === branch && t.active))}{(allowed("restaurant_manage") || profile?.administrator) && selector("Waiter", waiter, setWaiter, list("staff").filter(s => s.branch_id === branch))}{selector("Customer", customer, setCustomer, list("customers"))}{allowed("hospitality_manage") && selector("Guest room", guest, setGuest, rooms.flatMap(r => r.guests.map(g => ({ id: g.id, name: `${r.name} · ${list("customers").find(c => c.id === g.customer_id)?.name || "Guest"}` }))))}<button disabled={disabled} className="business-primary">{view === "quotations" ? "New quotation" : "Open order"}</button></form>}
+      {view==='quotations'&&<><QuotationRecovery<Order> companyId={companyId} actorKey={profile?.employee_id||'backoffice'} client={api} onOpen={selectOrder} disabled={disabled}/><nav aria-label="Quotation pages"><button type="button" disabled={disabled||quoteOffset===0} onClick={()=>setQuoteOffset(Math.max(0,quoteOffset-25))}>Newer quotations</button><span role="status">Quotations {quoteOffset+1}–{quoteOffset+orders.length}</span><button type="button" disabled={disabled||orders.length<25||quoteOffset>=100000} onClick={()=>setQuoteOffset(quoteOffset+25)}>Older quotations</button></nav></>}
       <div className="business-records">{orders.filter(o => view === "quotations" ? o.kind === "quotation" : o.kind !== "quotation").map(order => <button key={order.id} onClick={() => selectOrder(order)}><span className="business-badge">{order.status}</span><strong>{order.number}</strong><span>{order.table_name} · {order.waiter_name}</span><small>Estimated subtotal {order.estimated_subtotal}</small></button>)}{!orders.length && <p>No orders yet</p>}</div></> : <>
         <div className="business-bill-heading"><div><h3>{selectedOrder.number}</h3><p>{selectedOrder.table_name} · {selectedOrder.waiter_name}</p></div><span className="business-badge">{selectedOrder.status}</span><button onClick={() => setSelectedOrder(null)}>← Orders</button></div>
         {selectedOrder.kind === "quotation" && allowed("quotations_manage") && <QuotationLifecycle key={`${selectedOrder.id}:${profile?.employee_id || "backoffice"}`} order={selectedOrder} companyId={companyId} actorKey={profile?.employee_id || "backoffice"} client={api} pricingEnabled={profile?.quotation_pricing_enabled} products={list("products")} currencies={list("currencies")} onChanged={setSelectedOrder} disabled={disabled}/>}

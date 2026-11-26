@@ -1,0 +1,19 @@
+import {useEffect,useRef,useState} from 'react';
+import {createPrintScope} from '../printing/context';
+const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export default function QuotationRecovery<T extends {id:string;kind:string}>({companyId,actorKey,client,onOpen,disabled}:{companyId:string;actorKey:string;client:{get:<R>(path:string)=>Promise<{data:R}>};onOpen:(row:T)=>void;disabled:boolean}){
+ const actor=actorKey==='backoffice'?sessionStorage.getItem('backoffice_user_id')||'':actorKey;
+ const identity=`${companyId}:${actor}`;const activeIdentity=useRef(identity);activeIdentity.current=identity;
+ const [entries,setEntries]=useState<{id:string;labels:string[]}[]>([]),[offset,setOffset]=useState(0),[reference,setReference]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[bounded,setBounded]=useState(false);const alive=useRef(true),lock=useRef(false);
+ function scan(){try{const prefixes=[['apexretail_quotation_pricing_v2',actor,'pricing save'],['apexretail_quotation_conversion_v2',actor,'payment'],['apexretail_quotation_revision_v1',actor,'revision'],['apexretail_quotation_action_v1',actorKey,'workflow action']];const found=new Map<string,string[]>();
+  for(let i=0;i<Math.min(sessionStorage.length,10000);i++){const key=sessionStorage.key(i)||'';for(const [prefix,owner,label] of prefixes){const head=`${prefix}:${companyId}:${owner}:`;if(key.startsWith(head)){const id=key.slice(head.length);if(uuid.test(id))found.set(id,[...(found.get(id)||[]),label])}}}
+  setEntries([...found].sort(([a],[b])=>a.localeCompare(b)).map(([id,labels])=>({id,labels})));setBounded(sessionStorage.length>10000);setOffset(0);
+ }catch{setMessage('Retained request storage could not be read. Nothing was removed.')}}
+ useEffect(()=>{alive.current=true;scan();return()=>{alive.current=false}},[identity,actorKey]);
+ async function open(id:string){if(disabled||busy||lock.current||!actor||!uuid.test(id))return;lock.current=true;setBusy(true);setMessage('');const scope=createPrintScope(),owner=identity;const current=()=>alive.current&&activeIdentity.current===owner&&scope.isCurrent();
+  try{const {data}=await client.get<T>(`/operations/orders/${id}`);if(!current())return;if(data.id!==id||data.kind!=='quotation')throw Error();onOpen(data)}catch{if(current())setMessage('Quotation could not be confirmed in this account. Original requests remain saved.')}finally{lock.current=false;if(current())setBusy(false)}}
+ return <section aria-label="Quotation recovery"><h3>Retained quotation requests</h3><p>Open the original quotation to recover its saved request. This does not replay a payment or change stock.</p>{message&&<p role="status">{message}</p>}{bounded&&<p role="status">Storage exceeds the bounded discovery window. Use the original quotation reference; no requests were removed.</p>}
+ {entries.slice(offset,offset+25).map(row=><p key={row.id}><button type="button" disabled={disabled||busy} onClick={()=>void open(row.id)} aria-label={`Open retained quotation ${row.id}`}>{row.id} · {row.labels.join(', ')}</button></p>)}
+ {!entries.length&&<p>No retained quotation requests found for this actor.</p>}{entries.length>25&&<nav aria-label="Retained request pages"><button type="button" disabled={offset===0||busy} onClick={()=>setOffset(Math.max(0,offset-25))}>Previous retained requests</button><button type="button" disabled={offset+25>=entries.length||busy} onClick={()=>setOffset(offset+25)}>More retained requests</button></nav>}
+ <button type="button" disabled={busy} onClick={scan}>Refresh retained requests</button><label>Original quotation reference<input maxLength={36} value={reference} onChange={e=>setReference(e.target.value.trim())}/></label><button type="button" disabled={disabled||busy||!uuid.test(reference)} onClick={()=>void open(reference)}>Find original quotation</button></section>;
+}

@@ -35,6 +35,12 @@ SUMMARY_FIELDS = (
 )
 
 
+def disclosed_original_units(value,places):
+    if value is None:return None
+    exact=quantize_currency(value,places)
+    return exact if exact==value else value
+
+
 class ShiftService:
     def __init__(self, repo: ShiftRepository):
         self.repo = repo
@@ -89,6 +95,11 @@ class ShiftService:
                 "counted_cash": counted_cash,
                 "variance": variance,
             })
+            # API disclosure uses the frozen currency precision on first close
+            # and recovery alike. Preserve anomalous historical fractions for
+            # review rather than rounding evidence away.
+            for field in ('opening_float','cash_sales','cash_refunds','cash_settlements','cash_expenses','cash_in','cash_out','cash_paid_out','expected_cash','counted_cash','variance'):
+                currencies[-1][field]=disclosed_original_units(currencies[-1][field],row.decimal_places_snapshot)
         summary = {name: getattr(shift, name, None) for name in SUMMARY_FIELDS}
         summary["total_sales_base"] = summary["net_sales_base"]
         calculated_summary = None

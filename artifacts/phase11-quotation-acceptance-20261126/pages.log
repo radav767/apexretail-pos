@@ -1,0 +1,12 @@
+test_bounds_and_current_epoch_on_historical_pages (test_phase11_quotation_pages.QuotationPageTests) ... Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.167 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.255 seconds
+Executing <Task pending name='Task-1' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.451 seconds
+ok
+test_older_pages_tied_dates_stable_order_and_direct_old_reference (test_phase11_quotation_pages.QuotationPageTests) ... Executing <Task pending name='Task-5' coro=<IsolatedAsyncioTestCase._asyncioLoopRunner() running at /usr/lib/python3.10/unittest/async_case.py:101> wait_for=<Future pending cb=[BaseProtocol._on_waiter_completed(), Task.task_wakeup()] created at /usr/lib/python3.10/asyncio/base_events.py:429> created at /usr/lib/python3.10/unittest/async_case.py:117> took 0.241 seconds
+Executing <Handle _SelectorSocketTransport._read_ready() created at /usr/lib/python3.10/asyncio/selector_events.py:254> took 0.140 seconds
+ok
+
+----------------------------------------------------------------------
+Ran 2 tests in 2.201s
+
+OK

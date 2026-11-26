@@ -35,6 +35,7 @@ class CatalogAcceptanceTests(unittest.IsolatedAsyncioTestCase):
     async def saved(self):
         lines=[]
         for i in self.order['items']:
+            if Decimal(i['quantity'])<=0:continue
             lines.append({'item_id':i['id'],'quantity':i['quantity'],'unit':i['unit'],'discount':1 if i['variant_id']==self.first.id else Decimal('.5') if i['variant_id']==self.second.id else 0})
         proposal=PricingReview(version=self.order['version'],lines=lines,sale_discount=2)
         priced=await review(self.svc,self.order['id'],proposal)
@@ -77,3 +78,50 @@ class CatalogAcceptanceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(error.exception.status_code,409,(field,error.exception.detail))
             setattr(entity,field,previous);await self.db.commit()
         self.assertEqual((await self.db.execute(select(func.count(InventoryMovement.id)).where(InventoryMovement.company_id==self.company.id))).scalar_one(),0)
+    async def test_unrepresentable_foreign_tender_rejects_before_stock_or_proof(self):
+        from datetime import datetime,timezone,timedelta
+        from app.models import CompanyCurrency,CurrencyExchangeRate,SaleCommandReceipt
+        await self.configured()
+        settings=(await self.db.execute(select(CompanySetting).where(CompanySetting.company_id==self.company.id))).scalar_one();settings.multi_currency_enabled=True
+        cur=CompanyCurrency(company_id=self.company.id,code='SY0',display_name='Synthetic zero',symbol='S0',decimal_places=0,active=True,is_base=False);self.db.add(cur);await self.db.flush();self.db.add(CurrencyExchangeRate(company_id=self.company.id,currency_id=cur.id,currency_code='SY0',foreign_units_per_base=2,effective_at=datetime.now(timezone.utc)-timedelta(days=1),created_by_user_id=self.user.id));await self.db.commit()
+        proposal=PricingReview(version=self.order['version'],currency_code='SY0',lines=[{'item_id':i['id'],'quantity':i['quantity'],'unit':i['unit']} for i in self.order['items']]);priced=await review(self.svc,self.order['id'],proposal);await save(self.svc,self.order['id'],SavePricing(**proposal.model_dump(),request_id=uuid4(),expected_total=priced['total'],expected_display_total=priced['display_total']));self.order=await self.svc.order_out(await self.svc.order(self.order['id']));await self.accept()
+        command=self.payment().model_copy(update={'payment':self.payment().payment.model_copy(update={'tendered_amount_original':Decimal('1000.0001')})})
+        result=await self.client.post('/api/operations/orders/'+str(self.order['id'])+'/settle',json=command.model_dump(mode='json'));self.assertEqual(result.status_code,422,result.text)
+        self.assertIsNone(await self.db.get(SaleCommandReceipt,self.order['id']))
+        self.assertEqual((await self.db.execute(select(func.count(InventoryMovement.id)).where(InventoryMovement.company_id==self.company.id))).scalar_one(),0)
+    async def test_recipe_repeated_position_and_non_two_decimal_base_remain_gated(self):
+        from sqlalchemy import update
+        from app.models import CompanyCurrency
+        await self.configured();pid=self.product.id;company=self.company.id
+        self.order=await self.svc.add_item(self.order['id'],OrderItemInput(version=self.order['version'],product_id=pid,variant_id=self.first.id,quantity=1))
+        body={'version':self.order['version'],'lines':[{'item_id':str(i['id']),'quantity':str(i['quantity']),'unit':i['unit']} for i in self.order['items']]}
+        async def denied(fragment):
+            review_response=await self.client.post('/api/operations/orders/'+str(self.order['id'])+'/pricing/review',json=body);self.assertEqual(review_response.status_code,200,review_response.text);priced=review_response.json()
+            result=await self.client.post('/api/operations/orders/'+str(self.order['id'])+'/quotation-pricing',json={**body,'request_id':str(uuid4()),'expected_total':priced['total'],'expected_display_total':priced['display_total']});self.assertEqual(result.status_code,409,result.text);self.assertIn(fragment,result.json()['detail'])
+        await denied('repeated')
+        await self.db.execute(update(Product).where(Product.id==pid).values(product_type='bundle'));await self.db.commit();await denied('recipe')
+        await self.db.execute(update(Product).where(Product.id==pid).values(product_type='standard'));await self.db.execute(update(CompanyCurrency).where(CompanyCurrency.company_id==company,CompanyCurrency.is_base.is_(True)).values(decimal_places=0));await self.db.commit();await denied('Non-two-decimal')
+        self.assertEqual((await self.db.execute(select(func.count(InventoryMovement.id)).where(InventoryMovement.company_id==company))).scalar_one(),0)
+
+    async def test_removed_position_is_retained_but_not_priced_or_moved(self):
+        from app.business_operations.schema import ItemUpdate
+        await self.configured();await self.saved();removed=next(i for i in self.order['items'] if i['product_id']==self.other.id)
+        self.order=await self.svc.edit_item(self.order['id'],removed['id'],ItemUpdate(version=self.order['version'],quantity=0,notes='Synthetic removed position'))
+        plan=(await self.saved())['quotation_pricing'];self.assertEqual(len(plan['items']),2);await self.accept()
+        command=self.payment();command=command.model_copy(update={'payment':command.payment.model_copy(update={'amount_received':Decimal(200)})});result=await self.svc.settle(self.order['id'],command)
+        self.assertEqual((await self.db.execute(select(func.count(SaleItem.id)).where(SaleItem.sale_id==result['sale_id']))).scalar_one(),2)
+        self.assertEqual((await self.db.execute(select(InventoryBalance.quantity).where(InventoryBalance.product_id==self.other.id))).scalar_one(),20)
+        self.assertEqual((await self.db.get(CommerceOrderItem,removed['id'])).quantity,0)
+
+    async def test_tier_eligibility_is_revalidated_after_initial_selection(self):
+        from app.sales.repository import SalesRepository
+        await self.configured();await self.saved();await self.accept();company=self.company.id
+        native=SalesRepository.get_price_level
+        async def became_inactive(repo,*args):
+            result=await native(repo,*args)
+            if result:result.active=False;await repo.db.flush([result])
+            return result
+        with patch.object(SalesRepository,'get_price_level',became_inactive):
+            with self.assertRaises(HTTPException) as error:await self.svc.settle(self.order['id'],self.payment())
+        self.assertEqual(error.exception.status_code,409);self.assertIn('tier changed',error.exception.detail)
+        self.assertEqual((await self.db.execute(select(func.count(InventoryMovement.id)).where(InventoryMovement.company_id==company))).scalar_one(),0)

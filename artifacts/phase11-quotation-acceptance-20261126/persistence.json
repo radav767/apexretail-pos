@@ -1,0 +1,35 @@
+{
+  "synthetic_only": true,
+  "independent_read_only": true,
+  "bounded": {
+    "company": "8187380a-76a8-4a3d-9300-fef9328d19ad",
+    "originals": 10,
+    "refunds": 10,
+    "sale_proofs": 10,
+    "refund_proofs": 10,
+    "quotation_commands": 30,
+    "net_base_revenue": "608.70",
+    "variant_stock": {
+      "Red": "570.000",
+      "Blue": "385.000"
+    },
+    "closed_shift_net_base": "0",
+    "all_variances": "0",
+    "frozen_precisions": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  "recovery": {
+    "company": "778cb8e6-31d1-4f70-a533-4233149bdca0",
+    "orders": 319,
+    "quotation_commands": 11,
+    "sale_proofs": 2,
+    "refund_proofs": 2,
+    "stock": "94",
+    "held_old_actor_save_was_committed_without_stock": true
+  }
+}

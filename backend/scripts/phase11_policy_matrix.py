@@ -92,6 +92,9 @@ def assess(row):
         sources+=';business_operations/saved_pricing.py'
         policy='test_only_saved_quotation_plan'
         replay='Current identity/epoch/register and full UUID/payload proof before original saved result; new plans require licensed current draft and explicit test mode; no stock/payment effect'
+    if method=='GET' and path=='/api/operations/orders':
+        replay='Current tenant/branch/role/epoch historical read; limit1–100, offset0–100000, deterministic created/id order. No stock/payment or subscription mutation. Actor-scoped retained requests recover by authorized original-ID reads independently of page membership; no automatic replay.'
+        gap='bounded_old_pages_and_first_party_retained_discovery_verified_offset_pages_not_a_snapshot_under_inserts'
     exact = method == 'POST' and (
         path in {'/api/customers/checkout', '/api/sales', '/api/sales/refunds', '/api/expenses', '/api/credit/settlements', '/api/inventory/stock-take',
                  '/api/inventory/transfers', '/api/operations/orders', '/api/operations/offline/drafts',

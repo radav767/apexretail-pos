@@ -1,0 +1,133 @@
+{
+  "synthetic_only": true,
+  "company": "8187380a-76a8-4a3d-9300-fef9328d19ad",
+  "product": "75f8148e-c787-4ba1-94f4-29db2c921b5e",
+  "cases": [
+    {
+      "shell": "backoffice",
+      "places": 0,
+      "total": "121.74",
+      "original": "150",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": true,
+      "sale_id": "7518fc04-b2f8-465d-8482-649488dc78cd"
+    },
+    {
+      "shell": "backoffice",
+      "places": 1,
+      "total": "121.74",
+      "original": "150.3",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": true,
+      "sale_id": "9e1e1926-0fee-4d2c-991d-4551955f4c92"
+    },
+    {
+      "shell": "backoffice",
+      "places": 2,
+      "total": "121.74",
+      "original": "150.30",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": true,
+      "invalid_precision_not_sent": true,
+      "sale_id": "6b3df20a-6961-4979-9e15-2e806a1752d9"
+    },
+    {
+      "shell": "backoffice",
+      "places": 3,
+      "total": "121.74",
+      "original": "150.296",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": true,
+      "sale_id": "4bfa4468-efd2-4e85-a5a1-48bcb549b082"
+    },
+    {
+      "shell": "backoffice",
+      "places": 4,
+      "total": "121.74",
+      "original": "150.2963",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": false,
+      "sale_id": "4a27c778-2914-4df8-8156-4d0f731a599a"
+    },
+    {
+      "shell": "pos",
+      "places": 0,
+      "total": "121.74",
+      "original": "150",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": true,
+      "sale_id": "6d397d7f-72db-41cc-a214-473c1ac9093e"
+    },
+    {
+      "shell": "pos",
+      "places": 1,
+      "total": "121.74",
+      "original": "150.3",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": true,
+      "sale_id": "9d97046c-b3cd-407b-bd9f-53a1e9a702e5"
+    },
+    {
+      "shell": "pos",
+      "places": 2,
+      "total": "121.74",
+      "original": "150.30",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": true,
+      "invalid_precision_not_sent": true,
+      "sale_id": "e18152b2-785d-4096-9304-ab6c53f00e19"
+    },
+    {
+      "shell": "pos",
+      "places": 3,
+      "total": "121.74",
+      "original": "150.296",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": true,
+      "sale_id": "193b1d36-59b6-4d24-afa1-0642b0fc11e4"
+    },
+    {
+      "shell": "pos",
+      "places": 4,
+      "total": "121.74",
+      "original": "150.2963",
+      "three_positions": true,
+      "independent_tiers": true,
+      "source_names": true,
+      "catalog_change_409_and_original_recovery": false,
+      "invalid_precision_not_sent": false,
+      "sale_id": "e7c515d6-1943-47e8-95a6-db36661fb2d3"
+    }
+  ],
+  "shift_close_exact_replay_zero_variance": true,
+  "accessibility_bounded_keyboard_labels_390_reflow": true,
+  "mobile_drawer_closed_before_form_check": true,
+  "page_errors": [],
+  "unexpected_origins": [],
+  "physical_device_or_provider_acceptance": false
+}

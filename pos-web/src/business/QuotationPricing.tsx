@@ -1,9 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
 import {createPrintScope} from '../printing/context';
-export type PricingPlan={version:number;bound_version?:number;total:string;subtotal:string;tax:string;discount:string;currency:string;display_currency:string;display_total:string;exchange_rate_snapshot:string;items:{id:string;entered_quantity:string;entered_unit:string;base_quantity:string;base_unit:string;discount:string;net:string;tax:string}[];input?:{sale_discount:string;currency_code:string|null;lines:Line[]}};
+export type PricingPlan={version:number;bound_version?:number;total:string;subtotal:string;tax:string;discount:string;currency:string;display_currency:string;display_places:number;display_total:string;exchange_rate_snapshot:string;items:{id:string;entered_quantity:string;entered_unit:string;base_quantity:string;base_unit:string;discount:string;net:string;tax:string}[];input?:{sale_discount:string;currency_code:string|null;lines:Line[]}};
 type Line={item_id:string;quantity:string;unit:string;discount:string};
 type Quote={id:string;version:number;kind:string;quotation_status?:string;quotation_pricing?:PricingPlan|null;items:{id:string;product_id:string;name:string;quantity:string;unit:string}[]};
-type Review={order_id:string;version:number;total:string;tax:string;discount:string;base_currency:string;display_currency:string;display_total:string;exchange_rate_snapshot:string;items:{id:string;base_quantity:string;net:string;discount:string;tax:string}[]};
+type Review={order_id:string;version:number;total:string;tax:string;discount:string;base_currency:string;display_currency:string;display_places:number;display_total:string;exchange_rate_snapshot:string;items:{id:string;base_quantity:string;net:string;discount:string;tax:string}[]};
 type Input={version:number;lines:Line[];sale_discount:string;currency_code:string|null};
 type Intent=Input&{request_id:string;expected_total:string;expected_display_total:string};
 type Client={post:<T>(path:string,data:unknown)=>Promise<{data:T}>;get:<T>(path:string)=>Promise<{data:T}>};

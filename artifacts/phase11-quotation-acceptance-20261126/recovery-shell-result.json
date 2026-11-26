@@ -1,0 +1,171 @@
+{
+  "synthetic_only": true,
+  "company": "778cb8e6-31d1-4f70-a533-4233149bdca0",
+  "product": "1e390702-4ba1-4501-8132-97cdaa8df76e",
+  "backoffice_sale": "f8d4e5fb-e8a7-4a03-bcbb-9d02ccb63dac",
+  "pos_sale": "0338a5d3-3fef-4a47-8a7f-d1868074f85a",
+  "full_first_party_auth_and_navigation": true,
+  "older_than_100_BO_pricing_payment_discovery_and_POS_pricing_discovery": true,
+  "stable_25_row_pagination": true,
+  "other_tenant_cannot_discover_or_open_old_request_and_late_save_does_not_clear_it": true,
+  "delayed_POS_page_after_logout_discarded_and_old_token_401": true,
+  "configured_box_discount_and_JPY_review_save_accept_convert": true,
+  "lost_save_and_conversion_exact_payloads_across_reload": true,
+  "lost_revision_original_child_and_frozen_parent": true,
+  "superseded_parent_conversion_denied": true,
+  "delayed_review_after_logout_discarded": true,
+  "partial_final_API_returns_and_live_original_currency_shift_reconciled": true,
+  "refund_ids": [
+    "8dad4765-8784-4771-849d-45c25232eb07",
+    "77eba1c1-ae38-450b-afcc-4604b821449b"
+  ],
+  "saved_order": {
+    "id": "3868d660-5085-4636-a795-4028d5044740",
+    "number": "Q-2AF9471B13C84D30",
+    "kind": "quotation",
+    "status": "settled",
+    "version": 5,
+    "branch_id": "f0c90bc8-0e14-412e-963d-38c77e4e2932",
+    "device_id": "d4ae0057-4f4a-4ad3-9a81-1bfc66f06a35",
+    "table_id": null,
+    "waiter_id": null,
+    "guest_id": null,
+    "customer_id": null,
+    "parent_id": "be301b7b-89c9-4597-8e0d-72f42bc7a29f",
+    "sale_id": "f8d4e5fb-e8a7-4a03-bcbb-9d02ccb63dac",
+    "notes": "",
+    "created_at": "2026-11-26T08:52:10.639351+00:00",
+    "quotation_status": "converted",
+    "quotation_root_id": "be301b7b-89c9-4597-8e0d-72f42bc7a29f",
+    "quotation_revision": 1,
+    "quotation_valid_until": "2026-11-27T08:52:00+00:00",
+    "quotation_terms": {
+      "tax": "0.00",
+      "input": {
+        "lines": [
+          {
+            "unit": "box",
+            "item_id": "484077e9-798e-4906-944e-1663a9cfadfa",
+            "discount": "1",
+            "quantity": "0.5"
+          }
+        ],
+        "currency_code": "JPY",
+        "sale_discount": "2"
+      },
+      "items": [
+        {
+          "id": "484077e9-798e-4906-944e-1663a9cfadfa",
+          "net": "69.00",
+          "tax": "0.00",
+          "name": "Synthetic quotation cartons",
+          "price": "12.00",
+          "factor": "12.000",
+          "discount": "3.00",
+          "tax_rate": "0",
+          "base_unit": "each",
+          "product_id": "1e390702-4ba1-4501-8132-97cdaa8df76e",
+          "tax_exempt": false,
+          "variant_id": null,
+          "entered_unit": "box",
+          "product_type": "standard",
+          "base_quantity": "6.0000",
+          "line_discount": "1",
+          "track_inventory": true,
+          "entered_quantity": "0.5",
+          "price_level_name": null
+        }
+      ],
+      "total": "69.00",
+      "version": 2,
+      "currency": "USD",
+      "discount": "3.00",
+      "subtotal": "69.00",
+      "tax_name": "VAT",
+      "tax_rate": "0",
+      "bound_version": 2,
+      "display_total": "10353",
+      "sale_discount": "2",
+      "tax_inclusive": false,
+      "display_places": 0,
+      "display_currency": "JPY",
+      "exchange_rate_id": "993b03aa-88b1-4576-95a4-af5e60035797",
+      "exchange_rate_snapshot": "150.0500000000",
+      "currency_config_version": 4
+    },
+    "quotation_pricing": {
+      "tax": "0.00",
+      "input": {
+        "lines": [
+          {
+            "unit": "box",
+            "item_id": "484077e9-798e-4906-944e-1663a9cfadfa",
+            "discount": "1",
+            "quantity": "0.5"
+          }
+        ],
+        "currency_code": "JPY",
+        "sale_discount": "2"
+      },
+      "items": [
+        {
+          "id": "484077e9-798e-4906-944e-1663a9cfadfa",
+          "net": "69.00",
+          "tax": "0.00",
+          "name": "Synthetic quotation cartons",
+          "price": "12.00",
+          "factor": "12.000",
+          "discount": "3.00",
+          "tax_rate": "0",
+          "base_unit": "each",
+          "product_id": "1e390702-4ba1-4501-8132-97cdaa8df76e",
+          "tax_exempt": false,
+          "variant_id": null,
+          "entered_unit": "box",
+          "product_type": "standard",
+          "base_quantity": "6.0000",
+          "line_discount": "1",
+          "track_inventory": true,
+          "entered_quantity": "0.5",
+          "price_level_name": null
+        }
+      ],
+      "total": "69.00",
+      "version": 2,
+      "currency": "USD",
+      "discount": "3.00",
+      "subtotal": "69.00",
+      "tax_name": "VAT",
+      "tax_rate": "0",
+      "bound_version": 2,
+      "display_total": "10353",
+      "sale_discount": "2",
+      "tax_inclusive": false,
+      "display_places": 0,
+      "display_currency": "JPY",
+      "exchange_rate_id": "993b03aa-88b1-4576-95a4-af5e60035797",
+      "exchange_rate_snapshot": "150.0500000000",
+      "currency_config_version": 4
+    },
+    "table_name": "Takeaway",
+    "waiter_name": "Unassigned",
+    "items": [
+      {
+        "id": "484077e9-798e-4906-944e-1663a9cfadfa",
+        "product_id": "1e390702-4ba1-4501-8132-97cdaa8df76e",
+        "variant_id": null,
+        "name": "Synthetic quotation cartons",
+        "quantity": 6,
+        "sent_quantity": 0,
+        "price": 12,
+        "unit": "each",
+        "notes": ""
+      }
+    ],
+    "estimated_subtotal": "72.00000",
+    "estimate_only": false
+  },
+  "real_provider_or_printer_invoked": false,
+  "page_errors": [],
+  "unexpected_origins": []
+}

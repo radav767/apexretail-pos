@@ -1,0 +1,67 @@
+{
+  "synthetic_only": true,
+  "results": [
+    {
+      "places": 0,
+      "original": "4",
+      "actual_shift_lock_verified_nowait": true,
+      "sale_first_close_waited": true,
+      "close_first_conversion_409": true,
+      "refund_first_close_waited": true,
+      "deactivated_precision_drift_used_original_snapshot": true,
+      "exact_sale_refund_close_recovery": true,
+      "final_expected_original": "7",
+      "variance": "0"
+    },
+    {
+      "places": 1,
+      "original": "4.3",
+      "actual_shift_lock_verified_nowait": true,
+      "sale_first_close_waited": true,
+      "close_first_conversion_409": true,
+      "refund_first_close_waited": true,
+      "deactivated_precision_drift_used_original_snapshot": true,
+      "exact_sale_refund_close_recovery": true,
+      "final_expected_original": "7",
+      "variance": "0"
+    },
+    {
+      "places": 2,
+      "original": "4.35",
+      "actual_shift_lock_verified_nowait": true,
+      "sale_first_close_waited": true,
+      "close_first_conversion_409": true,
+      "refund_first_close_waited": true,
+      "deactivated_precision_drift_used_original_snapshot": true,
+      "exact_sale_refund_close_recovery": true,
+      "final_expected_original": "7",
+      "variance": "0"
+    },
+    {
+      "places": 3,
+      "original": "4.346",
+      "actual_shift_lock_verified_nowait": true,
+      "sale_first_close_waited": true,
+      "close_first_conversion_409": true,
+      "refund_first_close_waited": true,
+      "deactivated_precision_drift_used_original_snapshot": true,
+      "exact_sale_refund_close_recovery": true,
+      "final_expected_original": "7",
+      "variance": "0"
+    },
+    {
+      "places": 4,
+      "original": "4.3457",
+      "actual_shift_lock_verified_nowait": true,
+      "sale_first_close_waited": true,
+      "close_first_conversion_409": true,
+      "refund_first_close_waited": true,
+      "deactivated_precision_drift_used_original_snapshot": true,
+      "exact_sale_refund_close_recovery": true,
+      "final_expected_original": "7",
+      "variance": "0"
+    }
+  ],
+  "catalogue_writer_between_review_and_lock_409_then_exact_retry": true,
+  "providers": false
+}

@@ -18,3 +18,6 @@
 }
 .business-operations fieldset{min-width:0;max-width:100%;border:1px solid #dce5df;border-radius:10px;padding:12px}
 .business-operations input[type=checkbox]{appearance:auto;accent-color:#07583b;width:18px;height:18px;min-height:18px;padding:0;justify-self:start}
+
+/* Business operations is a full workspace inside the POS modal backdrop. */
+.business-operations{background:#fff;border-radius:14px;overflow-wrap:anywhere}

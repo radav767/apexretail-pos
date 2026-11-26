@@ -62,6 +62,7 @@ async def save(svc,order_id,data):
         if Decimal(plan['total'])!=data.expected_total or Decimal(plan['display_total'])!=data.expected_display_total:raise HTTPException(409,'Pricing expectation changed; review exact totals')
         by_id={r['id']:r for r in plan['items']}
         for item in await svc.order_items(row):
+            if item.quantity<=0:continue
             p=by_id[str(item.id)];item.name=p['name'];item.quantity=Decimal(p['base_quantity']);item.unit=p['base_unit'];item.price=Decimal(p['price'])
         row.version+=1;plan['bound_version']=row.version;row.quotation_pricing=plan
         result={'order_id':str(row.id),'version':row.version,'quotation_pricing':public_plan(plan),'quotation_command_ack':str(data.request_id)}
@@ -86,6 +87,9 @@ def payment(row,payment):
     mode();p=row.quotation_terms
     if payment.payment_method not in {'cash','credit'}:raise HTTPException(409,'Saved quote acceptance covers cash/credit only')
     if payment.payment_method=='cash' and payment.payment_currency_code not in (None,p['display_currency']):raise HTTPException(409,'Use accepted quotation payment currency')
+    from app.currencies.service import quantize_currency
+    tender=payment.tendered_amount_original if payment.tendered_amount_original is not None else payment.amount_received if p['display_currency']==p['currency'] else None
+    if payment.payment_method=='cash' and tender is not None and quantize_currency(tender,p['display_places'])!=tender:raise HTTPException(422,'Cash tender exceeds accepted original currency precision')
     return payment.model_copy(update={'items':[SaleItemCreate(product_id=r['product_id'],variant_id=r['variant_id'],quantity=r['base_quantity'],selling_unit=r['base_unit'],unit_price=r['price'],line_total=r['net'],line_discount_amount=r['line_discount']) for r in p['items']],
         'discount_amount':Decimal(p['discount']),'sale_discount_amount':Decimal(p['sale_discount']),
         'payment_currency_code':p['display_currency'] if payment.payment_method=='cash' else p['currency'],'exchange_rate_id':UUID(p['exchange_rate_id']) if p['exchange_rate_id'] and payment.payment_method=='cash' else None,
@@ -101,7 +105,8 @@ class QuoteRepository(SalesRepository):
     async def get_price_level(self,*args):
         level=await super().get_price_level(*args)
         if level:
-            level=(await self.db.execute(select(ProductPriceLevel).where(ProductPriceLevel.id==level.id).with_for_update(read=True).execution_options(populate_existing=True))).scalar_one()
+            level=(await self.db.execute(select(ProductPriceLevel).where(ProductPriceLevel.id==level.id).with_for_update(read=True).execution_options(populate_existing=True))).scalar_one_or_none()
+            if not level or level.company_id!=args[0] or level.product_id!=args[1] or not level.active or level.deleted or level.name.lower()!=args[2].lower() or level.minimum_quantity>args[3]:raise HTTPException(409,'Customer tier changed during locked checkout')
         self.levels[(str(args[1]),Decimal(args[3]))]=level;return level
     def check(self,items):
         expected={(r['product_id'],r['variant_id']):r for r in self.plan['items']}

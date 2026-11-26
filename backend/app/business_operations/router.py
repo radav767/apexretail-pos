@@ -168,7 +168,7 @@ async def edit_table(table_id: UUID, data: TableInput, svc=Depends(service)): re
 
 
 @router.get("/orders")
-async def orders(kind: str | None = Query(default=None, pattern="^(restaurant|room_service|quotation)$"), svc=Depends(service)): return await svc.list_orders(kind)
+async def orders(kind: str | None = Query(default=None, pattern="^(restaurant|room_service|quotation)$"), limit:int=Query(default=100,ge=1,le=100),offset:int=Query(default=0,ge=0,le=100000), svc=Depends(service)): return await svc.list_orders(kind,limit=limit,offset=offset)
 
 
 @router.post("/orders")

@@ -241,16 +241,19 @@ class BusinessService(PrintingService):
             level = await repo.get_price_level(row.company_id, product.id, customer.price_level_name, quantities[(item.product_id, item.variant_id)]) if customer and customer.price_level_name else None
             item.price = level.price if level else variant.selling_price if variant and variant.selling_price is not None else product.selling_price
 
-    async def list_orders(self, kind=None):
+    async def list_orders(self, kind=None, *,limit=100,offset=0):
+        if not 1<=limit<=100 or not 0<=offset<=100000:raise HTTPException(422,"Use a bounded order page and nonnegative offset up to100000")
         allowed = self.actor.role in {"owner", "administrator"} or any(has_permission(self.actor.permissions or {}, p) for p in ("orders_manage", "orders_settle", "restaurant_manage", "quotations_manage", "hospitality_manage"))
         if not allowed: raise HTTPException(403, "Permission denied")
         q = select(CommerceOrder).where(CommerceOrder.company_id == self.actor.company_id)
+        if kind=='quotation':permit(self.actor,'quotations_manage')
         if kind: q = q.where(CommerceOrder.kind == kind)
+        elif self.actor.employee and not has_permission(self.actor.permissions or {},'quotations_manage'):q=q.where(CommerceOrder.kind!='quotation')
         if self.actor.employee and self.actor.role not in {"owner", "administrator"}:
             q = q.where(CommerceOrder.branch_id == self.actor.employee.branch_id)
             if not self.manager() and not has_permission(self.actor.permissions or {}, "orders_settle"):
                 q = q.where(CommerceOrder.waiter_id == self.actor.employee.id)
-        rows = (await self.db.execute(q.order_by(CommerceOrder.created_at.desc()).limit(100))).scalars().all()
+        rows = (await self.db.execute(q.order_by(CommerceOrder.created_at.desc(),CommerceOrder.id.desc()).limit(limit).offset(offset))).scalars().all()
         return [await self.order_out(row) for row in rows]
 
     async def add_item(self, order_id, data):

@@ -1,0 +1,12 @@
+{
+  "synthetic_only": true,
+  "both_real_shells": true,
+  "real_auth_and_PIN": true,
+  "exposed_mobile_form_keyboard_labels_large_text_reflow": true,
+  "opaque_workspace_surface": true,
+  "viewport_width": 390,
+  "large_text_px": 28,
+  "physical_device_or_provider_acceptance": false,
+  "page_errors": [],
+  "unexpected_origins": []
+}
