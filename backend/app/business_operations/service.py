@@ -47,7 +47,9 @@ class BusinessService(PrintingService):
         from app.subscriptions.commercial import terms_for
         licensed=await terms_for(self.db,self.actor.company_id)
         if licensed is not None:features={f for f in features if licensed.get('features',{}).get(f,False)}
-        return {"profile": key, "name": PROFILES[key]["name"], "features": sorted(features),
+        from app.core.config import get_settings
+        config=get_settings()
+        return {"quotation_pricing_enabled":config.app_env=="test" and config.quotation_pricing_mode=="test", "profile": key, "name": PROFILES[key]["name"], "features": sorted(features),
             "employee_id": self.actor.employee.id if self.actor.employee else None,
             "tips_enabled": bool(tips and tips.enabled),
             "separate_tips": tips is not None,
@@ -91,7 +93,7 @@ class BusinessService(PrintingService):
             raise HTTPException(403, "Permission denied")
         output = {}
         for key, model, fields in (("branches", Branch, ("id", "name", "shop_id")), ("devices", Device, ("id", "name", "branch_id")),
-            ("products", Product, ("id", "name", "selling_price", "unit", "product_type")), ("variants", ProductVariant, ("id", "product_id", "name", "selling_price")),
+            ("products", Product, ("id", "name", "selling_price", "unit", "purchase_unit", "units_per_purchase", "product_type")), ("variants", ProductVariant, ("id", "product_id", "name", "selling_price")),
             ("staff", Employee, ("id", "name", "branch_id", "role")), ("customers", Customer, ("id", "name"))):
             q = select(model).where(model.company_id == self.actor.company_id)
             if hasattr(model, "active"): q = q.where(model.active == True)
@@ -102,6 +104,8 @@ class BusinessService(PrintingService):
                 elif hasattr(model, "branch_id"): q = q.where(model.branch_id == self.actor.employee.branch_id)
             rows = (await self.db.execute(q.limit(1000))).scalars().all()
             output[key] = [row_dict(row, fields) for row in rows]
+        from app.currencies.repository import CurrencyRepository
+        output['currencies']=[{'id':r.code,'name':r.code,'decimal_places':r.decimal_places,'is_base':r.is_base} for r in await CurrencyRepository(self.db).list(self.actor.company_id,active=True)]
         return output
 
     async def tables(self):

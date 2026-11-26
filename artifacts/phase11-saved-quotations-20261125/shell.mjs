@@ -1,0 +1,81 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import {join,extname,resolve} from 'node:path';
+import assert from 'node:assert/strict';
+import {chromium} from '/tmp/apex-phase11-browser-tools/node_modules/playwright/index.mjs';
+const API='http://127.0.0.1:18128/api',POS='https://pos.synthetic.invalid',BO='https://backoffice.synthetic.invalid';
+async function request(path,body,token,method='POST') {
+ const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});
+ const text=await r.text();assert.ok(r.ok,`${path}: ${r.status} ${text}`);return JSON.parse(text);
+}
+const password='Synthetic-Shell-Only-123!';
+const tenant=await request('/auth/register',{owner_name:'Synthetic shell owner',owner_pin:'1234',business_name:'Synthetic quotation shells',business_type:'Hardware / Wholesale',country:'Zimbabwe',phone:'000000000',email:`shell-${crypto.randomUUID()}@example.com`,password,confirm_password:password,base_currency_code:'USD',base_currency_symbol:'$',base_currency_decimal_places:2});
+const C=tenant.company.id,B=tenant.branch.id,D=tenant.device.id,T=tenant.token;
+await request('/operations/profile',{profile:'wholesale'},T,'PUT');
+await request('/settings/'+C,{tax_rate:'0',tax_inclusive:false,shift_enforcement_enabled:false},T,'PATCH');
+const currency=await request('/currencies',{company_id:C,code:'JPY',display_name:'Synthetic yen',symbol:'JPY',decimal_places:0,cash_accepted:true,card_accepted:false,mobile_accepted:false},T);
+await request('/currencies/rates',{company_id:C,currency_id:currency.id,foreign_units_per_base:'150.05',effective_at:new Date(Date.now()-86400000).toISOString()},T);
+await request('/currencies/configuration/'+C,{enabled:true},T,'PATCH');
+const product=await request('/products',{company_id:C,branch_id:B,name:'Synthetic quotation cartons',selling_price:'12',cost_price:'2',stock_qty:'100',purchase_unit:'box',units_per_purchase:'12',create_request_key:crypto.randomUUID()},T);
+async function draft(device=D,token=T){let row=await request('/operations/orders',{branch_id:B,device_id:device,kind:'quotation',request_id:crypto.randomUUID()},token);return request(`/operations/orders/${row.id}/items`,{version:row.version,product_id:product.id,quantity:'2'},token)}
+let boq=await draft();const staleq=await draft();let posq;
+const browser=await chromium.launch({executablePath:'/root/.cache/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell',headless:true,args:['--no-sandbox','--disable-background-networking']});
+const errors=[],unexpected=[];let fault=null;const faults=[];const waitFor=async predicate=>{for(let i=0;i<200;i++){if(predicate())return;await new Promise(r=>setTimeout(r,50))}throw Error('Timed out waiting for controlled real response')};
+try {
+ const context=await browser.newContext({viewport:{width:1440,height:1100}});await context.addInitScript(()=>{window.print=()=>{throw Error('No print transport permitted in acceptance')}});
+ await context.route('**/*',async route=>{
+  const req=route.request(),u=new URL(req.url());if(![POS,BO].includes(u.origin)){unexpected.push(u.origin);return route.abort()}
+  if(u.pathname.startsWith('/api/')) {const headers={...req.headers(),origin:u.origin};delete headers.host;const r=await route.fetch({url:'http://127.0.0.1:18128'+u.pathname+u.search,headers});if(r.status()>=400&&!u.pathname.includes('/auth/refresh'))console.log('HTTP',u.pathname,r.status(),await r.text());if(fault&&fault.matches(u,req)){const f=fault;fault=null;f.status=r.status();f.body=await r.body();f.request=req.postData();f.seen=true;faults.push(f);if(f.mode==='drop')return route.abort();await new Promise(resolve=>f.release=resolve)}return route.fulfill({response:r})}
+  const root=`/tmp/apex-phase11-build-xijhpj7t/${u.origin===POS?'pos-web':'backoffice'}/dist`,path=resolve(root,'.'+u.pathname);
+  assert.ok(path.startsWith(root));let data;try{data=readFileSync(path)}catch{data=readFileSync(join(root,'index.html'))}
+  const type={'.js':'text/javascript','.css':'text/css','.json':'application/json','.svg':'image/svg+xml','.png':'image/png','.wasm':'application/wasm'}[extname(path)]||'text/html';return route.fulfill({body:data,contentType:type});
+ });
+ const bo=await context.newPage();bo.on('pageerror',e=>errors.push(String(e)));
+ async function loginBO(){await bo.goto(BO);await bo.locator('input[type=email]').fill(tenant.user.email);await bo.locator('input[type=password]').fill(password);await bo.getByRole('button',{name:'Login',exact:true}).click();await bo.getByRole('button',{name:'Log out',exact:true}).first().waitFor()}
+ async function quotations(page){await page.getByRole('button',{name:'Business Operations',exact:true}).first().click();await page.getByRole('button',{name:/^Quotations|^New quotation$/}).first().waitFor();if(!await page.getByRole('button',{name:'New quotation',exact:true}).count())await page.getByRole('button',{name:/^Quotations/}).click()}
+ async function select(page,row){await page.locator('.business-records button').filter({hasText:row.number}).click();await page.getByRole('heading',{name:'Quotation: '+(row.quotation_status||'draft'),exact:true}).waitFor()}
+ async function propose(page){await page.getByLabel('Quantity '+product.name,{exact:true}).fill('0.5');await page.getByLabel('Unit '+product.name,{exact:true}).selectOption('box');await page.getByLabel('Line discount '+product.name,{exact:true}).fill('1');await page.getByLabel('Quotation discount',{exact:true}).fill('2');await page.getByLabel('Quotation currency',{exact:true}).selectOption('JPY');await page.getByRole('button',{name:'Review quotation pricing',exact:true}).click();await page.getByRole('region',{name:'Reviewed quotation totals'}).getByText('69.00 USD',{exact:true}).waitFor();await page.getByRole('region',{name:'Reviewed quotation totals'}).getByText('10353 JPY',{exact:true}).waitFor();assert.equal(await page.getByRole('button',{name:'Mark sent and freeze terms',exact:true}).isDisabled(),true)}
+ async function accept(page){await page.getByLabel('Valid until',{exact:true}).fill(new Date(Date.now()+86400000).toISOString().slice(0,16));await page.getByRole('button',{name:'Mark sent and freeze terms',exact:true}).click();await page.getByRole('button',{name:'Mark accepted',exact:true}).click();await page.getByRole('region',{name:'Accepted quotation payment'}).waitFor()}
+ await loginBO();await quotations(bo);await select(bo,boq);await propose(bo);
+ const lost={mode:'drop',matches:(u,r)=>u.pathname===`/api/operations/orders/${boq.id}/quotation-pricing`&&r.method()==='POST'};fault=lost;
+ await bo.getByRole('button',{name:'Save reviewed quotation pricing',exact:true}).click();await waitFor(()=>lost.seen);assert.equal(lost.status,200);console.log('Saved plan response dropped after real commit');
+ await bo.getByRole('button',{name:'Retry original pricing save',exact:true}).waitFor();await bo.reload();await bo.getByRole('button',{name:'Log out',exact:true}).first().waitFor();await quotations(bo);
+ const saved=await request('/operations/orders/'+boq.id,null,T,'GET');await select(bo,saved);
+ let response=bo.waitForResponse(r=>r.url().endsWith(`/orders/${boq.id}/quotation-pricing`)&&r.request().method()==='POST');await bo.getByRole('button',{name:'Retry original pricing save',exact:true}).click();let recovered=await response;assert.equal(recovered.status(),200);assert.deepEqual(recovered.request().postDataJSON(),JSON.parse(lost.request));assert.deepEqual(await recovered.json(),JSON.parse(lost.body.toString()));
+ await bo.getByText(/Pricing saved. Review the saved plan/).waitFor();await accept(bo);
+ const parent=boq.id,parentFrozen=(await request('/operations/orders/'+parent,null,T,'GET')).quotation_terms;
+ await bo.getByLabel('Revision reason',{exact:true}).fill('Synthetic corrected quotation');const lostRevision={mode:'drop',matches:(u,r)=>u.pathname===`/api/operations/orders/${parent}/quotation-revision`&&r.method()==='POST'};fault=lostRevision;
+ await bo.getByRole('button',{name:'Create linked quotation draft',exact:true}).click();await waitFor(()=>lostRevision.seen);assert.equal(lostRevision.status,200);await bo.getByRole('button',{name:'Retry original revision',exact:true}).waitFor();
+ response=bo.waitForResponse(r=>r.url().endsWith(`/orders/${parent}/quotation-revision`)&&r.request().method()==='POST');await bo.getByRole('button',{name:'Retry original revision',exact:true}).click();recovered=await response;boq=await recovered.json();assert.equal(boq.parent_id,parent);assert.deepEqual(recovered.request().postDataJSON(),JSON.parse(lostRevision.request));assert.equal(boq.id,JSON.parse(lostRevision.body.toString()).id);
+ await bo.getByRole('heading',{name:'Quotation: draft',exact:true}).waitFor();await propose(bo);await bo.getByRole('button',{name:'Save reviewed quotation pricing',exact:true}).click();await bo.getByText(/Pricing saved. Review the saved plan/).waitFor();await accept(bo);
+ assert.deepEqual((await request('/operations/orders/'+parent,null,T,'GET')).quotation_terms,parentFrozen);
+ const parentAttempt=await fetch(API+`/operations/orders/${parent}/settle`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+T},body:JSON.stringify({version:(await request('/operations/orders/'+parent,null,T,'GET')).version,payment:{company_id:C,payment_method:'cash',amount_received:'100',tendered_amount_original:'12000',items:[]}})});assert.equal(parentAttempt.status,409);
+ console.log('Linked revision recovers original draft after lost response; parent terms frozen and superseded conversion denied');
+
+ await bo.getByLabel('Cash tendered in JPY',{exact:true}).fill('12000');const lostPayment={mode:'drop',matches:(u,r)=>u.pathname===`/api/operations/orders/${boq.id}/settle`&&r.method()==='POST'};fault=lostPayment;
+ await bo.getByRole('button',{name:'Confirm accepted quotation payment',exact:true}).click();await waitFor(()=>lostPayment.seen);assert.equal(lostPayment.status,200);console.log('Conversion response dropped after real commit');const converted=JSON.parse(lostPayment.body.toString());await bo.getByRole('button',{name:'Recover original quotation payment',exact:true}).waitFor();
+ await bo.reload();await bo.getByRole('button',{name:'Log out',exact:true}).first().waitFor();await quotations(bo);await select(bo,converted.order);
+ response=bo.waitForResponse(r=>r.url().endsWith(`/orders/${boq.id}/settle`)&&r.request().method()==='POST');await bo.getByRole('button',{name:'Recover original quotation payment',exact:true}).click();recovered=await response;assert.equal(recovered.status(),200);assert.deepEqual(recovered.request().postDataJSON(),JSON.parse(lostPayment.request));assert.equal((await recovered.json()).sale_id,converted.sale_id);
+ const receipt=await request(`/sales/receipt/${C}/${converted.sale_id}?mark_reprint=false`,null,T,'GET');assert.equal(Number(receipt.total_amount),69);assert.equal(Number(receipt.payment_amount_original),10353);assert.equal(Number(receipt.change_amount_original),1647);assert.equal(Number(receipt.items[0].quantity),6);
+ console.log('Backoffice real-shell pricing and conversion lost responses survive reload with original payloads');
+ // A real read-only review held through logout cannot install into a new identity.
+ await bo.getByRole('button',{name:'← Orders',exact:true}).click();await select(bo,staleq);
+ const held={mode:'hold',matches:(u,r)=>u.pathname===`/api/operations/orders/${staleq.id}/pricing/review`&&r.method()==='POST'};fault=held;
+ await bo.getByRole('button',{name:'Review quotation pricing',exact:true}).click();await waitFor(()=>held.release);await bo.getByRole('button',{name:'Log out',exact:true}).first().click();await bo.getByRole('button',{name:'Login',exact:true}).waitFor();held.release();await bo.waitForTimeout(100);assert.equal(await bo.getByRole('region',{name:'Reviewed quotation totals'}).count(),0);
+ const page=await context.newPage();page.on('pageerror',e=>errors.push(String(e)));await page.goto(POS);await page.locator('input[type=email]').fill(tenant.user.email);await page.locator('input[type=password]').fill(password);await page.getByRole('button',{name:'Sign in',exact:true}).last().click();await page.getByRole('button',{name:'Open POS',exact:true}).waitFor();await page.locator('input').filter({visible:true}).first().fill('1234');await page.getByRole('button',{name:'Open POS',exact:true}).click();
+ await page.getByRole('button',{name:'OPEN SHIFT',exact:true}).waitFor();await page.getByLabel('Opening cash · USD').fill('20');await page.getByLabel('Opening cash · JPY').fill('0');await page.getByRole('button',{name:'OPEN SHIFT',exact:true}).click();if(await page.getByRole('button',{name:'Return to Sales',exact:true}).count())await page.getByRole('button',{name:'Return to Sales',exact:true}).click();
+ const auth=await page.evaluate(()=>({token:localStorage.getItem('employee_token'),device:localStorage.getItem('device_id')}));posq=await draft(auth.device,auth.token);
+ await quotations(page);await select(page,posq);await propose(page);await page.getByRole('button',{name:'Save reviewed quotation pricing',exact:true}).click();await page.getByText(/Pricing saved. Review the saved plan/).waitFor();await accept(page);await page.getByLabel('Cash tendered in JPY',{exact:true}).fill('12000');
+ response=page.waitForResponse(r=>r.url().endsWith(`/orders/${posq.id}/settle`)&&r.request().method()==='POST');await page.getByRole('button',{name:'Confirm accepted quotation payment',exact:true}).click();const posResult=await (await response).json();assert.ok(posResult.sale_id,JSON.stringify(posResult));
+ await page.getByText('Quotation converted. Payment recorded once.',{exact:true}).waitFor();
+ const currentShift=await request('/shifts/current',null,auth.token,'GET');assert.equal(Number(currentShift.currencies.find(c=>c.currency_code==='JPY').expected_cash),10353);
+ const posReceipt=await request(`/sales/receipt/${C}/${posResult.sale_id}?mark_reprint=false`,null,auth.token,'GET');
+ const refund={request_id:crypto.randomUUID(),company_id:C,branch_id:B,device_id:auth.device,original_sale_id:posResult.sale_id,reason:'Synthetic shell quote return',items:[{sale_item_id:posReceipt.items[0].id,quantity:'1'}]};
+ const partial=await request('/sales/refunds',refund,auth.token);assert.equal(Number(partial.payment_amount_original),-1726);assert.equal((await request('/sales/refunds',refund,auth.token)).id,partial.id);
+ const final=await request('/sales/refunds',{...refund,request_id:crypto.randomUUID(),items:[{sale_item_id:posReceipt.items[0].id,quantity:'5'}]},auth.token);assert.equal(Number(final.payment_amount_original),-8627);
+ const returnedShift=await request('/shifts/current',null,auth.token,'GET');const jy=returnedShift.currencies.find(c=>c.currency_code==='JPY');assert.equal(Number(jy.cash_sales),10353);assert.equal(Number(jy.cash_refunds),10353);assert.equal(Number(jy.expected_cash),0);assert.equal(Number(returnedShift.currencies.find(c=>c.currency_code==='USD').expected_cash),20);
+ const savedOrder=await request('/operations/orders/'+boq.id,null,T,'GET');
+
+ const result={synthetic_only:true,company:C,product:product.id,backoffice_sale:converted.sale_id,pos_sale:posResult.sale_id,full_first_party_auth_and_navigation:true,configured_box_discount_and_JPY_review_save_accept_convert:true,lost_save_and_conversion_exact_payloads_across_reload:true,lost_revision_original_child_and_frozen_parent:true,superseded_parent_conversion_denied:true,delayed_review_after_logout_discarded:true,partial_final_API_returns_and_live_original_currency_shift_reconciled:true,refund_ids:[partial.id,final.id],saved_order:savedOrder,real_provider_or_printer_invoked:false,page_errors:errors,unexpected_origins:unexpected};
+ await Promise.all(context.pages().map(p=>p.waitForLoadState('networkidle')));await context.unrouteAll({behavior:'wait'});
+ assert.deepEqual(errors,[]);assert.deepEqual(unexpected,[]);writeFileSync('/tmp/phase11-quotation-shell-result.json',JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result));
+}finally{await browser.close()}

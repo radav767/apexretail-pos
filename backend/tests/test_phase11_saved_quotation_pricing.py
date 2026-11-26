@@ -172,3 +172,9 @@ class SavedPricingTests(unittest.IsolatedAsyncioTestCase):
         first=await self.client.post('/api/sales/refunds',json=refund.model_dump(mode='json'));self.assertEqual(first.status_code,200,first.text);self.assertEqual(Decimal(str(first.json()['payment_amount_original'])),Decimal('-14.1975'))
         final=await self.client.post('/api/sales/refunds',json=refund.model_copy(update={'request_id':uuid4(),'items':[RefundItemCreate(sale_item_id=item.id,quantity=5)]}).model_dump(mode='json'));self.assertEqual(final.status_code,200,final.text);self.assertEqual(Decimal(str(final.json()['payment_amount_original'])),Decimal('-70.9877'))
         await self.db.execute(text('SET CONSTRAINTS ALL IMMEDIATE'))
+    async def test_editor_capability_and_safe_configured_options(self):
+        profile=await self.svc.profile();self.assertFalse(profile['quotation_pricing_enabled'])
+        with patch('app.core.config.get_settings',return_value=get_settings().model_copy(update={'quotation_pricing_mode':'test'})):
+            self.assertTrue((await self.svc.profile())['quotation_pricing_enabled'])
+        options=await self.svc.options();product=next(r for r in options['products'] if r['id']==self.product.id)
+        self.assertEqual(product['purchase_unit'],'box');self.assertEqual(product['units_per_purchase'],12);self.assertNotIn('cost_price',product);self.assertEqual(options['currencies'][0]['id'],'USD')

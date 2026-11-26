@@ -1,0 +1,5 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade p11z_split_note_ownership -> p11aa_saved_quote_pricing, Freeze saved quotation pricing and accepted converted sale evidence.
+INFO  [alembic.runtime.migration] Running upgrade p11aa_saved_quote_pricing -> p11ab_saved_quote_binding, Prevent unlinking accepted quotation sales to evade immutable evidence.
+INFO  [alembic.runtime.migration] Running upgrade p11ab_saved_quote_binding -> p11ac_quote_refund_evidence, Freeze quotation refunds and constrain cumulative original-currency budgets.
