@@ -1,0 +1,40 @@
+TAP version 13
+# Subtest: POS exposes the clarified daily-selling hierarchy without administration menus
+ok 1 - POS exposes the clarified daily-selling hierarchy without administration menus
+  ---
+  duration_ms: 1.638202
+  ...
+# Subtest: navigation remains permission-aware and preserves existing module routing
+ok 2 - navigation remains permission-aware and preserves existing module routing
+  ---
+  duration_ms: 0.331232
+  ...
+# Subtest: legacy feature routes retain compatibility and recovery without new POS administration
+ok 3 - legacy feature routes retain compatibility and recovery without new POS administration
+  ---
+  duration_ms: 0.334942
+  ...
+# Subtest: header uses live session, location, shift and clock values
+ok 4 - header uses live session, location, shift and clock values
+  ---
+  duration_ms: 0.219381
+  ...
+# Subtest: dark-green shell is responsive without horizontal overflow
+ok 5 - dark-green shell is responsive without horizontal overflow
+  ---
+  duration_ms: 1.717002
+  ...
+# Subtest: module feature hubs are permission-aware and support browser history
+ok 6 - module feature hubs are permission-aware and support browser history
+  ---
+  duration_ms: 1.727832
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 20.327406

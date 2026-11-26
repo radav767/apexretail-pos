@@ -1,3 +1,4 @@
+import {createPrintScope} from "../../../pos-web/src/printing/context";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 
@@ -10,8 +11,8 @@ function read(key:string):Pending|null{
     return value&&typeof value==="object"&&value.payload&&typeof value.confirmed==="boolean"?value:{endpoint:"",payload:{},confirmed:false};}
   catch{return {endpoint:"",payload:{},confirmed:false};}
 }
-export default function StockTakePanel({companyId,branchId,onDataChanged,client=api,identity="backoffice",permitted=true}:{
-  companyId:string;branchId:string;onDataChanged?:()=>void;client?:Api;identity?:string;permitted?:boolean;
+export default function StockTakePanel({companyId,branchId,onDataChanged,client=api,identity="backoffice",permitted=true,recoveryOnly=false}:{
+  companyId:string;branchId:string;onDataChanged?:()=>void;client?:Api;identity?:string;permitted?:boolean;recoveryOnly?:boolean;
 }){
   const [products,setProducts]=useState<Position[]>([]),[counts,setCounts]=useState<Record<string,string>>({});
   const [reference,setReference]=useState(""),[notes,setNotes]=useState(""),[message,setMessage]=useState(""),[loading,setLoading]=useState(false);
@@ -20,17 +21,17 @@ export default function StockTakePanel({companyId,branchId,onDataChanged,client=
   const [pending,setPending]=useState<Pending|null>(()=>read(key));const lock=useRef(false);
   useEffect(()=>{setPending(read(key));setCounts({});setLotCounts({});},[key]);
   async function loadProducts(){
-    if(!permitted||!branchId)return;
+    if(recoveryOnly||!permitted||!branchId)return;
     setLoading(true);
     try{setProducts((await client.get(`/inventory/count-catalog/${companyId}`,{params:{branch_id:branchId}})).data);}
     catch(e:any){setMessage(e.response?.data?.detail||"Cannot load physical stock positions");}
     finally{setLoading(false);}
   }
-  useEffect(()=>{let current=true;setProducts([]);if(!permitted||!branchId)return;
+  useEffect(()=>{let current=true;setProducts([]);if(recoveryOnly||!permitted||!branchId)return;
     setLoading(true);void client.get(`/inventory/count-catalog/${companyId}`,{params:{branch_id:branchId}}).then(r=>{if(current)setProducts(r.data);})
       .catch(e=>{if(current)setMessage(e.response?.data?.detail||"Cannot load physical stock positions");}).finally(()=>{if(current)setLoading(false);});
     return()=>{current=false;};
-  },[companyId,branchId,client,permitted]);
+  },[companyId,branchId,client,permitted,recoveryOnly]);
   const counted=products.filter(p=>!p.batches.length&&counts[p.key]!==undefined&&counts[p.key]!=="");
   function archive(command:Pending){
     localStorage.setItem(`${key}:archive:${String(command.payload.request_id)}`,JSON.stringify(command));
@@ -41,15 +42,18 @@ export default function StockTakePanel({companyId,branchId,onDataChanged,client=
     if(!["/inventory/stock-take","/operations/batches/stock"].includes(command.endpoint)||!command.payload.request_id||(command.payload.company_id!==companyId&&command.endpoint==="/inventory/stock-take")||command.payload.branch_id!==branchId){
       setMessage("Saved count needs authorized review. Nothing was deleted.");return;
     }
-    lock.current=true;setLoading(true);
+    lock.current=true;setLoading(true);const recoveryScope=createPrintScope();
     try{
       const caps=(await client.get("/inventory/stock-take/capabilities",{timeout:10000})).data;
+      if(!recoveryScope.isCurrent())return;
       if(caps.idempotency!=="audit-v1"||!caps.variant_counts||!caps.expected_quantity)throw new Error("This server cannot safely apply the count");
       const response=(await client.post(command.endpoint,command.payload)).data;
+      if(!recoveryScope.isCurrent())return;
       if(!(Array.isArray(response)&&response.length>0&&response.every(m=>m.id))&&!(response?.movement_id&&response?.batch_id))throw new Error("No authoritative stock count acknowledgement");
       const ack={...command,confirmed:true};localStorage.setItem(key,JSON.stringify(ack));setPending(ack);setMessage("Stock count confirmed.");
       await loadProducts();onDataChanged?.();
     }catch(e:any){
+      if(!recoveryScope.isCurrent())return;
       const detail=e.response?.data?.detail;
       if(e.response?.status===409&&typeof detail==="string"&&detail.startsWith("Stock changed since")){
         const rejected={...command,rejected:true};localStorage.setItem(key,JSON.stringify(rejected));setPending(rejected);
@@ -77,6 +81,7 @@ export default function StockTakePanel({companyId,branchId,onDataChanged,client=
     }catch(e:any){setMessage(e.message||"Cannot preserve the stock count. Nothing was submitted.");}
   }
   if(!permitted)return <p role="alert">Permission denied.</p>;
+  if(recoveryOnly&&(!pending||pending.confirmed||pending.rejected))return <p role="status">{pending?"Original count evidence retained. Continue review in Backoffice; no replacement count was created.":"No retained count request on this POS."}</p>;
   return <section className="inventory-form-card"><div className="inventory-panel-header stock-take-header"><h2>Stock Take</h2>
     {!pending&&<div className="stock-take-header-actions"><button disabled={loading} onClick={()=>setCounts(Object.fromEntries(products.filter(p=>!p.batches.length).map(p=>[p.key,String(p.stock_qty)])))}>Fill system quantities</button>
     <button disabled={loading} onClick={()=>setCounts({})}>Clear counts</button></div>}</div>

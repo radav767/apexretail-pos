@@ -1,0 +1,3 @@
+Original frozen release-source seven SHA256 inputs match baseline manifest.
+Candidate App.tsx differs from 7b897e9 only by three JSX props: current permissions and original navigation/secure Backoffice callbacks. Removing those lines reproduces original complete bytes.
+Runtime lock, API client, device, authLifecycle and tracked Android inputs match 7b897e9. No auth, offline queue, signing or package identity edits.

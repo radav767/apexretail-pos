@@ -1,3 +1,4 @@
+import SalesReportsHub from "../../pos-web/src/navigation/SalesReportsHub";
 import { readAuthEntry } from './api/authEntry';
 import { clearBusinessContext, installBusinessContext, contextGeneration } from './api/businessSession';
 import { refreshBusinessSession, beginBusinessLogin } from './api/client';
@@ -27,6 +28,7 @@ import { AppIcon } from "./components/AppIcon";
 import BusinessOperations from "../../pos-web/src/business/BusinessOperations";
 
 type BackofficePage =
+  | "sales-reports-hub"
   | "business-operations"
   | "dashboard"
   | "sales"
@@ -43,7 +45,7 @@ type BackofficePage =
 
 function initialBackofficePage(): BackofficePage {
   const requested = new URLSearchParams(window.location.search).get("page");
-  return (["dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "shift-reports", "settings", "business-operations"] as BackofficePage[])
+  return (["sales-reports-hub","dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "shift-reports", "settings", "business-operations"] as BackofficePage[])
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
@@ -590,7 +592,8 @@ function App() {
             <AppIcon name="dashboard" /> <span>Dashboard</span>
           </button>
 
-          <span className="nav-section-label">Sales management</span>
+          <span className="nav-section-label">Sales &amp; Reports</span>
+          <button className={page==="sales-reports-hub"?"active":""} onClick={()=>navigateTo("sales-reports-hub")}><AppIcon name="reports"/><span>Sales &amp; Reports</span></button>
 
           <button
             className={page === "sales" ? "active" : ""}
@@ -623,6 +626,13 @@ function App() {
             <AppIcon name="expenses" /> <span>Expenses</span>
           </button>
 
+          <button
+            className={page === "reports" ? "active" : ""}
+            onClick={() => navigateTo("reports")}
+          >
+            <AppIcon name="reports" /> <span>Reports</span>
+          </button>
+
           <span className="nav-section-label">Catalogue & operations</span>
           <button
             className={page === "products" ? "active" : ""}
@@ -635,12 +645,6 @@ function App() {
             onClick={() => navigateTo("inventory")}
           >
             <AppIcon name="inventory" /> <span>Inventory</span>
-          </button>
-          <button
-            className={page === "reports" ? "active" : ""}
-            onClick={() => navigateTo("reports")}
-          >
-            <AppIcon name="reports" /> <span>Reports</span>
           </button>
           <button
             className={page === "devices" ? "active" : ""}
@@ -681,7 +685,7 @@ function App() {
         <header className="topbar">
           <div>
             <h1>
-              {page === "dashboard"
+              {page === "sales-reports-hub" ? "Sales & Reports" : page === "dashboard"
                 ? dashboardFeature === "sales-analytics"
                   ? "Sales Analytics"
                   : dashboardFeature === "payment-methods"
@@ -782,6 +786,8 @@ function App() {
         {page === "employees" && (
           <EmployeesPage companyId={companyId} />
         )}
+
+        {page === "sales-reports-hub" && <SalesReportsHub backoffice onSelect={item=>navigateTo(item.page as BackofficePage)}/>}
 
         {page === "reports" && (
           <ReportsPage companyId={companyId} />

@@ -9,18 +9,10 @@ const theme = readFileSync(new URL("../src/premium-theme.css", import.meta.url),
 const modulePage = readFileSync(new URL("../src/PosModulePage.tsx", import.meta.url), "utf8");
 const featureHub = readFileSync(new URL("../src/components/PosFeatureHub.tsx", import.meta.url), "utf8");
 
-test("POS navigation follows the approved hierarchy without numbered controls", () => {
-  const labels = ["Sales", "Sales Management", "Customers", "Expenses", "Products", "Inventory", "Reports", "Settings"];
-  let cursor = -1;
-  for (const label of labels) {
-    const next = navigation.indexOf(`label: "${label}"`, cursor + 1);
-    assert.ok(next > cursor, `${label} is missing or out of order`);
-    cursor = next;
-  }
-  for (const child of ["Transaction History", "Shift Management", "Credit Settlement", "Goods Received (GRN)", "Stock Adjustments", "Stock Transfers", "Sales Summary", "Sales Reports", "Top Selling Products"]) {
-    assert.ok(navigation.includes(child), `missing submenu ${child}`);
-  }
-  assert.doesNotMatch(navigation, />\s*\d+\s*</);
+test("POS exposes the clarified daily-selling hierarchy without administration menus", () => {
+  for(const label of ["Sales","Business Operations","Sales activity","Stock lookup","Device settings"])assert.ok(navigation.includes(`label:"${label}"`));
+  for(const label of ["Products","Inventory","Reports","Customers","Expenses","Settings"])assert.ok(!navigation.includes(`label:"${label}"`));
+  assert.match(navigation,/dailyPosDestinations/);assert.match(navigation,/Open Backoffice/);
 });
 
 test("navigation remains permission-aware and preserves existing module routing", () => {
@@ -33,13 +25,9 @@ test("navigation remains permission-aware and preserves existing module routing"
   assert.match(app, /onLogout=\{logout\}/);
 });
 
-test("supported submenu actions open their dedicated page, not just the module hub", () => {
-  for (const [label, feature] of [["Transaction History", "transaction-history"], ["Goods Received (GRN)", "goods-received"], ["Stock Adjustments", "stock-adjustments"], ["Sales Summary", "sales-summary"], ["Stock Transfers", "stock-transfers"], ["Sales Reports", "sales-reports"], ["Top Selling Products", "top-products"]]) {
-    assert.ok(navigation.includes(`label: "${label}", module: `));
-    const entry = navigation.split(`label: "${label}"`)[1].split("}")[0];
-    assert.ok(entry.includes(`feature: "${feature}"`), `${label} loses its feature route`);
-    assert.ok(modulePage.includes(`"${feature}"`));
-  }
+test("legacy feature routes retain compatibility and recovery without new POS administration", () => {
+  for(const feature of ["transaction-history","goods-received","stock-adjustments","sales-summary","stock-transfers","sales-reports","top-products"])assert.ok(modulePage.includes(`"${feature}"`));
+  assert.match(modulePage,/isDailyPosRoute/);assert.match(modulePage,/recoveryOnly/);assert.match(modulePage,/onOpenBackoffice/);
 });
 
 test("header uses live session, location, shift and clock values", () => {

@@ -1,8 +1,9 @@
+import {createPrintScope} from "../printing/context";
 import { useRef, useState } from "react";
 type Option = { id: string; name: string; product_id?: string };
 type Command = { payload: Record<string, unknown>; acknowledged: boolean };
-export default function BatchStockPanel({ identity, branch, products, variants = [], receive, adjust, count = false, online, send, changed }: {
-  identity: string; branch: string; products: Option[]; variants?: Option[]; receive: boolean; adjust: boolean; count?: boolean; online: boolean;
+export default function BatchStockPanel({ identity, branch, products, variants = [], receive, adjust, count = false, online, send, changed,recoveryOnly=false }: {
+  recoveryOnly?:boolean;identity: string; branch: string; products: Option[]; variants?: Option[]; receive: boolean; adjust: boolean; count?: boolean; online: boolean;
   send: (payload: unknown) => Promise<unknown>; changed: () => Promise<unknown>;
 }) {
   const key = `apexretail_batch_command_v1:${identity}`;
@@ -18,7 +19,7 @@ export default function BatchStockPanel({ identity, branch, products, variants =
   const recording = useRef(false);
   async function execute() {
     if (recording.current || !online) return;
-    recording.current = true; setBusy(true); setMessage("");
+    recording.current = true; setBusy(true); setMessage("");const recoveryScope=createPrintScope();
     try {
       const persisted = JSON.parse(localStorage.getItem(key) || "null") as Command | null;
       const saved = persisted || command || { payload: { request_id: crypto.randomUUID(), branch_id: branch, product_id: product,
@@ -27,6 +28,7 @@ export default function BatchStockPanel({ identity, branch, products, variants =
       if (!saved.payload.request_id) throw new Error("Stored batch request needs review. No data was cleared.");
       localStorage.setItem(key, JSON.stringify(saved)); setCommand(saved);
       const response = await send(saved.payload) as { movement_id?: string; batch_id?: string } | null;
+      if(!recoveryScope.isCurrent())return;
       if (!response?.movement_id || !response?.batch_id) throw new Error("No stock acknowledgement");
       const acknowledged = { ...saved, acknowledged: true };
       localStorage.setItem(key, JSON.stringify(acknowledged)); setCommand(acknowledged);
@@ -36,6 +38,7 @@ export default function BatchStockPanel({ identity, branch, products, variants =
       setMessage(detail || "Operation not confirmed. The original request is retained; retry without changing it.");
     } finally { recording.current = false; setBusy(false); }
   }
+  if(recoveryOnly&&(!command||command.acknowledged))return <p role="status">{command?"Original batch confirmation retained.":"No retained batch stock request on this POS."}</p>;
   return <details className="business-details"><summary>Receive / return / dispose / count batch stock</summary>
     {command ? <><p>{command.acknowledged ? "Confirmed" : "Pending confirmation — retry the original request"}</p><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(command.payload, null, 2)}</pre>
       {command.acknowledged ? <button onClick={() => { localStorage.setItem(`${key}:ack:${String(command.payload.request_id)}`, JSON.stringify(command)); localStorage.setItem(key, "null"); setCommand(null); }}>New stock operation</button> : <button disabled={!online || busy} onClick={() => void execute()}>Retry original stock request</button>}</> :

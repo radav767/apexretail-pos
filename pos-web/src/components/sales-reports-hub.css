@@ -1,0 +1,13 @@
+.sales-reports-hub { background:#fff; color:#152238; padding:20px; border:1px solid #64748b; border-radius:12px; min-width:0; }
+.sales-reports-hub h2,.sales-reports-hub p { color:#152238; }
+.sales-reports-tiles { display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px; }
+.sales-reports-tiles button { display:flex;flex-direction:column;gap:8px;text-align:left;min-height:80px;padding:16px;background:#fff;color:#152238;border:1px solid #64748b;border-radius:10px;white-space:normal;overflow-wrap:anywhere; }
+.sales-reports-tiles button:focus-visible { outline:3px solid #1d4ed8!important;outline-offset:3px; }
+.sales-reports-tiles strong { color:#152238; } .sales-reports-tiles span { color:#334155; }
+
+/* Opaque daily workspaces remain legible above checkout under the legacy theme. */
+.daily-pos-frame.pos-module-overlay { background:#eef2f7!important;backdrop-filter:none;color:#152238;z-index:1101; }
+.daily-pos-frame .pos-module-container { background:#fff;border:1px solid #64748b;border-radius:12px;padding:20px;box-sizing:border-box;overflow-wrap:anywhere; }
+.daily-pos-frame button { min-height:44px;white-space:normal;max-width:100%; }
+.daily-pos-frame button:focus-visible { outline:3px solid #1d4ed8!important;outline-offset:3px; }
+@media(forced-colors:active) { .daily-pos-frame .pos-module-container,.sales-reports-hub,.sales-reports-tiles button { border:1px solid CanvasText; } }

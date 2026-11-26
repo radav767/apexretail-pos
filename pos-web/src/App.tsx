@@ -3861,6 +3861,7 @@ const [loggedIn, setLoggedIn] = useState(
         activeModule={activePosModule}
         cashierName={cashier?.name || "Cashier"}
         cashierRole={cashier?.role || "employee"}
+        permissions={cashier?.permissions}
         canManageProducts={canManageProducts}
         canManageInventory={canManageInventory}
         canManageExpenses={Boolean(cashier?.role === "owner" || cashier?.role === "administrator" || cashier?.permissions?.expenses_create)}
@@ -3875,6 +3876,8 @@ const [loggedIn, setLoggedIn] = useState(
       {activePosModule !== "Sales" && (
         <PosModulePage
           activeModule={activePosModule}
+          onNavigate={showPosModule}
+          onOpenBackoffice={openBackoffice}
           companyId={companyId}
           branchId={branchId}
           cashier={cashier}

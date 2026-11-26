@@ -1,3 +1,7 @@
+import "./components/sales-reports-hub.css";
+import StockLookup from "./navigation/StockLookup";
+import {dailyPosDestinations,isDailyPosRoute,canLookupStock} from "./navigation/dailyPos";
+import {canOpenSalesDestination,salesDestinationFor} from "./navigation/salesReports";
 import PresentationPreferences from "./components/PresentationPreferences";
 import ProductSelector from "./components/ProductSelector";
 import ReconciliationExport from "./reports/ReconciliationExport";
@@ -189,6 +193,8 @@ type BusinessSettings = {
 
 type Props = {
   activeModule: PosModuleName;
+  onNavigate:(module:PosModuleName,feature?:string)=>void;
+  onOpenBackoffice:()=>void;
   companyId: string;
   branchId: string;
   cashier: CashierSession | null;
@@ -381,7 +387,7 @@ function localDateValue(date: Date = new Date()) {
     .slice(0, 10);
 }
 
-export default function PosModulePage({
+function LegacyPosModulePage({
   activeModule,
   companyId,
   branchId,
@@ -414,6 +420,7 @@ export default function PosModulePage({
   onShiftChanged,
   onProductsChanged,
   onBackToSales,
+  onOpenBackoffice,
 }: Props) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -591,6 +598,7 @@ export default function PosModulePage({
     if (feature === "home") url.searchParams.delete("feature");
     else url.searchParams.set("feature", feature);
     window.history.pushState(null, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   function backToFeatureHub() {
@@ -603,6 +611,7 @@ export default function PosModulePage({
     if (page === "home") url.searchParams.delete("feature");
     else url.searchParams.set("feature", page);
     window.history.pushState(null, "", url);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   useEffect(() => {
@@ -752,7 +761,7 @@ export default function PosModulePage({
       setNotice("");
 
       try {
-        if (activeModule === "Sales Management") {
+        if (activeModule === "Sales Management" && ["transaction-history","cancel-void-sales"].includes(activeFeature) && canOpenSalesDestination(cashier,"history")) {
           const response = await api.get(`/sales/history/${companyId}`, {
             params: {
               limit: 100,
@@ -846,7 +855,7 @@ export default function PosModulePage({
           }
         }
 
-        if (activeModule === "Settings") {
+        if (activeModule === "Settings" && activeSettingsPage !== "printer") {
           const response = await api.get(`/settings/${companyId}`);
 
           if (!cancelled) {
@@ -876,6 +885,9 @@ export default function PosModulePage({
     };
   }, [
     activeModule,
+    activeFeature,
+    activeSettingsPage,
+    cashier,
     branchId,
     companyId,
     salesDate,
@@ -949,6 +961,7 @@ export default function PosModulePage({
 
   if (activeModule === "Shift Management") {
     return <ShiftManagementPage
+      view="shift"
       companyId={companyId}
       branchId={branchId}
       cashier={cashier}
@@ -1507,7 +1520,7 @@ export default function PosModulePage({
           <div className="pos-module-notice">{notice}</div>
         )}
 
-        {!loading && activeModule === "Business Operations" && <BusinessPanel companyId={companyId} branchId={branchId} employeeId={cashier?.id} onPrintReceipt={onReprintSale} onProductsChanged={onProductsChanged} />}
+        {!loading && activeModule === "Business Operations" && <BusinessPanel onOpenBackoffice={onOpenBackoffice} companyId={companyId} branchId={branchId} employeeId={cashier?.id} onPrintReceipt={onReprintSale} onProductsChanged={onProductsChanged} />}
 
         {!loading && activeModule === "Sales Management" && activeFeature === "home" && (
           <PosFeatureHub
@@ -2775,7 +2788,7 @@ export default function PosModulePage({
 
                 {activeSettingsPage === "presentation" ? (cashier?.role === "owner" || cashier?.role === "administrator" ? <PresentationPreferences key={`${companyId}:${cashier?.id}`} companyId={companyId} branchId={selectedBranchId} deviceId={localStorage.getItem("device_id") || ""} client={api}/> : <p>Presentation configuration requires owner or administrator access.</p>) : activeSettingsPage === "printer" ? (
                   <>
-                    <PrinterPanel companyId={companyId} canManage={canManageSettings} />
+                    <PrinterPanel companyId={companyId} canManage={false} />
                     {!canManageSettings && (
                       <div className="pos-module-notice">
                         Printer changes require settings permission or owner access.
@@ -3315,4 +3328,25 @@ function SettingsCard({
       </dl>
     </section>
   );
+}
+
+/** Approved daily-selling surface. Legacy administration URLs retain recovery gateways. */
+export default function PosModulePage(props:Props){
+ const read=()=>new URLSearchParams(location.search).get('feature')||'home';
+ const [feature,setFeature]=useState(read);
+ useEffect(()=>{const sync=()=>setFeature(read());sync();window.addEventListener('popstate',sync);return()=>window.removeEventListener('popstate',sync)},[props.activeModule]);
+ const identity=`${props.cashier?.id||''}:${localStorage.getItem('device_id')||''}`;
+ const activity=<section aria-label="Sales activity"><h2>Sales activity</h2><div className="sales-reports-tiles">{dailyPosDestinations(props.cashier).map(item=><button type="button" key={item.id} onClick={()=>props.onNavigate(item.module,item.feature)}>{item.title}</button>)}</div></section>;
+ const frame=(body:React.ReactNode)=><section className="pos-module-overlay daily-pos-frame"><div className="pos-module-container">{body}<button type="button" onClick={props.onBackToSales}>Return to Sales</button></div></section>;
+ if(props.activeModule==='Sales Management'&&feature==='request-recovery')return frame(<section aria-label="Request recovery"><h2>Request recovery</h2><p>Use the original account and device to review a retained request. Opening a recovery page does not send it. Existing offline sales remain in their original queue.</p><div className="sales-reports-tiles"><button type="button" onClick={()=>props.onNavigate('Sales Management','transaction-history')}>Receipt and refund recovery</button><button type="button" onClick={()=>props.onNavigate('Shift Management')}>Shift and cash movement recovery</button><button type="button" onClick={()=>props.onNavigate('Inventory','stock-transfers')}>Original stock transfer</button><button type="button" onClick={()=>props.onNavigate('Inventory','stock-counts')}>Original stock count</button><button type="button" onClick={()=>props.onNavigate('Business Operations')}>Selling, quotation and batch recovery</button><button type="button" onClick={()=>props.onNavigate('Settings','printer')}>Print recovery</button></div></section>);
+ if(props.activeModule==='Sales Management'&&feature==='home')return frame(activity);
+ if(props.activeModule==='Inventory'&&['home','inventory-overview'].includes(feature))return canLookupStock(props.cashier)?frame(<StockLookup company={props.companyId} branch={props.branchId} identity={identity}/>):frame(<p role="alert">Stock lookup permission required.</p>);
+ if(props.activeModule==='Settings'&&feature==='home')return frame(<section aria-label="Device settings"><h2>Device settings</h2><button type="button" onClick={()=>props.onNavigate('Settings','printer')}>Receipt printer &amp; print recovery</button><button type="button" onClick={props.onOpenBackoffice}>Open Backoffice</button></section>);
+ if(!isDailyPosRoute(props.activeModule,feature))return frame(<><h2>Continue in Backoffice</h2><p>This administrative workspace is managed in Backoffice. Your existing requests and offline queues remain retained on this POS.</p><button type="button" onClick={props.onOpenBackoffice}>Open Backoffice</button>{activity}
+  {props.activeModule==='Inventory'&&feature==='stock-transfers'&&<FocusedOperationsPage recoveryOnly feature="stock-transfers" companyId={props.companyId} branchId={props.branchId} identity={identity} permitted={props.cashier?.role==='owner'||props.cashier?.role==='administrator'||Boolean(props.cashier?.permissions?.inventory_transfer??props.cashier?.permissions?.manage_inventory)}/>}
+  {props.activeModule==='Inventory'&&feature==='stock-counts'&&<StockTakePanel recoveryOnly companyId={props.companyId} branchId={props.branchId} identity={identity} client={api} permitted={props.cashier?.role==='owner'||props.cashier?.role==='administrator'||Boolean(props.cashier?.permissions?.inventory_count??props.cashier?.permissions?.manage_inventory)}/>}
+ </>);
+ const destination=salesDestinationFor(props.activeModule,feature);
+ if(destination&&!canOpenSalesDestination(props.cashier,destination.id))return frame(<><h2>Access required</h2><p>This workspace requires its current permission. Retained requests have not been removed.</p>{activity}</>);
+ return <LegacyPosModulePage {...props}/>;
 }

@@ -1,17 +1,15 @@
+import {dailyPosDestinations,canLookupStock} from "../navigation/dailyPos";
+import type {NavigationActor} from "../navigation/salesReports";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   ArchiveBoxIcon,
   ArrowRightStartOnRectangleIcon,
-  BanknotesIcon,
   Bars3Icon,
   BuildingStorefrontIcon,
-  ChartBarIcon,
   ChevronDownIcon,
   ClipboardDocumentListIcon,
   Cog6ToothIcon,
-  CubeIcon,
   ShoppingCartIcon,
-  UsersIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
 
@@ -26,6 +24,7 @@ type NavigationChild = {
 type NavigationGroup = {
   label: string;
   icon: ReactNode;
+  feature?:string;
   module?: PosModuleName;
   children?: NavigationChild[];
   visible?: boolean;
@@ -33,6 +32,7 @@ type NavigationGroup = {
 
 type Props = {
   canSell?: boolean;
+  permissions?:NavigationActor["permissions"];
   open: boolean;
   activeModule: PosModuleName;
   cashierName: string;
@@ -50,79 +50,26 @@ type Props = {
 
 export default function PosNavigation({
   canSell = true,
+  permissions,
   open,
   activeModule,
   cashierName,
   cashierRole,
-  canManageProducts,
-  canManageInventory,
-  canManageExpenses,
-  canManageCredit,
   onToggle,
   onClose,
   onNavigate,
   onBackoffice,
   onLogout,
 }: Props) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    "Sales Management": true,
-    Products: activeModule === "Products",
-    Inventory: activeModule === "Inventory",
-    Reports: activeModule === "Reports",
-  });
-
-  useEffect(() => {
-    const containingGroup = activeModule === "Shift Management" || activeModule === "Credit Settlements"
-      ? "Sales Management"
-      : activeModule;
-    setExpanded((current) => ({ ...current, [containingGroup]: true }));
-  }, [activeModule]);
-
-  const groups: NavigationGroup[] = [
-    { label: "Sales", icon: <ShoppingCartIcon />, module: "Sales", visible: canSell },
-    { label: "Business Operations", icon: <BuildingStorefrontIcon />, module: "Business Operations" },
-    {
-      label: "Sales Management",
-      icon: <ClipboardDocumentListIcon />,
-      children: [
-        { label: "Transaction History", module: "Sales Management", feature: "transaction-history" },
-        { label: "Shift Management", module: "Shift Management" },
-        ...(canManageCredit ? [{ label: "Credit Settlement", module: "Credit Settlements" as PosModuleName }] : []),
-      ],
-    },
-    { label: "Customers", icon: <UsersIcon />, module: "Customers" },
-    { label: "Expenses", icon: <BanknotesIcon />, module: "Expenses", visible: canManageExpenses },
-    {
-      label: "Products",
-      icon: <CubeIcon />,
-      visible: canManageProducts,
-      children: [
-        { label: "Products", module: "Products", feature: "all-products" },
-        { label: "Categories", module: "Products", feature: "categories" },
-        { label: "Composite Products", module: "Products", feature: "composite-products" },
-      ],
-    },
-    {
-      label: "Inventory",
-      icon: <ArchiveBoxIcon />,
-      visible: canManageInventory,
-      children: [
-        { label: "Goods Received (GRN)", module: "Inventory", feature: "goods-received" },
-        { label: "Stock Adjustments", module: "Inventory", feature: "stock-adjustments" },
-        { label: "Stock Transfers", module: "Inventory", feature: "stock-transfers" },
-        { label: "Stock Counts", module: "Inventory", feature: "stock-counts" },
-      ],
-    },
-    {
-      label: "Reports",
-      icon: <ChartBarIcon />,
-      children: [
-        { label: "Sales Summary", module: "Reports", feature: "sales-summary" },
-        { label: "Sales Reports", module: "Reports", feature: "sales-reports" },
-        { label: "Top Selling Products", module: "Reports", feature: "top-products" },
-      ],
-    },
-    { label: "Settings", icon: <Cog6ToothIcon />, module: "Settings" },
+  const [expanded,setExpanded]=useState<Record<string,boolean>>({"Sales activity":true,"Request recovery":true});
+  useEffect(()=>{if(["Sales Management","Shift Management"].includes(activeModule))setExpanded(current=>({...current,"Sales activity":true,"Request recovery":true}))},[activeModule]);
+  const groups:NavigationGroup[]=[
+    {label:"Sales",icon:<ShoppingCartIcon/>,module:"Sales",visible:canSell},
+    {label:"Business Operations",icon:<BuildingStorefrontIcon/>,module:"Business Operations"},
+    {label:"Sales activity",icon:<ClipboardDocumentListIcon/>,children:dailyPosDestinations({role:cashierRole,permissions}).map(item=>({label:item.title,module:item.module,feature:item.feature}))},
+    {label:"Request recovery",icon:<ClipboardDocumentListIcon/>,module:"Sales Management",feature:"request-recovery"},
+    {label:"Stock lookup",icon:<ArchiveBoxIcon/>,module:"Inventory",visible:canLookupStock({role:cashierRole,permissions})},
+    {label:"Device settings",icon:<Cog6ToothIcon/>,module:"Settings"},
   ];
 
   const isGroupActive = (group: NavigationGroup) =>
@@ -156,7 +103,7 @@ export default function PosNavigation({
         {groups.filter((group) => group.visible !== false).map((group) => {
           const active = Boolean(isGroupActive(group));
           if (!group.children) {
-            return <button key={group.label} type="button" className={active ? "active" : ""} onClick={() => group.module && onNavigate(group.module)}>
+            return <button key={group.label} type="button" className={active ? "active" : ""} onClick={() => group.module && onNavigate(group.module,group.feature)}>
               {group.icon}<span>{group.label}</span>
             </button>;
           }
@@ -181,7 +128,7 @@ export default function PosNavigation({
           </div>;
         })}
 
-        <button type="button" onClick={onBackoffice}><BuildingStorefrontIcon /><span>Backoffice</span></button>
+        <button type="button" onClick={onBackoffice}><BuildingStorefrontIcon /><span>Open Backoffice</span></button>
       </nav>
 
       <button type="button" className="pos-menu-logout" onClick={onLogout}>
