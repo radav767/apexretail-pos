@@ -46,3 +46,47 @@ class ProductSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.get(f'/api/products/{uuid4()}/selection',params={'branch_id':str(self.branch.id)})).status_code,403)
         self.assertEqual((await self.get(branch_id=str(uuid4()))).status_code,404)
         self.assertEqual((await self.get(category_id=str(uuid4()))).status_code,404)
+
+    async def test_inactive_deleted_and_foreign_selected_ids_never_become_management_reads(self):
+        from app.models import InventoryMovement,Sale,Company
+        from app.products.selection import selection
+        from fastapi import HTTPException
+        baseline={model:(await self.db.execute(select(func.count()).select_from(model).where(model.company_id==self.company.id))).scalar_one() for model in [InventoryMovement,Sale]}
+        archived=(await self.db.execute(select(Product).where(Product.company_id==self.company.id,Product.active.is_(False)))).scalars().one()
+        deleted=(await self.db.execute(select(Product).where(Product.company_id==self.company.id,Product.deleted.is_(True)))).scalars().one()
+        foreign_company=Company(name='Synthetic foreign catalogue',owner_email=f'{uuid4()}@example.test');self.db.add(foreign_company);await self.db.flush()
+        foreign=Product(company_id=foreign_company.id,name='Synthetic foreign selected product',active=True);self.db.add(foreign);await self.db.commit()
+        for selected in [archived.id,deleted.id,foreign.id,uuid4()]:
+            for purpose in ['general','charge']:
+                response=await self.get(purpose=purpose,selected_id=str(selected))
+                self.assertEqual(response.status_code,200,response.text)
+                self.assertEqual(response.json()['items'],[]);self.assertEqual(response.json()['total'],0)
+                direct=await selection(self.db,self.company.id,self.branch.id,actor=self.owner,purpose=purpose,selected_id=selected)
+                self.assertEqual(direct['items'],[])
+        for purpose in ['management','recipe','components','GENERAL']:
+            self.assertEqual((await self.get(purpose=purpose)).status_code,422)
+            with self.assertRaises(HTTPException) as rejected:
+                await selection(self.db,self.company.id,self.branch.id,actor=self.owner,purpose=purpose)
+            self.assertEqual(rejected.exception.status_code,422)
+        self.assertFalse(archived.active);self.assertTrue(deleted.deleted)
+        for model in [InventoryMovement,Sale]:
+            self.assertEqual((await self.db.execute(select(func.count()).select_from(model).where(model.company_id==self.company.id))).scalar_one(),baseline[model])
+
+    async def test_sales_read_permission_does_not_grant_catalogue_edit_or_charge_configuration(self):
+        from app.products.selection import selection
+        from app.auth.dependencies import AuthActor
+        from fastapi import HTTPException
+        self.employee.permissions={'sales':True,'manage_products':False,'manage_inventory':False,'products_edit':False,'business_settings_manage':False}
+        await self.db.commit()
+        token=create_employee_access_token(employee_id=str(self.employee.id),company_id=str(self.company.id),role='cashier')
+        headers={'Authorization':'Bearer '+token}
+        result=await self.client.get(f'/api/products/{self.company.id}/selection',params={'branch_id':str(self.branch.id),'selected_id':str(self.product.id)},headers=headers)
+        self.assertEqual(result.status_code,200,result.text);self.assertEqual(len(result.json()['items']),1);self.assertNotIn('cost_price',result.json()['items'][0])
+        edit=await self.client.patch(f'/api/products/{self.company.id}/{self.product.id}',json={'name':'Forbidden catalogue rename'},headers=headers)
+        self.assertEqual(edit.status_code,403,edit.text)
+        actor=AuthActor(actor_type='employee',company_id=self.company.id,role='cashier',employee=self.employee,permissions=self.employee.permissions,pos_session=self.session)
+        with self.assertRaises(HTTPException) as denied:
+            await selection(self.db,self.company.id,self.branch.id,actor=actor,purpose='charge')
+        self.assertEqual(denied.exception.status_code,403)
+        charge=await self.client.get(f'/api/products/{self.company.id}/selection',params={'branch_id':str(self.branch.id),'purpose':'charge'},headers=headers)
+        self.assertEqual(charge.status_code,403,charge.text)
