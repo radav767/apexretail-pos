@@ -34,7 +34,7 @@ async def review(svc,order_id,data,*,internal=False):
     if len({line.item_id for line in data.lines})!=len(data.lines) or set(original)!={line.item_id for line in data.lines}:raise HTTPException(422,'Review must identify every current positive quotation position exactly once')
     repo=CurrencyRepository(svc.db);base=await repo.base(row.company_id);settings=await repo.settings(row.company_id)
     if not base or not settings:raise HTTPException(409,'Configured currency/tax policy is required')
-    customer=await svc.db.get(Customer,row.customer_id) if row.customer_id else None
+    customer=await svc.db.get(Customer,row.customer_id,populate_existing=True) if row.customer_id else None
     if customer and (not customer.active or customer.deleted or customer.company_id!=row.company_id):raise HTTPException(409,'Quotation customer requires review')
     prepared=[];dimensions={};quantities={};positions=[]
     for line in data.lines:
@@ -55,7 +55,7 @@ async def review(svc,order_id,data,*,internal=False):
         if price is None:raise HTTPException(409,'Configured price is unavailable')
         prepared.append({'id':line.item_id,'quantity':line.quantity,'factor':factor,'price':price,'discount':line.discount,'tax_rate':0 if p.tax_exempt else p.tax_rate if p.tax_rate is not None else settings.tax_rate or 0})
         cost=v.cost_price if v and v.cost_price is not None else p.cost_price
-        positions.append({'id':str(line.item_id),'product_id':str(p.id),'variant_id':str(v.id) if v else None,'name':item.name,'base_unit':p.unit,'entered_unit':line.unit,'entered_quantity':str(line.quantity),'factor':str(factor),'price':str(price),'tax_rate':str(prepared[-1]['tax_rate']),'tax_exempt':bool(p.tax_exempt),'cost':str(cost) if cost is not None else None,'product_type':p.product_type,'line_discount':str(line.discount)})
+        positions.append({'id':str(line.item_id),'product_id':str(p.id),'variant_id':str(v.id) if v else None,'name':p.name+(f' ({v.name})' if v else ''),'price_level_name':level.name if level else None,'base_unit':p.unit,'entered_unit':line.unit,'entered_quantity':str(line.quantity),'factor':str(factor),'price':str(price),'tax_rate':str(prepared[-1]['tax_rate']),'tax_exempt':bool(p.tax_exempt),'cost':str(cost) if cost is not None else None,'product_type':p.product_type,'track_inventory':bool(p.track_inventory),'line_discount':str(line.discount)})
     result=pricing(prepared,base.decimal_places,settings.tax_inclusive,data.sale_discount)
     currency=await repo.by_code(row.company_id,(data.currency_code or base.code).strip().upper())
     if not currency:raise HTTPException(409,'Requested display currency is inactive or unknown')

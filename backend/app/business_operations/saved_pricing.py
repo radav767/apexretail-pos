@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import Field
 from fastapi import HTTPException
 from sqlalchemy import select,text
-from app.models import QuotationCommand,Product,ProductVariant,CompanySetting,Device
+from app.models import QuotationCommand,Product,ProductVariant,CompanySetting,Device,ProductPriceLevel
 from app.sales.commands import actor_identity,fingerprint
 from app.sales.repository import SalesRepository
 from app.sales.schema import SaleItemCreate
@@ -62,7 +62,7 @@ async def save(svc,order_id,data):
         if Decimal(plan['total'])!=data.expected_total or Decimal(plan['display_total'])!=data.expected_display_total:raise HTTPException(409,'Pricing expectation changed; review exact totals')
         by_id={r['id']:r for r in plan['items']}
         for item in await svc.order_items(row):
-            p=by_id[str(item.id)];item.quantity=Decimal(p['base_quantity']);item.unit=p['base_unit'];item.price=Decimal(p['price'])
+            p=by_id[str(item.id)];item.name=p['name'];item.quantity=Decimal(p['base_quantity']);item.unit=p['base_unit'];item.price=Decimal(p['price'])
         row.version+=1;plan['bound_version']=row.version;row.quotation_pricing=plan
         result={'order_id':str(row.id),'version':row.version,'quotation_pricing':public_plan(plan),'quotation_command_ack':str(data.request_id)}
         svc.db.add(QuotationCommand(request_id=data.request_id,company_id=row.company_id,order_id=row.id,actor_type=svc.actor.actor_type,actor_id=identity,payload_hash=digest,device_id=device.id,assignment_revision=device.assignment_revision,action='pricing_saved',result=result))
@@ -73,6 +73,12 @@ async def frozen(svc,row,draft=False):
     mode();plan=row.quotation_pricing
     if draft and plan['bound_version']!=row.version:raise HTTPException(409,'Draft edits invalidate saved pricing; explicitly resave')
     data=PricingReview.model_validate({**plan['input'],'version':row.version});current=await compute(svc,row,data)
+    # Additive tier-label evidence applies to new plans. Never rewrite older
+    # accepted v2 plans or invent a missing historical label.
+    old_items={r['id']:r for r in plan['items']}
+    for item in current['items']:
+        for field in ('price_level_name','track_inventory'):
+            if field not in old_items[item['id']]:item.pop(field,None)
     if {k:v for k,v in plan.items() if k!='bound_version'}!=current:raise HTTPException(409,'Configured pricing/unit/currency/cost changed; revise and accept again')
     return plan
 
@@ -93,15 +99,21 @@ class QuoteRepository(SalesRepository):
     async def get_variant(self,*args):
         row=await super().get_variant(*args);self.variants[str(args[2])]=row;return row
     async def get_price_level(self,*args):
-        level=await super().get_price_level(*args);self.levels[str(args[1])]=level;return level
+        level=await super().get_price_level(*args)
+        if level:
+            level=(await self.db.execute(select(ProductPriceLevel).where(ProductPriceLevel.id==level.id).with_for_update(read=True).execution_options(populate_existing=True))).scalar_one()
+        self.levels[(str(args[1]),Decimal(args[3]))]=level;return level
     def check(self,items):
         expected={(r['product_id'],r['variant_id']):r for r in self.plan['items']}
         if len(items)!=len(expected):raise HTTPException(409,'Accepted quotation positions differ')
         for item in items:
             r=expected[(str(item.product_id),str(item.variant_id) if item.variant_id else None)];p=self.products[str(item.product_id)]
-            level=self.levels.get(str(item.product_id));variant=self.variants.get(str(item.variant_id)) if item.variant_id else None
+            level=self.levels.get((str(item.product_id),Decimal(item.quantity)));variant=self.variants.get(str(item.variant_id)) if item.variant_id else None
             catalog_price=level.price if level else variant.selling_price if variant and variant.selling_price is not None else p.selling_price
             factor=1 if r['entered_unit'].strip().lower()==p.unit else p.units_per_purchase if r['entered_unit'].strip().lower()==str(p.purchase_unit or '').lower() else 0
             if (Decimal(catalog_price)!=Decimal(r['price']) or Decimal(factor)!=Decimal(r['factor']) or item.selling_unit!=r['base_unit'] or item.quantity!=Decimal(r['base_quantity']) or item.unit_price!=Decimal(r['price']) or item.line_total!=Decimal(r['net']) or Decimal(item.tax_rate_snapshot)!=Decimal(r['tax_rate']) or bool(item.tax_exempt_snapshot)!=r['tax_exempt'] or bool(item.cost_snapshot_available)!=(r['cost'] is not None) or r['cost'] is not None and Decimal(item.unit_cost)!=Decimal(r['cost'])):raise HTTPException(409,'Locked checkout differs from accepted quotation snapshots')
+            name=item.product_name+(f' ({item.variant_name_snapshot})' if item.variant_name_snapshot else '')
+            if 'track_inventory' in r and bool(p.track_inventory)!=r['track_inventory']:raise HTTPException(409,'Locked inventory policy differs from accepted quotation')
+            if name!=r['name'] or 'price_level_name' in r and item.price_level_name_snapshot!=r['price_level_name']:raise HTTPException(409,'Locked catalogue labels differ from accepted quotation source')
             item.tax_amount=Decimal(r['tax'])
     def totals(self,items):self.check(items);return tuple(Decimal(self.plan[k]) for k in ('subtotal','tax','total'))
