@@ -1,0 +1,22 @@
+{
+  "date_utc": "2026-11-26",
+  "implementation_commits": [
+    "2da223d",
+    "465f8fb"
+  ],
+  "source_hashes_match": true,
+  "original_frozen_seven_preserved": true,
+  "schema_revisions": 79,
+  "new_migrations": 0,
+  "policy_operations": 296,
+  "push_exit": 128,
+  "push_reason": "HTTPS Username unavailable; no credentials changed",
+  "production_super_admin": "NO-GO",
+  "posting": "default-disabled/test-only",
+  "preserved_gates": [
+    "recipes",
+    "repeated effective positions",
+    "non-two-decimal base",
+    "collected-credit payouts"
+  ]
+}
