@@ -1,0 +1,4 @@
+b6feae6ee046f0834526208ca913026b16a73907 Filter profile charge selectors and lock final product eligibility
+0b8121a8cb44cc28b151bb90c1f07c29ad2904ae Add scoped shared-tool appearance without changing legacy proofs
+d704b4caa245f32974c96b7a065210e2fd819e25 Add scoped selector preferences and preserve settings navigation
+2a713b8f1ac5efa859e29a6a414890ee25846c23 Add bounded read-only reconciliation snapshot exports
