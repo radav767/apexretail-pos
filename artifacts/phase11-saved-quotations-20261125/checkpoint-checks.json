@@ -1,0 +1,17 @@
+{
+  "date_utc": "2026-11-26",
+  "source_hashes_match": true,
+  "source_files": 33,
+  "original_frozen_seven": {
+    "src/App.tsx": true,
+    "src/api/client.ts": true,
+    "src/device.ts": true,
+    "src/api/authLifecycle.ts": true,
+    "tests/authLifecycle.test.ts": true,
+    "scripts/run-auth-lifecycle-tests.mjs": true,
+    "scripts/reproduce-baseline-startup-races.mjs": true
+  },
+  "push_exit": 128,
+  "push_reason": "HTTPS Username unavailable; no credentials changed",
+  "production_super_admin": "NO-GO"
+}

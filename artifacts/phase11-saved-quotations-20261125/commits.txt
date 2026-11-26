@@ -1,0 +1,4 @@
+c08856cf82e32c6a2c273059ede280e293002c59 Add recoverable first-party quotation pricing and accepted conversion controls
+a7030f89e358aaa456c296ebb8128039cbd28964 Conserve frozen original-currency quotation refund budgets
+2abf3c0fc60ff8716d32ad0a3be7168ffaebd5e8 Save accepted quotation pricing and atomically convert base-currency plans
+c323c58098cac880823ff7ea6d80d1b04d759e88 Verify real receipt shells and fence print delivery across identity changes
