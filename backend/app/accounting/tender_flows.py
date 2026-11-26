@@ -77,8 +77,9 @@ SELECT (SELECT count(*) FROM events) event_count,
  (SELECT COALESCE(jsonb_agg(jsonb_build_object('base_code',base_code,'receipts',receipts,'billed',billed::text,'tax',tax::text,'cost',cost::text,'unknown_cost_receipts',unknown_cost_receipts) ORDER BY base_code),'[]'::jsonb) FROM revenue) revenue
 ''')
 
-async def report(db,actor,company,start,end,branch=None,shift=None,limit=100,offset=0):
-    if start.tzinfo is None or end.tzinfo is None or not timedelta(0)<end-start<=timedelta(days=366) or not 1<=limit<=200 or offset<0:raise HTTPException(422,'Use aware half-open bounds up to366 days and bounded pagination')
+async def authorized_scope(db,actor,company,start,end,branch=None,shift=None):
+    if start.tzinfo is None or end.tzinfo is None or not timedelta(0)<end-start<=timedelta(days=366):
+        raise HTTPException(422,'Use aware half-open bounds up to366 days')
     await WorkflowService(db,actor).current_context(company)
     permit(actor,'revenue_view');permit(actor,'credit_settlements')
     if actor.employee and actor.role not in {'owner','administrator'}:branch=branch or actor.employee.branch_id
@@ -92,7 +93,13 @@ async def report(db,actor,company,start,end,branch=None,shift=None,limit=100,off
         enforce_actor_branch(actor,branch)
         if not (await db.execute(select(Branch.id).where(Branch.company_id==company,Branch.id==branch))).scalar_one_or_none():raise HTTPException(404,'Branch not found')
     start,end=start.astimezone(timezone.utc),end.astimezone(timezone.utc)
-    result=dict((await db.execute(SQL,{'company':company,'branch':branch,'shift':shift,'start':start,'end':end,'limit':limit,'offset':offset})).mappings().one())
+    return {'company':company,'branch':branch,'shift':shift,'start':start,'end':end}
+
+async def report(db,actor,company,start,end,branch=None,shift=None,limit=100,offset=0):
+    if not 1<=limit<=200 or offset<0:raise HTTPException(422,'Use bounded pagination')
+    params=await authorized_scope(db,actor,company,start,end,branch,shift)
+    start,end=params['start'],params['end']
+    result=dict((await db.execute(SQL,{**params,'limit':limit,'offset':offset})).mappings().one())
     return {'contract_version':'tender-flows-v1','start_inclusive':start.isoformat(),'end_exclusive':end.isoformat(),'read_consistency':'single_statement','limit':limit,'offset':offset,
         'scope':'dated recorded payments/debt and billed revenue; known frozen-rate valuation is not current cash value or provider confirmation','posting_enabled':False,'provider_confirmed':False,**result}
 
@@ -100,3 +107,8 @@ router=APIRouter(prefix='/reports',tags=['Dated tender accounting'])
 @router.get('/tender-flows/{company_id}')
 async def read(company_id:UUID,start:datetime,end:datetime,branch_id:UUID|None=None,shift_id:UUID|None=None,limit:int=Query(default=100,ge=1,le=200),offset:int=Query(default=0,ge=0),db=Depends(get_db),actor=Depends(get_auth_actor)):
     return await report(db,actor,company_id,start,end,branch_id,shift_id,limit,offset)
+
+@router.get('/reconciliation/{company_id}/export.zip')
+async def export_reconciliation(company_id:UUID,start:datetime,end:datetime,branch_id:UUID|None=None,shift_id:UUID|None=None,db=Depends(get_db),actor=Depends(get_auth_actor)):
+    from app.accounting.exports import export_bundle
+    return await export_bundle(db,actor,company_id,start,end,branch_id,shift_id)

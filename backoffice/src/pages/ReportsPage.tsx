@@ -1,3 +1,4 @@
+import ReconciliationExport from "../../../pos-web/src/reports/ReconciliationExport";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import "./reports.css";
@@ -254,6 +255,7 @@ export default function ReportsPage({
 
   return (
     <div className="reports-page">
+      <ReconciliationExport key={companyId} companyId={companyId} client={api}/>
       <section className="reports-toolbar">
         <div>
           <h2>Sales Report</h2>

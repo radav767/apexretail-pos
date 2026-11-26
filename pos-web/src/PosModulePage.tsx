@@ -1,3 +1,4 @@
+import ReconciliationExport from "./reports/ReconciliationExport";
 import { RefundCommands, refundActorStorageId } from "./refundCommand";
 import { createBootstrapScope } from "./api/authLifecycle";
 import AllocationDetails from './printing/AllocationDetails';
@@ -2660,6 +2661,7 @@ export default function PosModulePage({
           </div></>
         )}
 
+        {!loading && activeModule === "Reports" && activeFeature === "home" && (cashier?.role === "owner" || cashier?.role === "administrator" || (cashier?.permissions?.revenue_view && cashier?.permissions?.credit_settlements)) && <ReconciliationExport companyId={companyId} branchId={selectedBranchId} client={api}/>}
         {!loading && activeModule === "Reports" && activeFeature === "home" && (
           <PosFeatureHub
             title="Reports"

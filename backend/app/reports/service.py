@@ -1,5 +1,6 @@
 import csv
 import io
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -12,7 +13,7 @@ from app.reports.accounting import (
 
 def csv_cell(value):
     text = "" if value is None else str(value)
-    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+    if text.startswith(("\t", "\r", "\n", "\ufeff")) or re.match(r"^[\s\ufeff]*[=+@-]", text):
         return "'" + text
     return text
 
