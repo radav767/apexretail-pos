@@ -1,0 +1,186 @@
+{
+  "frozen_commit": "7b897e9",
+  "legacy_fingerprint_cases": [
+    {
+      "model": "SavePreferences",
+      "scope": "company",
+      "preferences": {},
+      "unchanged_hash": "61c77bd3a1b375dc726a2598e9b1b592be918e0abce3a7edbbd878a7de0b52ce"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "company",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "90cbb17ab456cfd3a15d5df55a572d2629a1a5ba23b90ce638667c84d0444836"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "company",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "61c77bd3a1b375dc726a2598e9b1b592be918e0abce3a7edbbd878a7de0b52ce"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "branch",
+      "preferences": {},
+      "unchanged_hash": "e7706755ff427975cc7aac3d898c1117ba9d3d0c8b1c8856c5a82e3f0967b90c"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "branch",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "3cd169875816dea9c3cd00773fc2f364991dfc3cd88dd92c7251d1e6c05b5162"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "branch",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "e7706755ff427975cc7aac3d898c1117ba9d3d0c8b1c8856c5a82e3f0967b90c"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "device",
+      "preferences": {},
+      "unchanged_hash": "da2aaa057d9722e8ad2c64d05b8a0aa03abaa4d3581fe8fe9daf13d6a0c3d195"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "device",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "e0bf974f637b6426edcf7eaae2a1435722a0a68dc40a406b9d0e626eeedeeb98"
+    },
+    {
+      "model": "SavePreferences",
+      "scope": "device",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "da2aaa057d9722e8ad2c64d05b8a0aa03abaa4d3581fe8fe9daf13d6a0c3d195"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "company",
+      "preferences": {},
+      "unchanged_hash": "f7f4d0e9d55ec7c4df6b79d2c00f80ccf9bbf759aaf983877c52ebe45e303d4e"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "company",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "de3c1d52e48186cb228f33e70989bb6a5e4a426594a7f22b9316038c6cef0f91"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "company",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "f7f4d0e9d55ec7c4df6b79d2c00f80ccf9bbf759aaf983877c52ebe45e303d4e"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "company",
+      "preferences": {
+        "tool_color_scheme": "system"
+      },
+      "unchanged_hash": "eeb5f5ee02e283f4e4fdf71b8fba006aef958288d9703587e3acd396133be241"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "company",
+      "preferences": {
+        "tool_color_scheme": null
+      },
+      "unchanged_hash": "f7f4d0e9d55ec7c4df6b79d2c00f80ccf9bbf759aaf983877c52ebe45e303d4e"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "branch",
+      "preferences": {},
+      "unchanged_hash": "192b20a79242c39e670b54f58fcd4206bce7fafaf59486e7f57b921abc301b2a"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "branch",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "d65fecf3de8922f6ccd01671ee1729765528d1e9112784fc1c3c4aa198ab3c38"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "branch",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "192b20a79242c39e670b54f58fcd4206bce7fafaf59486e7f57b921abc301b2a"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "branch",
+      "preferences": {
+        "tool_color_scheme": "system"
+      },
+      "unchanged_hash": "c86c92c9d7c3de32d1a5889e43c3cdeefd48ccb7d3c03e92a81af36a71fadbf1"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "branch",
+      "preferences": {
+        "tool_color_scheme": null
+      },
+      "unchanged_hash": "192b20a79242c39e670b54f58fcd4206bce7fafaf59486e7f57b921abc301b2a"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "device",
+      "preferences": {},
+      "unchanged_hash": "d64c3899873381a3aa3769a29f9b1aa94636679590f64a6ff103f49a23a95828"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "device",
+      "preferences": {
+        "selector_view": "cards"
+      },
+      "unchanged_hash": "3b47e4c4b2a6ac158ddd8b72970295d36cc13b610ef3682745cb79974c56626f"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "device",
+      "preferences": {
+        "selector_view": null
+      },
+      "unchanged_hash": "d64c3899873381a3aa3769a29f9b1aa94636679590f64a6ff103f49a23a95828"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "device",
+      "preferences": {
+        "tool_color_scheme": "system"
+      },
+      "unchanged_hash": "eb3571cfdbfec9a5a52704dc1392f9253af69ef7b0311e1234ea2d5448f40c60"
+    },
+    {
+      "model": "SaveAppearance",
+      "scope": "device",
+      "preferences": {
+        "tool_color_scheme": null
+      },
+      "unchanged_hash": "d64c3899873381a3aa3769a29f9b1aa94636679590f64a6ff103f49a23a95828"
+    }
+  ],
+  "database_connected": false
+}

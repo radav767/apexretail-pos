@@ -96,3 +96,58 @@ class PresentationPreferenceTests(unittest.IsolatedAsyncioTestCase):
         bad={**body,'request_id':str(uuid4()),'version':4,'preferences':{'tool_color_scheme':'url(https://provider.invalid)'}}
         self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json=bad)).status_code,422)
         self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json={**legacy,'preferences':{'tool_color_scheme':'dark'}})).status_code,422)
+
+    async def test_v3_backoffice_workspace_inheritance_and_mixed_legacy_ownership(self):
+        from app.business_settings.preferences import SavePreferences,SaveAppearance
+        from app.sales.commands import fingerprint
+        contract='backoffice-workspace-preferences-v3'
+        async def send(scope,version,values,status=200,**fields):
+            body={'contract_version':contract,'company_id':str(self.c),'request_id':str(uuid4()),'scope':scope,'version':version,'preferences':values,**fields}
+            response=await self.client.put(f'/api/settings/preferences/{self.c}',json=body);self.assertEqual(response.status_code,status,response.text);return response.json(),body
+        old,v1=await self.put()
+        v2={**v1,'request_id':str(uuid4()),'version':1,'contract_version':'presentation-preferences-v2','preferences':{'tool_color_scheme':'dark'}}
+        second=await self.client.put(f'/api/settings/preferences/{self.c}',json=v2);self.assertEqual(second.status_code,200,second.text)
+        before_hashes=[fingerprint(SavePreferences(**v1)),fingerprint(SaveAppearance(**v2))]
+        saved,body=await send('company',2,{'selector_view':'cards','tool_color_scheme':'dark','backoffice_workspace_view':'list','backoffice_text_size':'large'})
+        metadata=await self.read();self.assertEqual(metadata['contract_version'],'presentation-preferences-v2');self.assertEqual(metadata['capabilities']['workspace_preferences'],contract)
+        for original,ack,original_hash in [(v1,old,before_hashes[0]),(v2,second.json(),before_hashes[1])]:
+            self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json=original)).json(),ack)
+            self.assertEqual((await self.db.get(WorkflowCommand,UUID(original['request_id']))).payload_hash,original_hash)
+        await self.put(version=3,values={})
+        self.assertEqual((await self.read())['effective'],{'selector_view':'table','tool_color_scheme':'dark','backoffice_workspace_view':'list','backoffice_text_size':'large'})
+        clear_v2={**v2,'request_id':str(uuid4()),'version':4,'preferences':{}}
+        self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json=clear_v2)).status_code,200)
+        self.assertEqual((await self.read())['effective'],{'selector_view':'table','tool_color_scheme':'light','backoffice_workspace_view':'list','backoffice_text_size':'large'})
+        await send('branch',0,{'backoffice_text_size':'standard'},branch_id=str(self.b))
+        await send('device',0,{'backoffice_workspace_view':'tiles'},branch_id=str(self.b),device_id=str(self.device.id))
+        result=await self.read(branch_id=str(self.b),device_id=str(self.device.id));self.assertEqual(result['effective']['backoffice_text_size'],'standard');self.assertEqual(result['sources']['backoffice_text_size'],'branch');self.assertEqual(result['sources']['backoffice_workspace_view'],'device')
+        await send('device',1,{},branch_id=str(self.b),device_id=str(self.device.id))
+        self.assertEqual((await self.read(branch_id=str(self.b),device_id=str(self.device.id)))['sources']['backoffice_workspace_view'],'company')
+        await send('device',2,{'backoffice_workspace_view':'tiles'},branch_id=str(self.b),device_id=str(self.device.id))
+        self.device.assignment_revision+=1;await self.db.commit()
+        result=await self.read(branch_id=str(self.b),device_id=str(self.device.id));self.assertEqual(result['scopes'][-1]['version'],0);self.assertEqual(result['sources']['backoffice_workspace_view'],'company')
+        self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json=body)).json(),saved)
+        await send('company',2,{},status=409)
+        for invalid in [{'backoffice_text_size':'url(https://provider.invalid)'},{'backoffice_workspace_view':'recipes'},{'posting_enabled':True}]:
+            await send('company',5,invalid,status=422)
+        self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json={**v2,'preferences':{'backoffice_text_size':'large'}})).status_code,422)
+        sub=(await self.db.execute(select(CompanySubscription).where(CompanySubscription.company_id==self.c))).scalar_one();sub.status='expired';await self.db.commit()
+        self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json=body)).json(),saved)
+        await send('company',5,{},status=402)
+        user=await self.db.get(User,self.u);user.session_version+=1;await self.db.commit()
+        self.assertEqual((await self.client.put(f'/api/settings/preferences/{self.c}',json=body)).status_code,401)
+        self.assertEqual((await self.db.execute(select(InventoryBalance.quantity).where(InventoryBalance.company_id==self.c,InventoryBalance.product_id==self.p))).scalar_one(),100)
+        self.assertEqual((await self.db.execute(select(func.count()).select_from(InventoryMovement).where(InventoryMovement.company_id==self.c))).scalar_one(),0)
+
+    async def test_v3_failure_rolls_back_and_employee_cannot_set_company_workspace(self):
+        from app.workflows.core import WorkflowService
+        body={'contract_version':'backoffice-workspace-preferences-v3','company_id':str(self.c),'request_id':str(uuid4()),'scope':'company','version':0,'preferences':{'backoffice_workspace_view':'list','backoffice_text_size':'large'}}
+        token=create_employee_access_token(employee_id=str(self.e),company_id=str(self.c),role='cashier')
+        response=await self.client.put(f'/api/settings/preferences/{self.c}',json=body,headers={'Authorization':'Bearer '+token});self.assertEqual(response.status_code,403,response.text)
+        async def fail(svc,*args,**kwargs):await svc.db.flush();raise RuntimeError('Synthetic workspace acknowledgement failure')
+        with patch.object(WorkflowService,'finish',fail):
+            response=await self.client.put(f'/api/settings/preferences/{self.c}',json=body);self.assertEqual(response.status_code,500,response.text)
+        await self.db.rollback()
+        self.assertNotIn('backoffice_workspace_view',(await self.read())['effective'])
+        self.assertIsNone(await self.db.get(WorkflowCommand,UUID(body['request_id'])))
+        response=await self.client.put(f'/api/settings/preferences/{self.c}',json=body);self.assertEqual(response.status_code,200,response.text)

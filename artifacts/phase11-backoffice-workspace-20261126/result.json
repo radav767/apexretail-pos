@@ -1,0 +1,16 @@
+{
+  "company_id": "2cc89025-13e0-4019-93e8-50ee3cff1f38",
+  "sale_id": "9acec44c-4e6b-4e4e-a89c-395c7f2ffca7",
+  "real_BO_owner_login_settings_hub": true,
+  "v3_lost_response_original_body_and_uuid": true,
+  "legacy_acknowledgement_unchanged": true,
+  "company_list_large_text_reload": true,
+  "scoped_company_branch_device_preview_and_clear": true,
+  "downlevel_v2_fallback_preserves_workspace": true,
+  "narrow_forced_colors_keyboard_reflow": true,
+  "POS_minimal_device_settings_no_BO_hierarchy": true,
+  "receipt_snapshot_unchanged": true,
+  "completed_preference_response_discarded_after_logout": true,
+  "page_errors": [],
+  "unexpected_origins": []
+}

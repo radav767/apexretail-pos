@@ -33,6 +33,15 @@ class SaveAppearance(SavePreferences):
     preferences:AppearanceValues
 
 
+class WorkspaceValues(AppearanceValues):
+    backoffice_workspace_view:Literal['tiles','list']|None=None
+    backoffice_text_size:Literal['standard','large']|None=None
+
+class SaveWorkspace(SaveAppearance):
+    contract_version:Literal['backoffice-workspace-preferences-v3']
+    preferences:WorkspaceValues
+
+
 def key(company,branch=None,device=None,revision=None):
     return uuid5(NAMESPACE_URL,f'apexretail:selector-preferences:v1:{company}:{branch}:{device}:{revision}')
 
@@ -63,7 +72,7 @@ async def effective(db,actor,company,branch=None,device=None):
         row=rows.get(id);preferences=row.payload['preferences'] if row else {}
         values.update(preferences);sources.update({name:level for name in preferences})
         scopes.append({'scope':level,'version':row.version if row else 0,'preferences':preferences})
-    return {'contract_version':'presentation-preferences-v2','company_id':str(company),'branch_id':str(branch) if branch else None,'device_id':str(device) if device else None,'assignment_revision':revision,'effective':values,'sources':sources,'scopes':scopes}
+    return {'contract_version':'presentation-preferences-v2','capabilities':{'workspace_preferences':'backoffice-workspace-preferences-v3'},'company_id':str(company),'branch_id':str(branch) if branch else None,'device_id':str(device) if device else None,'assignment_revision':revision,'effective':values,'sources':sources,'scopes':scopes}
 
 async def save(db,actor,data):
     svc=WorkflowService(db,actor);await svc.current_context(data.company_id)
@@ -83,11 +92,13 @@ async def save(db,actor,data):
     row=(await db.execute(select(WorkflowRecord).where(WorkflowRecord.id==record_id,WorkflowRecord.company_id==data.company_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
     if (row.version if row else 0)!=data.version:raise HTTPException(409,'Preferences changed; reload before saving')
     preferences=data.preferences.model_dump(exclude_none=True)
-    if not isinstance(data,SaveAppearance) and row and 'tool_color_scheme' in row.payload['preferences']:
-        # Legacy callers own only selector_view. Never erase a newer override or
-        # add a field/default to their fingerprint-bearing request model.
-        preferences['tool_color_scheme']=row.payload['preferences']['tool_color_scheme']
-    contract='presentation-preferences-v2' if isinstance(data,SaveAppearance) or 'tool_color_scheme' in preferences else 'selector-preferences-v1'
+    # A writer owns only fields represented by its original request contract.
+    # Never extend legacy fingerprint-bearing models or erase newer overrides.
+    owned=set(type(data.preferences).model_fields)
+    if row:
+        preferences.update({name:value for name,value in row.payload['preferences'].items() if name not in owned})
+    contract=('backoffice-workspace-preferences-v3' if isinstance(data,SaveWorkspace) or any(name.startswith('backoffice_') for name in preferences)
+        else 'presentation-preferences-v2' if isinstance(data,SaveAppearance) or 'tool_color_scheme' in preferences else 'selector-preferences-v1')
     payload={'contract_version':contract,'scope':data.scope,'device_id':str(data.device_id) if data.device_id else None,'assignment_revision':revision,'preferences':preferences}
     if row:row.payload=payload;row.version+=1
     else:row=WorkflowRecord(id=record_id,company_id=data.company_id,branch_id=branch,kind='ui_preferences',state='active',version=1,payload=payload);db.add(row)
@@ -99,6 +110,6 @@ async def read_preferences(company_id:UUID,branch_id:UUID|None=None,device_id:UU
     return await effective(db,actor,company_id,branch_id,device_id)
 
 @router.put('/{company_id}')
-async def save_preferences(company_id:UUID,data:SavePreferences|SaveAppearance,db=Depends(get_db),actor=Depends(get_auth_actor)):
+async def save_preferences(company_id:UUID,data:SavePreferences|SaveAppearance|SaveWorkspace,db=Depends(get_db),actor=Depends(get_auth_actor)):
     if company_id!=data.company_id:raise HTTPException(422,'Preference tenant differs')
     return await save(db,actor,data)

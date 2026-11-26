@@ -787,7 +787,7 @@ function App() {
           <EmployeesPage companyId={companyId} />
         )}
 
-        {page === "sales-reports-hub" && <SalesReportsHub backoffice onSelect={item=>navigateTo(item.page as BackofficePage)}/>}
+        {page === "sales-reports-hub" && <SalesReportsHub backoffice companyId={companyId} client={api} onSelect={item=>navigateTo(item.page as BackofficePage)}/>}
 
         {page === "reports" && (
           <ReportsPage companyId={companyId} />

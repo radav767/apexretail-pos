@@ -11,3 +11,6 @@
 .daily-pos-frame button { min-height:44px;white-space:normal;max-width:100%; }
 .daily-pos-frame button:focus-visible { outline:3px solid #1d4ed8!important;outline-offset:3px; }
 @media(forced-colors:active) { .daily-pos-frame .pos-module-container,.sales-reports-hub,.sales-reports-tiles button { border:1px solid CanvasText; } }
+
+.sales-reports-hub[data-workspace-view="list"] .sales-reports-tiles { grid-template-columns:minmax(0,1fr); }
+:is(.sales-reports-hub,.shared-tool-theme)[data-workspace-text-size="large"] :is(p,label,select,input,button,strong,span) { font-size:max(20px,1.25rem)!important;line-height:1.5; }
