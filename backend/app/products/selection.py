@@ -3,15 +3,25 @@ from fastapi import HTTPException
 from sqlalchemy import select,func,case,or_
 from app.models import Product,Category,Branch,InventoryBalance,VariantInventoryBalance
 from app.pagination import page_response
+from app.products.access import ensure_catalog_access
+from app.workflows.core import WorkflowService
+from app.printing.service import permit
 
 
-async def selection(db,company_id,branch_id,*,search='',category_id=None,page=1,page_size=25):
+async def selection(db,company_id,branch_id,*,actor=None,search='',category_id=None,purpose='general',selected_id=None,page=1,page_size=25):
+    if purpose not in ('general','charge') or not isinstance(search,str) or len(search)>160 or not isinstance(page,int) or not isinstance(page_size,int) or page<1 or not 1<=page_size<=100 or (page-1)*page_size>2147483647:
+        raise HTTPException(422,'Use a supported selection purpose and bounded search/page')
+    await WorkflowService(db,actor).current_context(company_id,branch_id)
+    if purpose=='charge':permit(actor,'business_settings_manage')
+    else:ensure_catalog_access(actor,company_id)
     branch=(await db.execute(select(Branch.id).where(Branch.id==branch_id,Branch.company_id==company_id,
         Branch.active.is_(True),Branch.deleted.is_(False)))).scalar_one_or_none()
     if not branch:raise HTTPException(404,'Branch not found')
     if category_id and not (await db.execute(select(Category.id).where(Category.id==category_id,Category.company_id==company_id,Category.deleted.is_(False)))).scalar_one_or_none():
         raise HTTPException(404,'Category not found')
     query=select(Product).where(Product.company_id==company_id,Product.active.is_(True),Product.deleted.is_(False))
+    if purpose=='charge':query=query.where(Product.product_type.in_(('service','non_stock')),Product.track_inventory.is_(False))
+    if selected_id:query=query.where(Product.id==selected_id)
     term=search.strip()
     if term:
         escaped=term.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')
@@ -30,4 +40,4 @@ async def selection(db,company_id,branch_id,*,search='',category_id=None,page=1,
         .order_by(case((Product.barcode==term,0),else_=1),func.lower(Product.name),Product.id)
         .offset((page-1)*page_size).limit(page_size))).mappings().all()
     items=[{**row,'branch_stock_qty':row['branch_stock_qty'] if row['track_inventory'] else None} for row in rows]
-    return page_response(items,page,page_size,total)
+    return {**page_response(items,page,page_size,total),'selection_contract':'product-selection-v2','purpose':purpose}

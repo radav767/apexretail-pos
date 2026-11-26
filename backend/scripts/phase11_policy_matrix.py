@@ -208,6 +208,14 @@ def assess(row):
         sources += ';accounting/tender_flows.py;shifts/split_accounting.py'
         replay = 'Current identity/revocation/revenue and collection permissions plus own event tenant/branch/shift. Aware UTC half-open <=366day window; one statement independently aggregates original/refund revenue, applied payments, debt and original cash units with frozen FX residuals. Exact committed commands contribute once. Historical read survives expiry; no provider/posting authority or current-rate reconstruction.'
         gap = 'synthetic_dates_boundaries_fx_replay_and_shift_close_lock_orders_verified_receipt_ui_full_device_acceptance_pending'
+    if path == '/api/products/{company_id}/selection':
+        sources += ';products/selection.py;products/access.py;workflows/core.py'
+        replay = 'Direct current identity/epoch/tenant/branch/register plus existing catalogue permission for general purpose or business-settings authority for charge purpose. Bounded server search/pages and exact selected-ID lookup; charge count/rows require active undeleted explicit nontracking service/non_stock products. Cost redaction, literal wildcards, expired configuration reads and selection-contract capability retained; no mutation or recipe authority.'
+        gap = 'synthetic_scopes_purpose_pages_selected_id_and_current_guard_verified_profile_shell_acceptance_and_advanced_management_filters_separate'
+    if path == '/api/operations/profile' and method == 'PUT':
+        sources += ';business_operations/service.py;workflows/core.py'
+        replay = 'Current direct actor/epoch/register and business-settings permission/write license; product eligibility refreshed and share-locked in deterministic ID order through commit. Unversioned configuration PUT, not an immutable UUID command/recovery or financial transaction. Optional clear retains profile policy; future catalogue changes require renewed eligibility.'
+        gap = 'synthetic_stale_identity_map_and_both_catalog_lock_orders_verified_unversioned_profile_configuration_limit_explicit'
     if path.startswith('/api/settings/preferences/'):
         sources += ';business_settings/preferences.py;workflows/core.py'
         policy = 'scoped_presentation_read_or_exact_command'

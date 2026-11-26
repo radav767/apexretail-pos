@@ -1,0 +1,20 @@
+{
+  "company_id": "e8d88db1-e168-45aa-8e35-f24968dc36e9",
+  "tail_id": "9e2e0932-f5e7-4940-9c99-2ac7dfdf2bbe",
+  "first_id": "91120d34-dd71-449e-9cfa-75ae0939cc1a",
+  "last_id": "ad644393-c302-469d-b434-00eb24372e21",
+  "tracked_id": "9f22ae27-0d7e-42db-8978-f9d80a8d7a78",
+  "eligible_total": 33,
+  "filler_count": 1005,
+  "real_BO_POS_auth_PIN_profile_navigation": true,
+  "pagination_25_then_8": true,
+  "saved_source_name_beyond_1000_options": true,
+  "SKU_barcode_search": true,
+  "optional_clear_preserves_other_field": true,
+  "reload_and_PIN_preserve_settings": true,
+  "tracked_service_save_rejected400": true,
+  "stale_charge_search_after_logout_suppressed": true,
+  "page_errors": [],
+  "unexpected_origins": [],
+  "no_tip_payout_provider_acceptance": true
+}

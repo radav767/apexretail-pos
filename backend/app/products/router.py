@@ -1,3 +1,5 @@
+from typing import Literal
+from app.products.access import ensure_catalog_access
 from uuid import UUID
 
 import csv
@@ -59,17 +61,6 @@ async def read_image(company_id:UUID,media_id:UUID,db:AsyncSession=Depends(get_d
     return FileResponse(path_for(media),media_type=media.content_type,headers={"Cache-Control":"private,max-age=3600"})
 
 
-def ensure_catalog_access(actor: AuthActor, company_id: UUID) -> None:
-    ensure_company_access(actor, company_id)
-    if actor.actor_type == "employee" and actor.role not in {
-        "owner", "manager", "administrator"
-    }:
-        permissions = actor.permissions or {}
-        if not any(
-            permissions.get(key)
-            for key in ("sales", "manage_products", "manage_inventory")
-        ):
-            raise HTTPException(403, "Permission denied")
 
 
 def can_view_product_cost(actor: AuthActor) -> bool:
@@ -125,12 +116,11 @@ async def lookup_product_by_barcode(
 
 @router.get("/{company_id}/selection")
 async def select_products(company_id: UUID, branch_id: UUID, search: str = Query(default="",max_length=160),
-    category_id: UUID | None = None, page: int = Query(default=1,ge=1),page_size: int = Query(default=25,ge=1,le=100),
+    category_id: UUID | None = None, purpose:Literal["general","charge"]="general", selected_id:UUID|None=None, page: int = Query(default=1,ge=1),page_size: int = Query(default=25,ge=1,le=100),
     db: AsyncSession = Depends(get_db), actor: AuthActor = Depends(get_auth_actor)):
-    ensure_catalog_access(actor,company_id)
     enforce_actor_branch(actor,branch_id)
     from .selection import selection
-    return await selection(db,company_id,branch_id,search=search,category_id=category_id,page=page,page_size=page_size)
+    return await selection(db,company_id,branch_id,actor=actor,search=search,category_id=category_id,purpose=purpose,selected_id=selected_id,page=page,page_size=page_size)
 
 
 @router.post("/categories", response_model=CategoryOut)

@@ -3,12 +3,12 @@ import {createPrintScope} from "../printing/context";
 import { useEffect, useId, useRef, useState } from "react";
 import "./product-selector.css";
 
-export type SelectionProduct = { id: string; name: string; sku: string | null; barcode: string | null; unit: string; category_name: string | null; selling_price: string | number | null; branch_stock_qty: string | number | null };
-export type SelectionPage = { items: SelectionProduct[]; page: number; total_pages: number; total: number };
+export type SelectionProduct = { id: string; name: string; sku: string | null; barcode: string | null; unit: string; category_name: string | null; selling_price: string | number | null; branch_stock_qty: string | number | null; product_type?:string;track_inventory?:boolean };
+export type SelectionPage = { selection_contract?:string;purpose?:string;items: SelectionProduct[]; page: number; total_pages: number; total: number };
 type Client = { get: <T=SelectionPage>(path: string, config: { params: Record<string, unknown>; signal: AbortSignal }) => Promise<{ data: T }> };
-export default function ProductSelector({ companyId, branchId, scopeKey, value, selectedLabel, onChange, client, disabled = false, label = "Product", categoryId }: {
+export default function ProductSelector({ companyId, branchId, scopeKey, value, selectedLabel, onChange, client, disabled = false, label = "Product", categoryId, purpose = "general", onClear }: {
   companyId: string; branchId: string; scopeKey: string; value: string; selectedLabel?: string;
-  onChange: (id: string, product: SelectionProduct) => void; client: Client; disabled?: boolean; label?: string; categoryId?: string;
+  onChange: (id: string, product: SelectionProduct) => void; client: Client; disabled?: boolean; label?: string; categoryId?: string; purpose?: "general"|"charge"; onClear?:()=>void;
 }) {
   const [preference,setPreference] = useState<{scope:string;view:"table"|"cards";scheme:ToolScheme}|null>(null),[preferenceEpoch,setPreferenceEpoch]=useState(0);
   const preferenceScope=JSON.stringify([companyId,branchId,scopeKey,disabled]);
@@ -29,10 +29,11 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
   const [query, setQuery] = useState(""), [page, setPage] = useState(1), [result, setResult] = useState<SelectionPage | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [choice, setChoice] = useState<{ id: string; name: string } | null>(null);
   const [cursor, setCursor] = useState(0), [retry, setRetry] = useState(0), [resultScope, setResultScope] = useState("");
+  const [selectionWarning,setSelectionWarning]=useState("");
   const resultGuard=useRef<ReturnType<typeof createPrintScope>|null>(null);
-  const scope = JSON.stringify([companyId, branchId, scopeKey, query, categoryId, page, disabled, retry, preferenceEpoch]);
+  const scope = JSON.stringify([companyId, branchId, scopeKey, query, categoryId, page, disabled, retry, preferenceEpoch, purpose]);
   const visible = resultScope === scope ? result : null;
-  useEffect(() => { setQuery(""); setPage(1); setChoice(null); }, [companyId, branchId, scopeKey]);
+  useEffect(() => { setQuery(""); setPage(1); setChoice(null); }, [companyId, branchId, scopeKey, purpose]);
   useEffect(() => {
     const request = ++generation.current, controller = new AbortController(), context=createPrintScope();
     resultGuard.current=null;
@@ -40,19 +41,33 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
     if (!companyId || !branchId || disabled) { setBusy(false); return; }
     setBusy(true);
     const timer = window.setTimeout(() => {
-      void client.get<SelectionPage>(`/products/${companyId}/selection`, { params: { branch_id: branchId, search: query, category_id: categoryId, page, page_size: 25 }, signal: controller.signal }).then(({ data }) => {
+      void client.get<SelectionPage>(`/products/${companyId}/selection`, { params: { branch_id: branchId, search: query, category_id: categoryId, purpose, page, page_size: 25 }, signal: controller.signal }).then(({ data }) => {
         if (generation.current !== request || controller.signal.aborted || !context.isCurrent()) return;
+        if (purpose==="charge"&&(data.selection_contract!=="product-selection-v2"||data.purpose!=="charge")) throw new Error("Charge selection contract unavailable");
         if (!Array.isArray(data.items) || data.page !== page || !Number.isInteger(data.total) || !Number.isInteger(data.total_pages)) throw new Error("Invalid product search response");
         resultGuard.current=context; setResultScope(scope); setResult(data); setBusy(false);
       }).catch(() => { if (generation.current === request && !controller.signal.aborted) { setError("Product search failed. Retry when connected."); setBusy(false); } });
     }, 180);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [client, companyId, branchId, scopeKey, query, categoryId, page, disabled, retry, scope]);
+  useEffect(()=>{
+    const controller=new AbortController(),context=createPrintScope();setSelectionWarning("");
+    if(purpose==="charge"&&companyId&&branchId&&value&&!disabled){
+      void client.get<SelectionPage>(`/products/${companyId}/selection`,{params:{branch_id:branchId,purpose,selected_id:value,page:1,page_size:1},signal:controller.signal}).then(({data})=>{
+        if(controller.signal.aborted||!context.isCurrent())return;
+        if(data.selection_contract!=="product-selection-v2"||data.purpose!=="charge")throw new Error("Charge selection contract unavailable");
+        const row=data.items?.find(item=>item.id===value);
+        if(row)setChoice({id:row.id,name:row.name});
+        else{setChoice(null);setSelectionWarning("Saved product is unavailable for this purpose. Clear it or choose an eligible product.");}
+      }).catch(()=>{if(!controller.signal.aborted&&context.isCurrent())setSelectionWarning("Cannot verify the saved product. Retry when connected before saving profile changes.");});
+    }
+    return()=>controller.abort();
+  },[client,companyId,branchId,scopeKey,purpose,value,disabled]);
   function choose(product: SelectionProduct) { if (busy || disabled || !visible || !resultGuard.current?.isCurrent()) return; setChoice(product); onChange(product.id, product); searchInput.current?.focus(); }
   const rows = visible?.items || [];
   return <div className="product-selector shared-tool-theme" data-tool-theme={theme}>
     <label htmlFor={id}>{label}: search name, SKU or barcode</label>
-    <input id={id} ref={searchInput} type="search" autoComplete="off" value={query} disabled={disabled || !branchId} aria-controls={`${id}-results`} aria-describedby={`${id}-status`}
+    <input id={id} ref={searchInput} type="search" autoComplete="off" value={query} disabled={disabled || !branchId} aria-controls={`${id}-results`} aria-describedby={`${id}-status ${id}-selection-status`}
       onChange={e => { setQuery(e.target.value); setPage(1); }} onKeyDown={e => {
         if (["ArrowDown", "ArrowUp", "Enter"].includes(e.key)) e.preventDefault();
         if (e.key === "ArrowDown") setCursor(n => Math.min(n + 1, rows.length - 1));
@@ -60,6 +75,8 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
         if (e.key === "Enter" && rows[cursor]) choose(rows[cursor]);
       }} />
     <p id={`${id}-status`} role="status">{busy ? "Searching…" : error || (visible ? `${visible.total} products · Page ${visible.page} of ${Math.max(1, visible.total_pages)}` : "Choose a branch to search")}</p>
+    <p id={`${id}-selection-status`} role="status">{selectionWarning}</p>
+    {onClear&&<button type="button" disabled={disabled||busy||!value} aria-label={`Clear ${label}`} onClick={()=>{setChoice(null);onClear()}}>None / clear {label}</button>}
     {value && <p>Selected: {choice?.id === value ? choice.name : selectedLabel || "Previously selected product"}</p>}
     {view === "cards" ? <div id={`${id}-results`} className="product-selector-cards" role="list" aria-label={`${label} results`} aria-busy={busy}>
       {rows.map((product,index)=><article role="listitem" key={product.id} className={index===cursor?"product-selector-focused":undefined}>

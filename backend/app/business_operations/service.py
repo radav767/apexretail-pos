@@ -64,13 +64,15 @@ class BusinessService(PrintingService):
             raise HTTPException(409, "Enable the appropriate business profile in Settings first")
 
     async def save_profile(self, data):
+        from app.workflows.core import WorkflowService
+        await WorkflowService(self.db,self.actor).current_context(self.actor.company_id)
         await self.require_write()
         permit(self.actor, "business_settings_manage")
-        for product_id in (data.tip_product_id, data.service_product_id):
-            if product_id:
-                product = await self.db.get(Product, product_id)
-                if not product or product.company_id != self.actor.company_id or product.deleted or not product.active or product.track_inventory or product.product_type not in {"service", "non_stock"}:
-                    raise HTTPException(400, "Charges require an active non-stock/service product with reviewed tax settings")
+        for product_id in sorted({id for id in (data.tip_product_id,data.service_product_id) if id},key=str):
+            product=(await self.db.execute(select(Product).where(Product.id==product_id,Product.company_id==self.actor.company_id)
+                .with_for_update(read=True).execution_options(populate_existing=True))).scalar_one_or_none()
+            if not product or product.deleted or not product.active or product.track_inventory or product.product_type not in {"service", "non_stock"}:
+                raise HTTPException(400, "Charges require an active non-stock/service product with reviewed tax settings")
         profile = await self.db.get(BusinessProfile, self.actor.company_id)
         if not profile: profile = BusinessProfile(company_id=self.actor.company_id)
         for key, value in data.model_dump().items(): setattr(profile, key, value)
