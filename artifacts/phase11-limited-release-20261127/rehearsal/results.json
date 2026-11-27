@@ -1,0 +1,54 @@
+[
+  {
+    "step": "before-upgrade",
+    "exit": 0
+  },
+  {
+    "step": "populated-upgrade",
+    "exit": 0
+  },
+  {
+    "step": "original-columns-after-upgrade",
+    "exit": 0
+  },
+  {
+    "step": "before-backup",
+    "exit": 0
+  },
+  {
+    "step": "dump",
+    "exit": 0
+  },
+  {
+    "step": "independent-restore",
+    "exit": 0
+  },
+  {
+    "step": "restore-compare",
+    "exit": 0
+  },
+  {
+    "step": "newer-sale-revocation",
+    "exit": 0
+  },
+  {
+    "step": "newer-before-forward",
+    "exit": 0
+  },
+  {
+    "step": "compatible-head-forward",
+    "exit": 0
+  },
+  {
+    "step": "newer-after-forward",
+    "exit": 0
+  },
+  {
+    "step": "test-db-head",
+    "exit": 0
+  },
+  {
+    "step": "shell-db-head",
+    "exit": 0
+  }
+]

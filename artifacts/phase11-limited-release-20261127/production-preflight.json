@@ -1,0 +1,114 @@
+{
+  "read_only": true,
+  "unit_files": [
+    "/etc/systemd/system/apexpos.service",
+    "/etc/systemd/system/apexpos.service.d/20-entitlement-keyring.conf",
+    "/etc/systemd/system/apexpos.service.d/30-phase4-release.conf",
+    "/etc/systemd/system/apexpos.service.d/40-phase4-hotfix.conf",
+    "/etc/systemd/system/apexpos.service.d/50-authorization-fix.conf",
+    "/etc/systemd/system/apexpos.service.d/60-phase7-onward.conf"
+  ],
+  "working_directory": "/root/apexretail-pos/backend",
+  "configured_user": "root (unit default)",
+  "configured_group": "unit default",
+  "environment_files": [],
+  "processes": [
+    {
+      "pid": 1014833,
+      "uid": 0,
+      "gid": 0,
+      "cwd": "/root/apexretail-pos/backend",
+      "executable": "/usr/bin/python3.10"
+    }
+  ],
+  "safe_modes": {
+    "APP_ENV": "production",
+    "SPLIT_CHECKOUT_MODE": "<unset>",
+    "QUOTATION_PRICING_MODE": "<unset>",
+    "DOCUMENT_DELIVERY_MODE": "<unset>",
+    "BUSINESS_EMAIL_MODE": "<unset>"
+  },
+  "sensitive_config_present": {
+    "DATABASE_URL": true,
+    "JWT_SECRET": true,
+    "ENTITLEMENT_SIGNING_KEY_FILE": false,
+    "ENTITLEMENT_SIGNING_KEY_CREDENTIAL": true,
+    "ENTITLEMENT_PRIVATE_KEY": true,
+    "ENTITLEMENT_PUBLIC_KEY": true,
+    "ENTITLEMENT_PUBLIC_KEYRING_FILE": true,
+    "BUSINESS_EMAIL_KEY": false,
+    "DOCUMENT_DELIVERY_KEY": false
+  },
+  "runtime_source": "/opt/apexpos-migration-runners/phase7-onward-remediated-20261022/backend",
+  "dotenv_present": true,
+  "jwt_secret_length": 128,
+  "jwt_placeholder_like": false,
+  "runtime_python_files": 194,
+  "runtime_application_manifest_sha256": "daa2bd24d7088874efab12a1231c4a30cef05af134463ba7eeee96c82f39e2bf",
+  "requirements-runtime.lock_sha256": "34b040afe98bc63ddc01c7e254472a6dc9a1fda2f3eeead8d9c7f65f8dcbc554",
+  "requirements.txt_sha256": "59c15029c51d36d443c52db7d6a5a20ed4ce6b2513ae558df077f4f6ba890085",
+  "nginx_sites": [
+    {
+      "path": "/etc/nginx/sites-enabled/apexretail-admin.conf",
+      "resolved_path": "/etc/nginx/sites-available/apexretail-admin.conf",
+      "server_names": [
+        "admin.apexpos.cloud",
+        "admin.apexpos.cloud"
+      ],
+      "roots": [
+        "/var/www/apexretail-acme"
+      ],
+      "holding_503": true
+    },
+    {
+      "path": "/etc/nginx/sites-enabled/apexretail-backoffice.conf",
+      "resolved_path": "/etc/nginx/sites-available/apexretail-backoffice.conf",
+      "server_names": [
+        "backoffice.apexpos.cloud",
+        "backoffice.apexpos.cloud"
+      ],
+      "roots": [
+        "/var/www/apexpos-backoffice"
+      ],
+      "holding_503": false
+    },
+    {
+      "path": "/etc/nginx/sites-enabled/apexretail.conf",
+      "resolved_path": "/etc/nginx/sites-enabled/apexretail.conf",
+      "server_names": [
+        "pos.apexpos.cloud api.apexpos.cloud",
+        "api.apexpos.cloud",
+        "pos.apexpos.cloud"
+      ],
+      "roots": [
+        "/var/www/apexretail-pos"
+      ],
+      "holding_503": true
+    }
+  ],
+  "candidate_settings_valid": true,
+  "candidate_disabled_modes": {
+    "split_checkout_mode": "disabled",
+    "quotation_pricing_mode": "disabled",
+    "business_email_mode": "disabled",
+    "document_delivery_mode": "disabled"
+  },
+  "entitlement_inline_pair_matches": true,
+  "entitlement_public_ring_sha256": "fae6a7d408cf0d2c6fc650bfab55159e09957ccb046cf7cbe508b462f8ed28cf",
+  "entitlement_ring_contains_signing_public_key": false,
+  "effective_signer_matches_active_ring_key": true,
+  "effective_signer_source": "systemd credential",
+  "active_public_key_deadline_valid": true,
+  "schema": {
+    "inspected": true,
+    "transaction_read_only": true,
+    "database": "apexretail_pos",
+    "role": "apex_user",
+    "version": "PostgreSQL 14.24 (Ubuntu 14.24-0ubuntu0.22.04.1) on x86_64-pc-linux-gnu",
+    "revisions": [
+      "p10a_platform_management"
+    ],
+    "tables": 79,
+    "user_triggers": 24
+  }
+}

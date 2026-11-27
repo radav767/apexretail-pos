@@ -18,6 +18,16 @@ from app.models import User, BusinessSession, AuditEvent
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
+@router.get('/capabilities')
+async def auth_capabilities(response: Response):
+    # Public deployment availability only: never account or delivery evidence.
+    from app.core.config import get_settings
+    settings = get_settings()
+    sink = settings.app_env == 'test' and settings.business_email_mode == 'sink'
+    response.headers['Cache-Control'] = 'no-store'
+    return {'password_recovery': 'test_sink' if sink else 'unavailable'}
+
+
 @router.get("/registration-currencies")
 async def registration_currencies():
     return {"items": serialize_registration_currencies()}

@@ -1,0 +1,83 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> f1a62dfba039, enterprise core identity tables
+INFO  [alembic.runtime.migration] Running upgrade f1a62dfba039 -> 73949d4d36fb, create products and categories
+INFO  [alembic.runtime.migration] Running upgrade 73949d4d36fb -> 02d0c8e6367e, create sales tables
+INFO  [alembic.runtime.migration] Running upgrade 02d0c8e6367e -> c668d5e6d150, add tender and receipt fields
+INFO  [alembic.runtime.migration] Running upgrade c668d5e6d150 -> 126d0a13fddb, create inventory movements
+INFO  [alembic.runtime.migration] Running upgrade 126d0a13fddb -> b31a9f4c7e20, add branch inventory balances
+INFO  [alembic.runtime.migration] Running upgrade b31a9f4c7e20 -> d42f8a9c1b70, add branch links to sales and inventory
+INFO  [alembic.runtime.migration] Running upgrade d42f8a9c1b70 -> e7b1c5a9d240, add employee permissions and cashier sales
+INFO  [alembic.runtime.migration] Running upgrade e7b1c5a9d240 -> b31280e1f5ad, add sale item cost snapshots
+INFO  [alembic.runtime.migration] Running upgrade b31280e1f5ad -> c4f6a1b28d90, add company settings
+INFO  [alembic.runtime.migration] Running upgrade c4f6a1b28d90 -> d7a4b1c92e65, add sale tax snapshots
+INFO  [alembic.runtime.migration] Running upgrade d7a4b1c92e65 -> e8b4d0c721aa, add offline sale identity
+INFO  [alembic.runtime.migration] Running upgrade e8b4d0c721aa -> 8f3e21a4c9d1, normalize employee management permissions
+INFO  [alembic.runtime.migration] Running upgrade 8f3e21a4c9d1 -> 1e4c9f7b2a6d, add product create idempotency
+INFO  [alembic.runtime.migration] Running upgrade 1e4c9f7b2a6d -> 6c7fd2a9c1ab, phase 1 pos onboarding settings snapshots
+INFO  [alembic.runtime.migration] Running upgrade 6c7fd2a9c1ab -> 9a6b3d4e5f01, add device activation attempt lockouts
+INFO  [alembic.runtime.migration] Running upgrade 9a6b3d4e5f01 -> 3c2a6f4b8d11, add weighted product snapshots and subscriptions
+INFO  [alembic.runtime.migration] Running upgrade 3c2a6f4b8d11 -> b8e51d8f4a21, add paynow subscription billing fields
+INFO  [alembic.runtime.migration] Running upgrade b8e51d8f4a21 -> c1phase1refunds, phase 1 refunds, sessions, authorizations and audit
+INFO  [alembic.runtime.migration] Running upgrade c1phase1refunds -> c2phase1inventory, repair inventory balance backfill for online and offline upgrades
+INFO  [alembic.runtime.migration] Running upgrade c2phase1inventory -> d3phase2discount, add nullable sale discount snapshots for Dashboard Phase 2
+INFO  [alembic.runtime.migration] Running upgrade d3phase2discount -> d4discountcomponents, separate line and sale-wide discount snapshots
+INFO  [alembic.runtime.migration] Running upgrade d4discountcomponents -> p4a_sales_inventory, add Phase 4A nullable reporting evidence
+INFO  [alembic.runtime.migration] Running upgrade p4a_sales_inventory -> p4b_device_lifecycle, add Phase 4B terminal deletion tombstones
+INFO  [alembic.runtime.migration] Running upgrade p4b_device_lifecycle -> p4c_customers_receivables, add customers and credit receivables
+INFO  [alembic.runtime.migration] Running upgrade p4c_customers_receivables -> p4d_credit_settlements, add immutable credit settlements
+INFO  [alembic.runtime.migration] Running upgrade p4d_credit_settlements -> p4e_expenses, add expense categories and posted expenses
+INFO  [alembic.runtime.migration] Running upgrade p4e_expenses -> p4f_product_barcode_unique, add company-scoped normalized product barcode uniqueness
+INFO  [alembic.runtime.migration] Running upgrade p4f_product_barcode_unique -> p5a_company_currencies, add company currencies and immutable exchange-rate history
+INFO  [alembic.runtime.migration] Running upgrade p5a_company_currencies -> p5b_cashier_shifts, add cashier shifts and per-currency drawer snapshots
+INFO  [alembic.runtime.migration] Running upgrade p5b_cashier_shifts -> p5c_transaction_currency, add shift links and immutable transaction currency snapshots
+INFO  [alembic.runtime.migration] Running upgrade p5c_transaction_currency -> p5d_shift_cash_movements, add immutable cashier shift cash movements
+INFO  [alembic.runtime.migration] Running upgrade p5d_shift_cash_movements -> p5e_settlement_tender_change, store immutable tender and change snapshots for credit settlements
+INFO  [alembic.runtime.migration] Running upgrade p5e_settlement_tender_change -> p5f_phase4_shift_z, reconcile automatic shifts and immutable Z report snapshots
+INFO  [alembic.runtime.migration] Running upgrade p5f_phase4_shift_z -> p5g_offline_resolution, add immutable audited offline sale resolutions
+INFO  [alembic.runtime.migration] Running upgrade p5g_offline_resolution -> p5h_runtime_write_permissions, grant least-privilege Phase 4 runtime shift updates
+INFO  [alembic.runtime.migration] Running upgrade p5h_runtime_write_permissions -> p7a_product_composites, add professional product, category, variant and composite support
+INFO  [alembic.runtime.migration] Running upgrade p7a_product_composites -> p7b_variant_pricing_tax, variant stock, customer pricing, media and item tax snapshots
+Revision ID: p7b_variant_pricing_tax
+Revises: p7a_product_composites
+INFO  [alembic.runtime.migration] Running upgrade p7b_variant_pricing_tax -> p7c_employee_roles_permissions, advanced employees, roles and manager authorizations
+INFO  [alembic.runtime.migration] Running upgrade p7c_employee_roles_permissions -> p7d_printers_kitchen_jobs, Add isolated printer stations, routing and delivery queue (no financial rewrites).
+INFO  [alembic.runtime.migration] Running upgrade p7d_printers_kitchen_jobs -> p7e_business_orders_batches, Add optional business operations without rewriting historical financial records.
+INFO  [alembic.runtime.migration] Running upgrade p7e_business_orders_batches -> p7f_offline_order_receipts, Append-only offline unpaid-order acknowledgements; no financial backfill.
+INFO  [alembic.runtime.migration] Running upgrade p7f_offline_order_receipts -> p7g_batch_stock_operations, Append-only idempotency records for lot-specific existing-ledger movements.
+INFO  [alembic.runtime.migration] Running upgrade p7g_batch_stock_operations -> p7h_tips_accounting, Separate tip liabilities, business tips and immutable shift summaries.
+INFO  [alembic.runtime.migration] Running upgrade p7h_tips_accounting -> p7i_pharmacy_return_holds, Hold newly refunded lot stock pending audited inspection. No backfill.
+INFO  [alembic.runtime.migration] Running upgrade p7i_pharmacy_return_holds -> p7j_variant_batches, Scope new lots to variants. Never assign historical lots to a variant.
+INFO  [alembic.runtime.migration] Running upgrade p7j_variant_batches -> p8a_commercial_billing, Opt-in commercial plans and separate platform administration. No backfill.
+INFO  [alembic.runtime.migration] Running upgrade p8a_commercial_billing -> p9a_fiscal_preparation, Additive, uncommissioned fiscal configuration and immutable review records.
+INFO  [alembic.runtime.migration] Running upgrade p9a_fiscal_preparation -> p9b_fiscal_protocol, Additive fiscal test protocol state and immutable evidence; never activates FDMS.
+INFO  [alembic.runtime.migration] Running upgrade p9b_fiscal_protocol -> p10a_platform_management, Extend existing platform identities; no tenant backfill or financial mutation.
+INFO  [alembic.runtime.migration] Running upgrade p10a_platform_management -> p11a_user_session_revocation, Add business user revocation version; preserve existing tokens at version zero.
+INFO  [alembic.runtime.migration] Running upgrade p11a_user_session_revocation -> p11b_remembered_sessions, Revocable per-browser business sessions with rotating hashed refresh credentials.
+INFO  [alembic.runtime.migration] Running upgrade p11b_remembered_sessions -> p11c_password_recovery, Hashed reset grants, encrypted sink outbox and durable recovery throttles.
+INFO  [alembic.runtime.migration] Running upgrade p11c_password_recovery -> p11d_backoffice_handoff, Single-use, account/branch/role/version-bound Backoffice handoff grants.
+INFO  [alembic.runtime.migration] Running upgrade p11d_backoffice_handoff -> p11e_sale_command_receipts, Append-only proof for new sale commands; never guess legacy request bodies.
+INFO  [alembic.runtime.migration] Running upgrade p11e_sale_command_receipts -> p11f_order_command_proofs, Freeze new order creation/settlement request proofs; no historical backfill.
+INFO  [alembic.runtime.migration] Running upgrade p11f_order_command_proofs -> p11g_financial_command_proofs, Full request proofs for new expense and collection commands only.
+INFO  [alembic.runtime.migration] Running upgrade p11g_financial_command_proofs -> p11h_employee_session_epochs, Persistent employee revocation covers opaque sessions and legacy JWTs.
+INFO  [alembic.runtime.migration] Running upgrade p11h_employee_session_epochs -> p11i_stock_command_authority, Original actor/register bindings for new immutable stock/tip commands.
+INFO  [alembic.runtime.migration] Running upgrade p11i_stock_command_authority -> p11j_shift_command_receipts, Full shift/drawer/resolution command proofs; no historical reconstruction.
+INFO  [alembic.runtime.migration] Running upgrade p11j_shift_command_receipts -> p11k_refund_command_receipts, Full request/actor/register proof for newly identified refund commands.
+INFO  [alembic.runtime.migration] Running upgrade p11k_refund_command_receipts -> p11l_credit_refund_adjustments, Unpaid credit notes with immutable refund linkage; preserve original debt.
+INFO  [alembic.runtime.migration] Running upgrade p11l_credit_refund_adjustments -> p11m_checkout_customer_commands, Immutable identified basic checkout customer creation, without credit grants.
+INFO  [alembic.runtime.migration] Running upgrade p11m_checkout_customer_commands -> p11n_quotation_lifecycle, Quotation validity, frozen terms and immutable workflow command proof.
+INFO  [alembic.runtime.migration] Running upgrade p11n_quotation_lifecycle -> p11o_workflow_commands, Scoped procurement/count/document projections and immutable commands.
+INFO  [alembic.runtime.migration] Running upgrade p11o_workflow_commands -> p11p_stock_movement_revisions, DB cutoffs include net-zero moves, variant/lot/hold and scope changes.
+INFO  [alembic.runtime.migration] Running upgrade p11p_stock_movement_revisions -> p11q_workflow_cancel_fences, Fence abandoned uncommitted workflow UUIDs before allowing replacements.
+INFO  [alembic.runtime.migration] Running upgrade p11q_workflow_cancel_fences -> p11r_private_document_assets, Keep private normalized document assets and output bytes immutable.
+INFO  [alembic.runtime.migration] Running upgrade p11r_private_document_assets -> p11s_document_sink_evidence, Freeze consent/job binding and append-only encrypted sink captures.
+INFO  [alembic.runtime.migration] Running upgrade p11s_document_sink_evidence -> p11t_media_retention, One mutable retention projection with immutable original command evidence.
+INFO  [alembic.runtime.migration] Running upgrade p11t_media_retention -> p11u_quotation_revision_chain, Immutable quotation revision lineage with at most one converted sale.
+INFO  [alembic.runtime.migration] Running upgrade p11u_quotation_revision_chain -> p11v_split_tender_evidence, Immutable versioned split sale allocations; no provider/offline enablement.
+INFO  [alembic.runtime.migration] Running upgrade p11v_split_tender_evidence -> p11w_split_snapshot_guards, Preserve original split monetary/identity/item snapshots through forward recovery.
+INFO  [alembic.runtime.migration] Running upgrade p11w_split_snapshot_guards -> p11x_split_refund_allocations, Immutable debt-first split refund allocations and original currency budgets.
+INFO  [alembic.runtime.migration] Running upgrade p11x_split_refund_allocations -> p11y_split_credit_note_guard, Require original tender debt evidence for every split credit note insert.
+INFO  [alembic.runtime.migration] Running upgrade p11y_split_credit_note_guard -> p11z_split_note_ownership, Bind split credit notes to the original tenant and receivable.
+INFO  [alembic.runtime.migration] Running upgrade p11z_split_note_ownership -> p11aa_saved_quote_pricing, Freeze saved quotation pricing and accepted converted sale evidence.
+INFO  [alembic.runtime.migration] Running upgrade p11aa_saved_quote_pricing -> p11ab_saved_quote_binding, Prevent unlinking accepted quotation sales to evade immutable evidence.
+INFO  [alembic.runtime.migration] Running upgrade p11ab_saved_quote_binding -> p11ac_quote_refund_evidence, Freeze quotation refunds and constrain cumulative original-currency budgets.

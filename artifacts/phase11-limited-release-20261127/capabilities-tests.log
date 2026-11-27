@@ -1,0 +1,16 @@
+.                                                                     [100%]
+=============================== warnings summary ===============================
+app/core/config.py:25
+  /tmp/apexpos-phase11/backend/app/core/config.py:25: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class Settings(BaseSettings):
+
+app/sales/schema.py:48
+  /tmp/apexpos-phase11/backend/app/sales/schema.py:48: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SaleOut(BaseModel):
+
+app/sales/schema.py:108
+  /tmp/apexpos-phase11/backend/app/sales/schema.py:108: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.13/migration/
+    class SaleItemOut(BaseModel):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 passed, 3 warnings, 3 subtests passed in 2.45s

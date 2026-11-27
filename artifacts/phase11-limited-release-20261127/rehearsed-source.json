@@ -1,0 +1,19 @@
+{
+  "base_commit": "061051afb765c5aeb27f50d4e734ebf6721ee6da",
+  "base_archive_sha256": "d19fb32b11a1a1683687cfb5cd3c7abfafb28a02b53ecc20ce0096b551c1b4b8",
+  "overlaid_files": {
+    "backend/app/auth/router.py": "beb2bcbe30c09072dff044d1572e445f157c17b6441b704c61c0864716fc2292",
+    "backoffice/src/App.tsx": "181fb38e4c3473a52a099ec37d0409ba83fe26b9bb735b75435cb9030387c5b5",
+    "backend/tests/test_phase11_auth_capabilities.py": "41194e4730e62df1646a7fc603b1ecb1d14fd6d65e317f158c13724e6bb5b771"
+  },
+  "configuration": {
+    "APP_ENV": "test",
+    "SPLIT_CHECKOUT_MODE": "disabled default",
+    "QUOTATION_PRICING_MODE": "disabled default",
+    "BUSINESS_EMAIL_MODE": "disabled default",
+    "DOCUMENT_DELIVERY_MODE": "disabled default"
+  },
+  "public_ring": "synthetic-only; not deployable artifacts",
+  "databases": "new private cluster 55443; no TCP",
+  "synthetic_dump_sha256": "5c9fb21838439fad3ecb26ec15d15413badedb889461b50690865c41f32a14e0"
+}

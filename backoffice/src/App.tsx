@@ -73,6 +73,14 @@ function App() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'forgot' | 'reset' | 'handoff'>(authEntry.handoff !== null ? 'handoff' : authEntry.reset !== null ? 'reset' : 'login');
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
+  useEffect(() => {
+    let active = true;
+    api.get('/auth/capabilities').then(({ data }) => {
+      if (active) setRecoveryAvailable(data.password_recovery === 'test_sink');
+    }).catch(() => { if (active) setRecoveryAvailable(false); });
+    return () => { active = false; };
+  }, []);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const handoffReceiver = useRef(crypto.randomUUID());
@@ -161,6 +169,7 @@ function App() {
     setLoading(true); setMessage('');
     try {
       if (authMode === 'forgot') {
+        if (!recoveryAvailable) { setMessage('Email recovery is unavailable on this release. Contact your business administrator.'); return; }
         const { data } = await api.post('/auth/forgot-password', { email });
         setMessage(data.message);
       } else {
@@ -525,7 +534,9 @@ function App() {
             {loading ? "Signing in..." : "Login"}
           </button>
 
-          <button onClick={() => { setAuthMode('forgot'); setMessage(''); }}>Forgot password?</button>
+          {recoveryAvailable
+            ? <button onClick={() => { setAuthMode('forgot'); setMessage(''); }}>Forgot password? (test email sink)</button>
+            : <p>Email password recovery is unavailable. Contact your business administrator.</p>}
           </> : authMode === 'handoff' ? <>
             <h2>Confirm your Backoffice account</h2>
             {handoffIdentity ? <>

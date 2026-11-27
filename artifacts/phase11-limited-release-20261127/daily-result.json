@@ -1,0 +1,23 @@
+{
+  "company_id": "71b76ec5-5c95-421a-a09e-80f81dc279bd",
+  "branch_id": "a2e389f4-abb3-4ca3-8653-e036c2755899",
+  "product_id": "29868314-3e02-4799-b676-547be3e22d83",
+  "sale_id": "36ebe777-9c4a-41df-a1ab-3441e3fd0494",
+  "restricted_employee_id": "bda84118-b8da-46d1-aa92-59f44c1e98a6",
+  "transfer_id": "5a224e27-f456-4dba-a812-e28d4ca2939a",
+  "count_id": "9e324728-184d-41df-b1a1-bba647f26c93",
+  "owner_real_POS_BO_navigation": true,
+  "Backoffice_hub_and_legacy_pages_history": true,
+  "POS_daily_only_no_administration_menu": true,
+  "legacy_urls_retained_with_secure_gateways": true,
+  "original_transfer_count_payloads_exact_recovery": true,
+  "restricted_history_shift_allowed_reports_and_refund_guarded": true,
+  "restricted_Backoffice_password_denied": true,
+  "wrong_company_handoff_denied": true,
+  "secure_owner_reauthentication_one_use_handoff": true,
+  "POS_cashier_credential_unchanged": true,
+  "receipt_snapshot_unchanged": true,
+  "Backoffice_and_daily_POS_390px_28px_reflow": true,
+  "page_errors": [],
+  "unexpected_origins": []
+}

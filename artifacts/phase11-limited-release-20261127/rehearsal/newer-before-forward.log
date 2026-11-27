@@ -1,0 +1,1671 @@
+{
+  "audit_events": {
+    "columns": [
+      "id",
+      "company_id",
+      "actor_employee_id",
+      "actor_user_id",
+      "device_id",
+      "action",
+      "reason",
+      "details",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "batch_allocations": {
+    "columns": [
+      "id",
+      "batch_id",
+      "movement_id",
+      "quantity"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "batch_inspection_disposals": {
+    "columns": [
+      "inspection_id",
+      "movement_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "batch_return_holds": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "product_id",
+      "movement_id",
+      "quantity",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "batch_return_inspections": {
+    "columns": [
+      "id",
+      "company_id",
+      "hold_id",
+      "batch_id",
+      "request_id",
+      "payload_hash",
+      "disposition",
+      "reason",
+      "created_at",
+      "actor_type",
+      "actor_id",
+      "device_id",
+      "assignment_revision"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "batch_stock_operations": {
+    "columns": [
+      "id",
+      "company_id",
+      "request_id",
+      "payload_hash",
+      "batch_id",
+      "movement_id",
+      "operation",
+      "created_at",
+      "actor_type",
+      "actor_id",
+      "device_id",
+      "assignment_revision"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "billing_invoices": {
+    "columns": [
+      "id",
+      "company_id",
+      "request_id",
+      "payload_hash",
+      "plan_id",
+      "snapshot",
+      "amount",
+      "currency",
+      "decimal_places",
+      "due_at",
+      "fulfilled_at",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "billing_notices": {
+    "columns": [
+      "id",
+      "company_id",
+      "event_key",
+      "kind",
+      "message",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "billing_payments": {
+    "columns": [
+      "id",
+      "company_id",
+      "invoice_id",
+      "request_id",
+      "admin_id",
+      "amount",
+      "method",
+      "reference",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "billing_plans": {
+    "columns": [
+      "id",
+      "name",
+      "version",
+      "active",
+      "terms"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "branches": {
+    "columns": [
+      "company_id",
+      "shop_id",
+      "name",
+      "id",
+      "created_at",
+      "updated_at",
+      "active",
+      "deleted"
+    ],
+    "rows": 1,
+    "sha256": "6eba5ef7af41aeff29f69e993d144c23d05fd712f69e1f3ab6902f2a608c273a"
+  },
+  "business_auth_throttles": {
+    "columns": [
+      "bucket",
+      "attempts",
+      "expires_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "business_backoffice_handoffs": {
+    "columns": [
+      "token_hash",
+      "user_id",
+      "company_id",
+      "branch_id",
+      "source_session_id",
+      "session_version",
+      "role",
+      "audience",
+      "receiver_hash",
+      "expires_at",
+      "consumed_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "business_email_outbox": {
+    "columns": [
+      "id",
+      "user_id",
+      "company_id",
+      "ciphertext",
+      "status",
+      "created_at",
+      "sink_written_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "business_password_resets": {
+    "columns": [
+      "token_hash",
+      "user_id",
+      "company_id",
+      "session_version",
+      "expires_at",
+      "consumed_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "business_profiles": {
+    "columns": [
+      "company_id",
+      "profile",
+      "tip_product_id",
+      "service_product_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "business_refresh_credentials": {
+    "columns": [
+      "token_hash",
+      "session_id",
+      "consumed_at",
+      "expires_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "business_sessions": {
+    "columns": [
+      "id",
+      "user_id",
+      "company_id",
+      "session_version",
+      "remembered",
+      "audience",
+      "created_at",
+      "expires_at",
+      "revoked_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "cashier_shift_cash_movements": {
+    "columns": [
+      "id",
+      "company_id",
+      "shift_id",
+      "branch_id",
+      "device_id",
+      "employee_id",
+      "movement_type",
+      "currency_code",
+      "amount",
+      "reason",
+      "idempotency_key",
+      "created_at",
+      "base_amount",
+      "exchange_rate_snapshot"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "cashier_shift_currency_snapshots": {
+    "columns": [
+      "id",
+      "shift_id",
+      "company_id",
+      "company_currency_id",
+      "currency_code",
+      "currency_name_snapshot",
+      "currency_symbol_snapshot",
+      "decimal_places_snapshot",
+      "cash_accepted_snapshot",
+      "card_accepted_snapshot",
+      "mobile_accepted_snapshot",
+      "opening_float",
+      "cash_sales",
+      "cash_refunds",
+      "cash_settlements",
+      "cash_expenses",
+      "expected_cash",
+      "counted_cash",
+      "variance",
+      "created_at",
+      "cash_in",
+      "cash_out"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "cashier_shifts": {
+    "columns": [
+      "id",
+      "shift_number",
+      "company_id",
+      "shop_id",
+      "branch_id",
+      "device_id",
+      "employee_id",
+      "opened_pos_session_id",
+      "status",
+      "opened_at",
+      "closed_at",
+      "opening_note",
+      "closing_note",
+      "open_idempotency_key",
+      "close_idempotency_key",
+      "gross_sales_base",
+      "net_sales_base",
+      "cost_of_sales_base",
+      "gross_profit_base",
+      "discounts_base",
+      "cash_sales_base",
+      "card_sales_base",
+      "mobile_sales_base",
+      "credit_sales_base",
+      "cash_settlements_base",
+      "card_settlements_base",
+      "mobile_settlements_base",
+      "cash_expenses_base",
+      "noncash_expenses_base",
+      "created_at",
+      "business_name_snapshot",
+      "shop_name_snapshot",
+      "branch_name_snapshot",
+      "register_name_snapshot",
+      "cashier_name_snapshot",
+      "base_currency_code_snapshot",
+      "cash_refunds_base",
+      "refunds_base",
+      "cash_in_base",
+      "cash_out_base",
+      "closed_by_user_id",
+      "closed_by_employee_id",
+      "closing_user_name_snapshot",
+      "report_generated_at",
+      "tips_snapshot"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "categories": {
+    "columns": [
+      "id",
+      "company_id",
+      "name",
+      "active",
+      "deleted",
+      "parent_id",
+      "image_url"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "checkout_customer_commands": {
+    "columns": [
+      "request_id",
+      "company_id",
+      "customer_id",
+      "actor_type",
+      "actor_id",
+      "payload_hash",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "commerce_order_items": {
+    "columns": [
+      "id",
+      "order_id",
+      "product_id",
+      "variant_id",
+      "category_id",
+      "name",
+      "quantity",
+      "sent_quantity",
+      "price",
+      "unit",
+      "notes"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "commerce_orders": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "device_id",
+      "waiter_id",
+      "table_id",
+      "guest_id",
+      "customer_id",
+      "parent_id",
+      "sale_id",
+      "kind",
+      "status",
+      "version",
+      "request_id",
+      "number",
+      "last_dispatch_context",
+      "notes",
+      "created_at",
+      "creation_payload_hash",
+      "creation_actor_type",
+      "creation_actor_id",
+      "settlement_payload_hash",
+      "settlement_actor_type",
+      "settlement_actor_id",
+      "quotation_status",
+      "quotation_valid_until",
+      "quotation_terms",
+      "quotation_root_id",
+      "quotation_revision",
+      "quotation_pricing"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "companies": {
+    "columns": [
+      "name",
+      "owner_name",
+      "owner_email",
+      "business_type",
+      "country",
+      "phone",
+      "id",
+      "created_at",
+      "updated_at",
+      "active",
+      "deleted"
+    ],
+    "rows": 1,
+    "sha256": "aa7e040d1df35f343e7d9965274cf8f2e0fece8561484ebabfb5ec020f5101a0"
+  },
+  "company_currencies": {
+    "columns": [
+      "id",
+      "company_id",
+      "code",
+      "display_name",
+      "symbol",
+      "decimal_places",
+      "active",
+      "is_base",
+      "cash_accepted",
+      "card_accepted",
+      "mobile_accepted",
+      "display_order",
+      "created_by_user_id",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "company_settings": {
+    "columns": [
+      "company_id",
+      "address",
+      "contact_email",
+      "currency_code",
+      "currency_symbol",
+      "decimal_places",
+      "tax_name",
+      "tax_rate",
+      "tax_inclusive",
+      "receipt_header",
+      "receipt_footer",
+      "paper_size",
+      "auto_print",
+      "payment_methods",
+      "id",
+      "created_at",
+      "updated_at",
+      "active",
+      "deleted",
+      "base_currency_id",
+      "currency_config_version",
+      "multi_currency_enabled",
+      "reporting_timezone",
+      "shift_enforcement_enabled",
+      "shift_required_from"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "company_subscription_history": {
+    "columns": [
+      "id",
+      "company_subscription_id",
+      "company_id",
+      "action",
+      "plan",
+      "status",
+      "provider",
+      "provider_reference",
+      "payload",
+      "note",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "company_subscriptions": {
+    "columns": [
+      "id",
+      "company_id",
+      "plan",
+      "status",
+      "trial_started_at",
+      "trial_ends_at",
+      "current_period_started_at",
+      "current_period_ends_at",
+      "grace_ends_at",
+      "provider",
+      "provider_reference",
+      "status_reason",
+      "created_at",
+      "updated_at",
+      "billing_currency",
+      "licensed_terminal_count",
+      "unit_price",
+      "total_amount",
+      "commercial_terms"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "credit_receivables": {
+    "columns": [
+      "id",
+      "company_id",
+      "sale_id",
+      "customer_id",
+      "shop_id",
+      "branch_id",
+      "cashier_employee_id",
+      "device_id",
+      "currency_code",
+      "original_amount",
+      "amount_settled",
+      "outstanding_balance",
+      "due_date",
+      "status",
+      "created_at",
+      "updated_at",
+      "shift_id",
+      "amount_credited"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "credit_refund_adjustments": {
+    "columns": [
+      "id",
+      "company_id",
+      "receivable_id",
+      "refund_sale_id",
+      "amount",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "credit_settlements": {
+    "columns": [
+      "id",
+      "company_id",
+      "receivable_id",
+      "customer_id",
+      "shop_id",
+      "branch_id",
+      "actor_user_id",
+      "cashier_employee_id",
+      "device_id",
+      "amount",
+      "payment_method",
+      "reference",
+      "note",
+      "received_at",
+      "idempotency_key",
+      "receipt_number",
+      "created_at",
+      "shift_id",
+      "base_currency_code",
+      "payment_currency_code",
+      "exchange_rate_id",
+      "exchange_rate_snapshot",
+      "original_amount",
+      "tendered_amount_original",
+      "change_amount_original",
+      "command_hash",
+      "command_actor_type",
+      "command_actor_id",
+      "command_device_revision"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "currency_exchange_rates": {
+    "columns": [
+      "id",
+      "company_id",
+      "currency_id",
+      "currency_code",
+      "foreign_units_per_base",
+      "effective_at",
+      "created_by_user_id",
+      "note",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "customers": {
+    "columns": [
+      "id",
+      "company_id",
+      "customer_code",
+      "name",
+      "phone",
+      "email",
+      "address",
+      "credit_enabled",
+      "unlimited_credit",
+      "credit_limit",
+      "credit_terms_days",
+      "active",
+      "deleted",
+      "created_at",
+      "updated_at",
+      "price_level_name"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "device_activation_attempts": {
+    "columns": [
+      "company_id",
+      "device_fingerprint",
+      "failed_attempts",
+      "locked_until",
+      "last_failed_at",
+      "id",
+      "active",
+      "deleted",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "device_tombstones": {
+    "columns": [
+      "id",
+      "company_id",
+      "terminal_name",
+      "pos_number",
+      "previous_shop_id",
+      "previous_branch_id",
+      "device_key_hash",
+      "fingerprint_hash",
+      "actor_user_id",
+      "actor_employee_id",
+      "action",
+      "reason",
+      "assignment_revision",
+      "historical_sales_count",
+      "deleted_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "devices": {
+    "columns": [
+      "company_id",
+      "shop_id",
+      "branch_id",
+      "name",
+      "device_key",
+      "platform",
+      "app_version",
+      "id",
+      "created_at",
+      "updated_at",
+      "active",
+      "deleted",
+      "pos_number",
+      "friendly_name",
+      "last_seen_at",
+      "last_seen_platform",
+      "last_seen_app_version",
+      "status",
+      "claimed_at",
+      "deactivated_at",
+      "deactivation_reason",
+      "removed_at",
+      "activation_code_hash",
+      "activation_code_expires_at",
+      "device_fingerprint",
+      "pending_shop_id",
+      "pending_branch_id",
+      "assignment_revision"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "dining_tables": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "name",
+      "floor",
+      "seats",
+      "x",
+      "y",
+      "active"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "employee_device_access": {
+    "columns": [
+      "id",
+      "company_id",
+      "employee_id",
+      "device_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "employee_roles": {
+    "columns": [
+      "id",
+      "company_id",
+      "name",
+      "description",
+      "permissions",
+      "active",
+      "deleted",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "employee_shop_access": {
+    "columns": [
+      "id",
+      "employee_id",
+      "shop_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "employees": {
+    "columns": [
+      "company_id",
+      "shop_id",
+      "branch_id",
+      "name",
+      "email",
+      "phone",
+      "pin",
+      "role",
+      "id",
+      "created_at",
+      "updated_at",
+      "active",
+      "deleted",
+      "permissions",
+      "role_id",
+      "role_overrides",
+      "device_restricted",
+      "session_version"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "expense_categories": {
+    "columns": [
+      "id",
+      "company_id",
+      "name",
+      "description",
+      "active",
+      "deleted",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "expenses": {
+    "columns": [
+      "id",
+      "company_id",
+      "category_id",
+      "shop_id",
+      "branch_id",
+      "actor_user_id",
+      "employee_id",
+      "amount",
+      "currency_code",
+      "occurred_at",
+      "payment_method",
+      "description",
+      "reference",
+      "idempotency_key",
+      "created_at",
+      "shift_id",
+      "device_id",
+      "base_currency_code",
+      "exchange_rate_id",
+      "exchange_rate_snapshot",
+      "original_amount",
+      "command_hash",
+      "command_actor_type",
+      "command_actor_id",
+      "command_device_revision"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fiscal_audit": {
+    "columns": [
+      "id",
+      "company_id",
+      "actor_user_id",
+      "action",
+      "details",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fiscal_configurations": {
+    "columns": [
+      "company_id",
+      "version",
+      "settings",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fiscal_documents": {
+    "columns": [
+      "id",
+      "company_id",
+      "preparation_id",
+      "day_no",
+      "global_no",
+      "payload",
+      "payload_hash",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fiscal_preparations": {
+    "columns": [
+      "id",
+      "company_id",
+      "sale_id",
+      "snapshot",
+      "snapshot_hash",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fiscal_protocol_events": {
+    "columns": [
+      "id",
+      "company_id",
+      "document_id",
+      "sequence",
+      "kind",
+      "details",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "fiscal_protocol_states": {
+    "columns": [
+      "company_id",
+      "data"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "guest_accounts": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "room_id",
+      "customer_id",
+      "active"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "hospitality_rooms": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "name",
+      "active"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "inventory_balances": {
+    "columns": [
+      "id",
+      "company_id",
+      "shop_id",
+      "branch_id",
+      "product_id",
+      "quantity",
+      "reorder_level",
+      "active",
+      "deleted",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "inventory_movements": {
+    "columns": [
+      "id",
+      "company_id",
+      "product_id",
+      "product_name",
+      "movement_type",
+      "quantity",
+      "before_qty",
+      "after_qty",
+      "unit_cost",
+      "reference",
+      "supplier",
+      "reason",
+      "notes",
+      "created_at",
+      "shop_id",
+      "branch_id",
+      "variant_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "kitchen_tickets": {
+    "columns": [
+      "id",
+      "company_id",
+      "order_id",
+      "station_id",
+      "print_job_id",
+      "version",
+      "status",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "manager_authorizations": {
+    "columns": [
+      "id",
+      "company_id",
+      "requester_employee_id",
+      "approver_employee_id",
+      "device_id",
+      "action",
+      "context_hash",
+      "token_hash",
+      "reason",
+      "expires_at",
+      "used_at",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "offline_sale_resolutions": {
+    "columns": [
+      "id",
+      "company_id",
+      "client_sale_id",
+      "original_shift_id",
+      "original_employee_id",
+      "original_device_id",
+      "sale_id",
+      "action",
+      "reason",
+      "payload_sha256",
+      "payload_snapshot",
+      "idempotency_key",
+      "resolved_by_user_id",
+      "resolved_by_employee_id",
+      "resolver_name_snapshot",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "order_sync_receipts": {
+    "columns": [
+      "id",
+      "company_id",
+      "employee_id",
+      "device_id",
+      "request_id",
+      "payload_hash",
+      "result",
+      "captured_at",
+      "synchronized_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "platform_admins": {
+    "columns": [
+      "id",
+      "email",
+      "password_hash",
+      "role",
+      "active",
+      "failed_attempts",
+      "locked_until",
+      "mfa_secret",
+      "mfa_last_step"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "platform_audit": {
+    "columns": [
+      "id",
+      "admin_id",
+      "company_id",
+      "action",
+      "details",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "platform_challenges": {
+    "columns": [
+      "id",
+      "admin_id",
+      "token_hash",
+      "pending_secret",
+      "expires_at",
+      "used_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "platform_sessions": {
+    "columns": [
+      "id",
+      "admin_id",
+      "token_hash",
+      "expires_at",
+      "revoked_at",
+      "mfa_verified"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "platform_settings": {
+    "columns": [
+      "id",
+      "version",
+      "values"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "pos_sessions": {
+    "columns": [
+      "id",
+      "company_id",
+      "employee_id",
+      "device_id",
+      "shop_id",
+      "branch_id",
+      "token_hash",
+      "created_at",
+      "last_authenticated_at",
+      "expires_at",
+      "revoked_at",
+      "revoke_reason",
+      "session_version"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "print_jobs": {
+    "columns": [
+      "id",
+      "company_id",
+      "station_id",
+      "sale_id",
+      "requested_employee_id",
+      "request_key",
+      "kind",
+      "payload",
+      "payload_hash",
+      "status",
+      "attempts",
+      "claim_hash",
+      "claimed_at",
+      "completed_at",
+      "last_error",
+      "created_at",
+      "order_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "printer_routes": {
+    "columns": [
+      "id",
+      "station_id",
+      "target_type",
+      "target_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "printer_stations": {
+    "columns": [
+      "id",
+      "company_id",
+      "shop_id",
+      "branch_id",
+      "device_id",
+      "name",
+      "purpose",
+      "transport",
+      "address",
+      "paper_width",
+      "auto_print",
+      "active",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "product_batches": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "product_id",
+      "code",
+      "expires_on",
+      "quantity",
+      "variant_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "product_components": {
+    "columns": [
+      "id",
+      "company_id",
+      "composite_product_id",
+      "component_product_id",
+      "quantity",
+      "unit",
+      "active",
+      "deleted"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "product_creation_requests": {
+    "columns": [
+      "id",
+      "company_id",
+      "product_id",
+      "idempotency_key",
+      "active",
+      "deleted",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "product_media": {
+    "columns": [
+      "id",
+      "company_id",
+      "product_id",
+      "storage_name",
+      "original_name",
+      "content_type",
+      "size_bytes",
+      "sha256",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "product_price_levels": {
+    "columns": [
+      "id",
+      "company_id",
+      "product_id",
+      "name",
+      "price",
+      "minimum_quantity",
+      "active",
+      "deleted"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "product_variants": {
+    "columns": [
+      "id",
+      "company_id",
+      "product_id",
+      "name",
+      "sku",
+      "barcode",
+      "attributes",
+      "cost_price",
+      "selling_price",
+      "active",
+      "deleted"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "products": {
+    "columns": [
+      "id",
+      "company_id",
+      "category_id",
+      "name",
+      "sku",
+      "barcode",
+      "unit",
+      "cost_price",
+      "selling_price",
+      "stock_qty",
+      "reorder_level",
+      "active",
+      "deleted",
+      "create_request_key",
+      "archived_at",
+      "product_type",
+      "image_url",
+      "purchase_unit",
+      "units_per_purchase",
+      "track_inventory",
+      "tax_rate",
+      "tax_exempt"
+    ],
+    "rows": 1,
+    "sha256": "523faff48e576a278ad0dacba722d6fcef4d6af726881b66e773d7891a53be2b"
+  },
+  "quotation_commands": {
+    "columns": [
+      "request_id",
+      "company_id",
+      "order_id",
+      "actor_type",
+      "actor_id",
+      "payload_hash",
+      "device_id",
+      "assignment_revision",
+      "action",
+      "created_at",
+      "revised_order_id",
+      "result"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "refund_command_receipts": {
+    "columns": [
+      "request_id",
+      "company_id",
+      "sale_id",
+      "actor_type",
+      "actor_id",
+      "payload_hash",
+      "branch_id",
+      "device_id",
+      "assignment_revision",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sale_command_receipts": {
+    "columns": [
+      "client_sale_id",
+      "company_id",
+      "sale_id",
+      "actor_type",
+      "actor_id",
+      "payload_hash",
+      "branch_id",
+      "device_id",
+      "assignment_revision",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sale_item_components": {
+    "columns": [
+      "id",
+      "company_id",
+      "sale_item_id",
+      "component_product_id",
+      "component_name",
+      "quantity",
+      "unit",
+      "unit_cost"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sale_items": {
+    "columns": [
+      "id",
+      "sale_id",
+      "product_id",
+      "product_name",
+      "quantity",
+      "unit_price",
+      "line_total",
+      "unit_cost",
+      "line_cost",
+      "selling_unit",
+      "original_sale_item_id",
+      "line_discount_amount",
+      "category_id_snapshot",
+      "category_name_snapshot",
+      "cost_snapshot_available",
+      "variant_id",
+      "variant_name_snapshot",
+      "tax_rate_snapshot",
+      "tax_amount",
+      "tax_exempt_snapshot",
+      "price_level_name_snapshot"
+    ],
+    "rows": 1,
+    "sha256": "8d8e4eb6b9c001533863eba54c23a9d182cd9a3a10d5c8502360fbebd664eea6"
+  },
+  "sale_tender_refunds": {
+    "columns": [
+      "id",
+      "company_id",
+      "refund_sale_id",
+      "tender_id",
+      "kind",
+      "amount_base",
+      "amount_original",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sale_tenders": {
+    "columns": [
+      "id",
+      "company_id",
+      "sale_id",
+      "method",
+      "currency_code",
+      "currency_places",
+      "applied_original",
+      "tendered_original",
+      "change_original",
+      "applied_base",
+      "exchange_rate_id",
+      "exchange_rate_snapshot",
+      "currency_config_version",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sales": {
+    "columns": [
+      "id",
+      "company_id",
+      "total_amount",
+      "payment_method",
+      "status",
+      "created_at",
+      "receipt_number",
+      "amount_received",
+      "change_due",
+      "shop_id",
+      "branch_id",
+      "employee_id",
+      "cashier_name",
+      "subtotal_amount",
+      "tax_name",
+      "tax_rate",
+      "tax_amount",
+      "tax_inclusive",
+      "client_sale_id",
+      "client_created_at",
+      "shop_name_snapshot",
+      "shop_address_snapshot",
+      "branch_name_snapshot",
+      "device_id",
+      "pos_name_snapshot",
+      "pos_number_snapshot",
+      "receipt_footer_snapshot",
+      "original_sale_id",
+      "refund_reason",
+      "refund_method",
+      "reprint_count",
+      "last_reprinted_at",
+      "discount_amount",
+      "sale_discount_amount",
+      "customer_id",
+      "customer_name_snapshot",
+      "customer_code_snapshot",
+      "shift_id",
+      "base_currency_code",
+      "payment_currency_code",
+      "exchange_rate_id",
+      "exchange_rate_snapshot",
+      "payment_amount_original",
+      "tendered_amount_original",
+      "change_amount_original",
+      "price_level_name_snapshot"
+    ],
+    "rows": 2,
+    "sha256": "98b3fba3c123a574d76c83f04de4b0432f0b54b105687d6caf62a0baf183124a"
+  },
+  "shift_command_receipts": {
+    "columns": [
+      "company_id",
+      "kind",
+      "command_key",
+      "shift_id",
+      "movement_id",
+      "resolution_id",
+      "payload_hash",
+      "actor_type",
+      "actor_id",
+      "device_id",
+      "assignment_revision",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "shops": {
+    "columns": [
+      "company_id",
+      "name",
+      "id",
+      "created_at",
+      "updated_at",
+      "active",
+      "deleted",
+      "address_line_1",
+      "address_line_2",
+      "city",
+      "state_province",
+      "country",
+      "phone",
+      "tax_vat_number"
+    ],
+    "rows": 1,
+    "sha256": "2e3e4042bdd8d7924d47de9a854229ea653b9cf130316d5356b43999d94a4654"
+  },
+  "stock_revisions": {
+    "columns": [
+      "company_id",
+      "branch_id",
+      "product_id",
+      "revision"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "subscription_checkout_sessions": {
+    "columns": [
+      "id",
+      "company_id",
+      "company_subscription_id",
+      "plan",
+      "provider",
+      "session_reference",
+      "status",
+      "checkout_url",
+      "payload",
+      "expires_at",
+      "created_at",
+      "updated_at",
+      "billing_period",
+      "billing_currency",
+      "unit_price",
+      "terminal_count",
+      "total_amount",
+      "included_device_ids",
+      "paynow_reference",
+      "poll_url",
+      "payment_status"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "subscription_webhook_events": {
+    "columns": [
+      "id",
+      "provider",
+      "provider_event_id",
+      "event_type",
+      "company_id",
+      "payload",
+      "processed",
+      "processed_at",
+      "processing_error",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "tip_entitlements": {
+    "columns": [
+      "id",
+      "entry_id",
+      "employee_id",
+      "amount"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "tip_entries": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "shift_id",
+      "sale_id",
+      "original_id",
+      "request_id",
+      "payload_hash",
+      "kind",
+      "policy",
+      "payment_method",
+      "currency_code",
+      "decimal_places",
+      "amount",
+      "reason",
+      "reference",
+      "cash_movement_id",
+      "created_at",
+      "actor_type",
+      "actor_id",
+      "device_id",
+      "assignment_revision"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "tip_settings": {
+    "columns": [
+      "company_id",
+      "enabled",
+      "policy",
+      "weights",
+      "business_retention_confirmed",
+      "service_product_id"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "users": {
+    "columns": [
+      "company_id",
+      "email",
+      "password_hash",
+      "role",
+      "id",
+      "created_at",
+      "updated_at",
+      "active",
+      "deleted",
+      "session_version"
+    ],
+    "rows": 1,
+    "sha256": "304f1362937e925000429d6b54036053495bade6e4d663d9e03d282bb6ba5aa6"
+  },
+  "variant_inventory_balances": {
+    "columns": [
+      "id",
+      "company_id",
+      "shop_id",
+      "branch_id",
+      "product_id",
+      "variant_id",
+      "quantity",
+      "reorder_level",
+      "active",
+      "deleted",
+      "created_at",
+      "updated_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "workflow_cancellations": {
+    "columns": [
+      "request_id",
+      "company_id",
+      "actor_type",
+      "actor_id",
+      "reason",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "workflow_commands": {
+    "columns": [
+      "request_id",
+      "company_id",
+      "record_id",
+      "kind",
+      "actor_type",
+      "actor_id",
+      "device_id",
+      "assignment_revision",
+      "payload_hash",
+      "result",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "workflow_records": {
+    "columns": [
+      "id",
+      "company_id",
+      "branch_id",
+      "kind",
+      "state",
+      "version",
+      "payload",
+      "created_at"
+    ],
+    "rows": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
