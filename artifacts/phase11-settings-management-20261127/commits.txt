@@ -1,0 +1,2 @@
+a2775b4bbb6251c82b311b9cfbe60faa0df07b7a Map approved Backoffice settings and bound catalogue management selection
+2be5d2a412e6538d15cf87662fbbea41fdac5fd9 Verify pharmacy recovery across actor and register changes
