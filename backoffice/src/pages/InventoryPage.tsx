@@ -81,7 +81,10 @@ export default function InventoryPage({
   companyId: string;
   onDataChanged?: () => void;
 }) {
-  const [tab, setTab] = useState<InventoryTab>("overview");
+  const readTab=():InventoryTab=>{const value=new URLSearchParams(location.search).get('inventory_tab');return ['overview','grn','adjustment','workflows','stocktake','transfers','valuation','history'].includes(value||'')?value as InventoryTab:'overview'};
+  const [tab,changeTab]=useState<InventoryTab>(readTab);
+  function setTab(next:InventoryTab){changeTab(next);const url=new URL(location.href);url.searchParams.set('inventory_tab',next);window.history.pushState(null,'',url)}
+  useEffect(()=>{const sync=()=>changeTab(readTab());window.addEventListener('popstate',sync);return()=>window.removeEventListener('popstate',sync)},[]);
 
   const [branches, setBranches] =
     useState<InventoryBranch[]>([]);

@@ -9,6 +9,7 @@ export const salesDestinations:readonly SalesDestination[]=[
  {id:'customers',title:'Customers',detail:'Customer accounts and existing balances',module:'Customers',page:'customers'},
  {id:'credit',title:'Credit Settlement',detail:'Recorded collections and debt reconciliation',module:'Credit Settlements',page:'credit-settlements'},
  {id:'expenses',title:'Expenses',detail:'Authorized expenses and reports',module:'Expenses',page:'expenses'},
+ {id:'tips',title:'Tip operations & recovery',detail:'Existing tip reports and retained request review',module:'Reports',feature:'tip-operations',page:'tip-operations'},
  {id:'summary',title:'Sales Summary',detail:'Recorded sales overview',module:'Reports',feature:'sales-summary',page:'dashboard'},
  {id:'reports',title:'Sales Reports',detail:'Filtered sales reports and historical values',module:'Reports',feature:'sales-reports',page:'reports'},
  {id:'top',title:'Top Selling Products',detail:'Product performance reports',module:'Reports',feature:'top-products',page:'reports'},
@@ -23,6 +24,7 @@ export function canOpenSalesDestination(actor:NavigationActor|null|undefined,id:
   case 'history':case 'returns':return history;
   case 'shift':return true; // Own recovery reads retain server enforcement for every action.
   case 'z':return p.z_reports_view===true;
+  case 'tips':return p.tips_reports_view===true;
   case 'customers':return p.customers_view===true;
   case 'credit':return p.credit_settlements===true;
   case 'expenses':return p.expenses_create===true||p.expense_reports===true;

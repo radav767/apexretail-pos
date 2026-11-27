@@ -1,3 +1,4 @@
+import ProductSelector from "../../../pos-web/src/components/ProductSelector";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import PlanFeatureGate from '../components/PlanFeatureGate';
@@ -140,6 +141,7 @@ export default function ProductsPage({
   companyId: string;
   onDataChanged?: () => void;
 }) {
+  const [managementStatus,setManagementStatus]=useState<"active"|"inactive"|"all">("active");
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -1182,12 +1184,13 @@ export default function ProductsPage({
             activeFeature === "composites" ? "Composite Products" : activeFeature === "variants" ? "Product Variants" :
             activeFeature === "units" ? "Units & Case Breaking" : activeFeature === "price-levels" ? "Price Levels" : "Barcode Labels"
           }</h2></div></div>
-          <label className="advanced-product-picker">Product
+          {["variants","price-levels"].includes(activeFeature)?<><label>Management branch<select aria-label="Management branch" value={form.branch_id||branches[0]?.id||''} onChange={event=>setForm(current=>({...current,branch_id:event.target.value}))}>{branches.map(branch=><option value={branch.id} key={branch.id}>{branch.name}</option>)}</select></label><label>Catalogue state<select aria-label="Catalogue state" value={managementStatus} onChange={event=>setManagementStatus(event.target.value as typeof managementStatus)}><option value="active">Active</option><option value="inactive">Inactive</option><option value="all">All non-deleted</option></select></label><p>Management selection does not reactivate products or authorize selling. Recipes remain disabled.</p><ProductSelector companyId={companyId} branchId={form.branch_id||branches[0]?.id||''} scopeKey={`backoffice:${sessionStorage.getItem('backoffice_user_id')||''}:${activeFeature}`} value={selectedAdvancedProductId} selectedLabel={products.find(product=>product.id===selectedAdvancedProductId)?.name} onChange={id=>setSelectedAdvancedProductId(id)} client={api} purpose="management" managementStatus={managementStatus} label="Management product"/></>:
+<label className="advanced-product-picker">Product
             <select value={selectedAdvancedProductId} onChange={(event) => setSelectedAdvancedProductId(event.target.value)}>
               <option value="">Select product</option>
               {products.filter((product) => activeFeature !== "composites" || ["composite", "bundle"].includes(product.product_type)).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
             </select>
-          </label>
+          </label>}
 
           {activeFeature === "composites" && selectedAdvancedProductId && <>
             <div className="advanced-inline-form">

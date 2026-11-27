@@ -1,3 +1,5 @@
+import {settingsGroup,filteredSettingsGroups,type SettingsWorkspace} from './settingsTaxonomy';
+import {useBackofficeWorkspace} from '../../../pos-web/src/preferences/workspace';
 import PresentationPreferences from "../../../pos-web/src/components/PresentationPreferences";
 import { useEffect, useMemo, useState } from "react";
 
@@ -222,13 +224,19 @@ function formatUsd(value: string | number | null | undefined) {
 export default function SettingsPage({
   companyId,
   onDataChanged,
+  onOpenWorkspace,
 }: {
   companyId: string;
   onDataChanged?: () => void;
+  onOpenWorkspace?:(target:SettingsWorkspace)=>void;
 }) {
   const validSections = ["home","company","currencies","shops","receipts","subscription","devices","printers","tips","fiscal","presentation"];
   function fromLocation():SettingsSection{const value=new URLSearchParams(window.location.search).get("settings_section")||"home";return validSections.includes(value)?value as SettingsSection:"home"}
   const [section, changeSection] = useState<SettingsSection>(fromLocation);
+  const [group,changeGroup]=useState(()=>settingsGroup(new URLSearchParams(location.search).get('settings_group')));
+  const workspace=useBackofficeWorkspace(companyId,api);
+  function setGroup(id:string|null){const next=settingsGroup(id);changeGroup(next);changeSection('home');const url=new URL(location.href);url.searchParams.delete('settings_section');if(next)url.searchParams.set('settings_group',next.id);else url.searchParams.delete('settings_group');history.pushState(null,'',url)}
+  useEffect(()=>{const sync=()=>changeGroup(settingsGroup(new URLSearchParams(location.search).get('settings_group')));window.addEventListener('popstate',sync);return()=>window.removeEventListener('popstate',sync)},[]);
   const [settingsSearch,setSettingsSearch]=useState("");
   function setSection(next:SettingsSection){changeSection(next);const url=new URL(window.location.href);if(next==="home")url.searchParams.delete("settings_section");else url.searchParams.set("settings_section",next);window.history.pushState(null,"",url)}
   useEffect(()=>{const sync=()=>changeSection(fromLocation());window.addEventListener("popstate",sync);return()=>window.removeEventListener("popstate",sync)},[]);
@@ -312,7 +320,7 @@ export default function SettingsPage({
           "Provision POS records, assign branches and control access.",
         hidden: true,
       },
-    ].filter((card) => !card.hidden),
+    ],
     [],
   );
 
@@ -691,12 +699,12 @@ export default function SettingsPage({
   }
 
   return (
-    <div className="settings-page">
+    <div className="settings-page" data-workspace-view={workspace.backoffice_workspace_view} data-workspace-text-size={workspace.backoffice_text_size}>
       <div className="settings-intro">
         <div>
           <h2>
             {section === "home"
-              ? "Settings"
+              ? group?.title||"Settings"
               : summaryCards.find((card) => card.id === section)
                   ?.title || "Settings"}
           </h2>
@@ -707,7 +715,7 @@ export default function SettingsPage({
           </p>
         </div>
 
-        {section === "home" ? (
+        {section === "home"&&!group ? (
           <button
             className="settings-secondary-button"
             onClick={() => void loadSettings()}
@@ -718,7 +726,7 @@ export default function SettingsPage({
         ) : (
           <button
             className="settings-secondary-button"
-            onClick={() => setSection("home")}
+            onClick={() => section!=="home"?setSection("home"):setGroup(null)}
             type="button"
           >
             Back to Settings
@@ -735,26 +743,13 @@ export default function SettingsPage({
         </div>
       ) : null}
 
-      {section === "home" && <label>Find settings<input type="search" value={settingsSearch} onChange={e=>setSettingsSearch(e.target.value)} /></label>}
-      {section === "home" ? (
-        <section className="settings-home-grid">
-          {summaryCards.filter(card => `${card.title} ${card.description}`.toLowerCase().includes(settingsSearch.trim().toLowerCase())).map((card) => (
-            <button
-              key={card.id}
-              className="settings-home-card"
-              onClick={() => setSection(card.id)}
-              type="button"
-            >
-              <strong>{card.title}</strong>
-              <span>{card.description}</span>
-            </button>
-          ))}
-        </section>
-      ) : null}
+      {section === "home"&&!group&&<label>Find settings<input type="search" value={settingsSearch} onChange={e=>setSettingsSearch(e.target.value)} /></label>}
+      {section === "home"&&!group&&<section aria-label="Settings sections" className="settings-home-grid">{filteredSettingsGroups(settingsSearch).map(item=><button type="button" key={item.id} className="settings-home-card" onClick={()=>setGroup(item.id)}><strong>{item.title}</strong><span>{item.description}</span></button>)}{filteredSettingsGroups(settingsSearch).length===0&&<p role="status">No matching settings sections.</p>}</section>}
+      {section === "home"&&group&&<section className="settings-group-entries" aria-label={group.title}><p>Configuration links retain their existing forms and permissions. Stock, payment, reporting and recovery workflows stay in their operational menus.</p>{group.entries.map((item,index)=>item.section?<button className="settings-home-card" type="button" key={index} onClick={()=>setSection(item.section as SettingsSection)}><strong>{item.title}</strong><span>{item.description}</span></button>:item.workspace?<button className="settings-home-card" type="button" key={index} disabled={!onOpenWorkspace} onClick={()=>onOpenWorkspace?.(item.workspace!)}><strong>{item.title}</strong><span>{item.description}</span></button>:<article className="settings-card" key={index}><h3>{item.title}</h3><p>{item.description}</p></article>)}</section>}
 
       {section === "presentation" && <PresentationPreferences key={companyId} companyId={companyId} client={api}/>}
       {section === "printers" && <PrinterManagement companyId={companyId} api={api} canManage />}
-      {section === "tips" && <TipsSettingsPanel companyId={companyId} />}
+      {section === "tips" && <><TipsSettingsPanel companyId={companyId} mode="configuration"/><p>Tip reports and original tip-request recovery remain in Sales &amp; Reports.</p><button type="button" onClick={()=>onOpenWorkspace?.({page:"tip-operations"})}>Open tip operations &amp; recovery</button></>}
       {section === "fiscal" && <FiscalSettingsPanel key={companyId} companyId={companyId} />}
 
       {section === "company" ? (
@@ -1120,6 +1115,7 @@ export default function SettingsPage({
               Receipt header
               <textarea
                 rows={4}
+                aria-label="Receipt header"
                 value={receiptForm.receipt_header}
                 onChange={(event) =>
                   updateReceiptField(
@@ -1134,6 +1130,7 @@ export default function SettingsPage({
               Receipt footer
               <textarea
                 rows={4}
+                aria-label="Receipt footer"
                 value={receiptForm.receipt_footer}
                 onChange={(event) =>
                   updateReceiptField(

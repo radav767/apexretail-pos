@@ -1,0 +1,17 @@
+{
+  "company_id": "699a77ee-f637-4b46-9c87-c4c50c96bb64",
+  "branch_id": "ccf95541-c68d-4b98-ae08-1110397deea3",
+  "tail_product_id": "00d17d19-48d0-469d-85a7-ec6cc65c961b",
+  "template_id": "d29fde1e-606d-4ce9-9694-863ee09d3f0a",
+  "template_request_id": "80927f64-7986-4248-a33e-9c89b9d603bf",
+  "approved_exact_ten_BO_only_sections": true,
+  "legacy_settings_values_links_history_query_unchanged": true,
+  "operational_tip_request_frame_preserved_without_transfer": true,
+  "document_configuration_link_original_template_exact_recovery": true,
+  "scoped_settings_list_large_text_keyboard_forced_colors_reflow": true,
+  "management_active_inactive_all_pagination_current_name_no_reactivation": true,
+  "POS_and_legacy_employee_BO_management_denied": true,
+  "late_management_response_after_logout_new_tenant_discarded": true,
+  "page_errors": [],
+  "unexpected_origins": []
+}

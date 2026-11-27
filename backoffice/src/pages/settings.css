@@ -472,3 +472,19 @@
     flex-direction: column;
   }
 }
+
+.settings-group-entries { display:grid;gap:14px;min-width:0; }
+.settings-group-entries .settings-home-card { min-height:64px; }
+.settings-page[data-workspace-view="list"] .settings-home-grid { grid-template-columns:minmax(0,1fr); }
+.settings-page[data-workspace-text-size="large"] :is(.settings-home-grid,.settings-group-entries) :is(strong,span,p,button,h3) { font-size:max(20px,1.25rem);line-height:1.5; }
+.settings-page :is(.settings-home-grid,.settings-group-entries) button { min-height:44px;white-space:normal;overflow-wrap:anywhere; }
+.settings-page :is(button,input,select):focus-visible { outline:3px solid #1d4ed8;outline-offset:3px; }
+@media(prefers-reduced-motion:reduce) { .settings-page .settings-home-card { transition:none;transform:none; } }
+@media(forced-colors:active) { .settings-page .settings-home-card { background:Canvas;color:CanvasText;border:1px solid CanvasText; } .settings-page .settings-home-card :is(strong,span) { color:CanvasText; } .settings-page button:focus-visible { outline-color:Highlight; } }
+
+/* The legacy <=390px two-column header overlaps long titles at enlarged text. */
+@media(max-width:600px) {
+ .content>.topbar { display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:12px; }
+ .content>.topbar>div,.content>.topbar h1 { min-width:0;overflow-wrap:anywhere; }
+ .content>.topbar .refresh-button { width:100%;max-width:100%;min-height:44px; }
+}

@@ -63,7 +63,7 @@ class ProductSelectionTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(response.json()['items'],[]);self.assertEqual(response.json()['total'],0)
                 direct=await selection(self.db,self.company.id,self.branch.id,actor=self.owner,purpose=purpose,selected_id=selected)
                 self.assertEqual(direct['items'],[])
-        for purpose in ['management','recipe','components','GENERAL']:
+        for purpose in ['recipe','components','GENERAL']:
             self.assertEqual((await self.get(purpose=purpose)).status_code,422)
             with self.assertRaises(HTTPException) as rejected:
                 await selection(self.db,self.company.id,self.branch.id,actor=self.owner,purpose=purpose)
@@ -90,3 +90,59 @@ class ProductSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(denied.exception.status_code,403)
         charge=await self.client.get(f'/api/products/{self.company.id}/selection',params={'branch_id':str(self.branch.id),'purpose':'charge'},headers=headers)
         self.assertEqual(charge.status_code,403,charge.text)
+
+    async def test_management_explicit_state_pages_selected_id_and_no_mutations(self):
+        from app.models import Sale,InventoryMovement
+        from app.products.selection import selection
+        from fastapi import HTTPException
+        baseline={model:(await self.db.execute(select(func.count()).select_from(model).where(model.company_id==self.company.id))).scalar_one() for model in [Sale,InventoryMovement]}
+        archived=(await self.db.execute(select(Product).where(Product.company_id==self.company.id,Product.active.is_(False)))).scalars().one()
+        for status,total in [('active',271),('inactive',1),('all',272)]:
+            response=await self.get(purpose='management',status=status);self.assertEqual(response.status_code,200,response.text);body=response.json()
+            self.assertEqual(body['selection_contract'],'product-selection-management-v1');self.assertEqual(body['status'],status);self.assertEqual(body['total'],total)
+            self.assertTrue(all('active' in row and 'cost_price' not in row for row in body['items']))
+        response=await self.get(purpose='management',status='inactive',selected_id=str(archived.id));self.assertEqual([row['id'] for row in response.json()['items']],[str(archived.id)])
+        self.assertEqual((await self.get(selected_id=str(archived.id))).json()['items'],[])
+        direct=await selection(self.db,self.company.id,self.branch.id,actor=self.owner,purpose='management',status='inactive',selected_id=archived.id);self.assertFalse(direct['items'][0]['active'])
+        deleted=(await self.db.execute(select(Product).where(Product.company_id==self.company.id,Product.deleted.is_(True)))).scalars().one()
+        self.assertEqual((await self.get(purpose='management',status='all',selected_id=str(deleted.id))).json()['total'],0)
+        first=await self.get(purpose='management',status='all',page=1);second=await self.get(purpose='management',status='all',page=2)
+        self.assertTrue({row['id'] for row in first.json()['items']}.isdisjoint(row['id'] for row in second.json()['items']))
+        for purpose,status in [('general','inactive'),('charge','all'),('management','deleted')]:
+            self.assertEqual((await self.get(purpose=purpose,status=status)).status_code,422)
+            with self.assertRaises(HTTPException) as denied:await selection(self.db,self.company.id,self.branch.id,actor=self.owner,purpose=purpose,status=status)
+            self.assertEqual(denied.exception.status_code,422)
+        for model,count in baseline.items():self.assertEqual((await self.db.execute(select(func.count()).select_from(model).where(model.company_id==self.company.id))).scalar_one(),count)
+
+    async def test_management_denies_POS_even_owner_or_employee_with_edit_permissions(self):
+        from app.products.selection import selection
+        from app.auth.dependencies import AuthActor
+        from fastapi import HTTPException
+        self.employee.permissions={'sales':True,'products_edit':True,'manage_products':True,'manage_inventory':True}
+        await self.db.commit()
+        for role in ['cashier','manager','owner']:
+            self.employee.role=role;await self.db.commit()
+            token=create_employee_access_token(employee_id=str(self.employee.id),company_id=str(self.company.id),role=role)
+            response=await self.client.get(f'/api/products/{self.company.id}/selection',params={'branch_id':str(self.branch.id),'purpose':'management','status':'all'},headers={'Authorization':'Bearer '+token})
+            self.assertEqual(response.status_code,403,response.text)
+            actor=AuthActor(actor_type='employee',company_id=self.company.id,role=role,employee=self.employee,permissions=self.employee.permissions,pos_session=self.session)
+            with self.assertRaises(HTTPException) as denied:await selection(self.db,self.company.id,self.branch.id,actor=actor,purpose='management',status='all')
+            self.assertEqual(denied.exception.status_code,403)
+        self.assertEqual((await self.client.get(f'/api/products/{uuid4()}/selection',params={'branch_id':str(self.branch.id),'purpose':'management'})).status_code,403)
+        self.assertEqual((await self.get(purpose='management',branch_id=str(uuid4()))).status_code,404)
+
+    async def test_management_refreshes_catalogue_state_and_revocation(self):
+        from sqlalchemy import update
+        from app.auth.dependencies import resolve_auth_actor
+        from app.products.selection import selection
+        from fastapi import HTTPException
+        await self.db.execute(update(Product).where(Product.id==self.product.id).values(active=False).execution_options(synchronize_session=False));await self.db.commit()
+        self.assertTrue(self.product.active)  # Deliberately stale ORM identity map.
+        current=await selection(self.db,self.company.id,self.branch.id,actor=self.owner,purpose='management',status='inactive',selected_id=self.product.id)
+        self.assertEqual(len(current['items']),1);self.assertFalse(current['items'][0]['active'])
+        self.assertEqual((await self.get(purpose='management',status='active',selected_id=str(self.product.id))).json()['items'],[])
+        authenticated=await resolve_auth_actor(self.client.headers['Authorization'].split(' ',1)[1],self.db)
+        self.user.session_version+=1;await self.db.commit()
+        self.assertEqual((await self.get(purpose='management',status='all')).status_code,401)
+        with self.assertRaises(HTTPException) as denied:await selection(self.db,self.company.id,self.branch.id,actor=authenticated,purpose='management',status='all')
+        self.assertEqual(denied.exception.status_code,401)

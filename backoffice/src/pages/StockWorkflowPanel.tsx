@@ -13,7 +13,11 @@ export default function StockWorkflowPanel({companyId,branchId,client=api,onChan
   const active=useRef(scope);active.current=scope;const lock=useRef(false);
   const listVersion=useRef(0),selectionVersion=useRef(0),readLock=useRef(false);
   const [more,setMore]=useState<Record<string,boolean>>({}),[historyMore,setHistoryMore]=useState(false),[paging,setPaging]=useState(false);
-  const [tab,setTab]=useState("purchasing"),[lists,setLists]=useState<Record<string,RecordRow[]>>({}),[caps,setCaps]=useState<any>({}),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
+  const readTab=()=>{const value=new URLSearchParams(location.search).get('workflow_tab');return ['purchasing','counts','documents'].includes(value||'')?value!:'purchasing'};
+  const [tab,changeTab]=useState(readTab);
+  function setTab(next:string){changeTab(next);const url=new URL(location.href);url.searchParams.set('workflow_tab',next);window.history.pushState(null,'',url)}
+  useEffect(()=>{const sync=()=>{selectionVersion.current++;setHistoryMore(false);changeTab(readTab());setSelected(null);setPreview('');setReason('')};window.addEventListener('popstate',sync);return()=>window.removeEventListener('popstate',sync)},[]);
+  const [lists,setLists]=useState<Record<string,RecordRow[]>>({}),[caps,setCaps]=useState<any>({}),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
   const [pending,setPending]=useState<Pending|null>(null),[blocked,setBlocked]=useState(false),[selected,setSelected]=useState<RecordRow|null>(null),[history,setHistory]=useState<any[]>([]);
   const [supplierName,setSupplierName]=useState(""),[contact,setContact]=useState(""),[supplier,setSupplier]=useState(""),[lines,setLines]=useState<Line[]>([]);
   const [product,setProduct]=useState<SelectionProduct|null>(null),[variant,setVariant]=useState(""),[variants,setVariants]=useState<any[]>([]),[quantity,setQuantity]=useState("1"),[unit,setUnit]=useState("each"),[cost,setCost]=useState("0");

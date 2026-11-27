@@ -3,12 +3,12 @@ import {createPrintScope} from "../printing/context";
 import { useEffect, useId, useRef, useState } from "react";
 import "./product-selector.css";
 
-export type SelectionProduct = { id: string; name: string; sku: string | null; barcode: string | null; unit: string; category_name: string | null; selling_price: string | number | null; branch_stock_qty: string | number | null; product_type?:string;track_inventory?:boolean };
-export type SelectionPage = { selection_contract?:string;purpose?:string;items: SelectionProduct[]; page: number; total_pages: number; total: number };
+export type SelectionProduct = { id: string; name: string; sku: string | null; barcode: string | null; unit: string; category_name: string | null; selling_price: string | number | null; branch_stock_qty: string | number | null; product_type?:string;track_inventory?:boolean;active?:boolean };
+export type SelectionPage = { selection_contract?:string;purpose?:string;status?:string;items: SelectionProduct[]; page: number; total_pages: number; total: number };
 type Client = { get: <T=SelectionPage>(path: string, config: { params: Record<string, unknown>; signal: AbortSignal }) => Promise<{ data: T }> };
-export default function ProductSelector({ companyId, branchId, scopeKey, value, selectedLabel, onChange, client, disabled = false, label = "Product", categoryId, purpose = "general", onClear }: {
+export default function ProductSelector({ companyId, branchId, scopeKey, value, selectedLabel, onChange, client, disabled = false, label = "Product", categoryId, purpose = "general", managementStatus="active", onClear }: {
   companyId: string; branchId: string; scopeKey: string; value: string; selectedLabel?: string;
-  onChange: (id: string, product: SelectionProduct) => void; client: Client; disabled?: boolean; label?: string; categoryId?: string; purpose?: "general"|"charge"; onClear?:()=>void;
+  onChange: (id: string, product: SelectionProduct) => void; client: Client; disabled?: boolean; label?: string; categoryId?: string; purpose?: "general"|"charge"|"management";managementStatus?:"active"|"inactive"|"all"; onClear?:()=>void;
 }) {
   const [preference,setPreference] = useState<{scope:string;view:"table"|"cards";scheme:ToolScheme}|null>(null),[preferenceEpoch,setPreferenceEpoch]=useState(0);
   const preferenceScope=JSON.stringify([companyId,branchId,scopeKey,disabled]);
@@ -31,9 +31,9 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
   const [cursor, setCursor] = useState(0), [retry, setRetry] = useState(0), [resultScope, setResultScope] = useState("");
   const [selectionWarning,setSelectionWarning]=useState("");
   const resultGuard=useRef<ReturnType<typeof createPrintScope>|null>(null);
-  const scope = JSON.stringify([companyId, branchId, scopeKey, query, categoryId, page, disabled, retry, preferenceEpoch, purpose]);
+  const scope = JSON.stringify([companyId, branchId, scopeKey, query, categoryId, page, disabled, retry, preferenceEpoch, purpose,managementStatus]);
   const visible = resultScope === scope ? result : null;
-  useEffect(() => { setQuery(""); setPage(1); setChoice(null); }, [companyId, branchId, scopeKey, purpose]);
+  useEffect(() => { setQuery(""); setPage(1); setChoice(null); }, [companyId, branchId, scopeKey, purpose,managementStatus]);
   useEffect(() => {
     const request = ++generation.current, controller = new AbortController(), context=createPrintScope();
     resultGuard.current=null;
@@ -41,9 +41,11 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
     if (!companyId || !branchId || disabled) { setBusy(false); return; }
     setBusy(true);
     const timer = window.setTimeout(() => {
-      void client.get<SelectionPage>(`/products/${companyId}/selection`, { params: { branch_id: branchId, search: query, category_id: categoryId, purpose, page, page_size: 25 }, signal: controller.signal }).then(({ data }) => {
+      void client.get<SelectionPage>(`/products/${companyId}/selection`, { params: { branch_id: branchId, search: query, category_id: categoryId, purpose,...(purpose==="management"?{status:managementStatus}:{}), page, page_size: 25 }, signal: controller.signal }).then(({ data }) => {
         if (generation.current !== request || controller.signal.aborted || !context.isCurrent()) return;
+        if(purpose==="management"&&(data.selection_contract!=="product-selection-management-v1"||data.purpose!==purpose||data.status!==managementStatus))throw new Error("Management selection contract unavailable");
         if (purpose==="charge"&&(data.selection_contract!=="product-selection-v2"||data.purpose!=="charge")) throw new Error("Charge selection contract unavailable");
+        if(purpose==="management"&&Array.isArray(data.items)&&data.items.some(item=>typeof item.active!=="boolean"))throw new Error("Management state metadata unavailable");
         if (!Array.isArray(data.items) || data.page !== page || !Number.isInteger(data.total) || !Number.isInteger(data.total_pages)) throw new Error("Invalid product search response");
         resultGuard.current=context; setResultScope(scope); setResult(data); setBusy(false);
       }).catch(() => { if (generation.current === request && !controller.signal.aborted) { setError("Product search failed. Retry when connected."); setBusy(false); } });
@@ -52,17 +54,17 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
   }, [client, companyId, branchId, scopeKey, query, categoryId, page, disabled, retry, scope]);
   useEffect(()=>{
     const controller=new AbortController(),context=createPrintScope();setSelectionWarning("");
-    if(purpose==="charge"&&companyId&&branchId&&value&&!disabled){
-      void client.get<SelectionPage>(`/products/${companyId}/selection`,{params:{branch_id:branchId,purpose,selected_id:value,page:1,page_size:1},signal:controller.signal}).then(({data})=>{
+    if((purpose==="charge"||purpose==="management")&&companyId&&branchId&&value&&!disabled){
+      void client.get<SelectionPage>(`/products/${companyId}/selection`,{params:{branch_id:branchId,purpose,...(purpose==="management"?{status:managementStatus}:{}),selected_id:value,page:1,page_size:1},signal:controller.signal}).then(({data})=>{
         if(controller.signal.aborted||!context.isCurrent())return;
-        if(data.selection_contract!=="product-selection-v2"||data.purpose!=="charge")throw new Error("Charge selection contract unavailable");
+        if(data.purpose!==purpose||data.selection_contract!==(purpose==="management"?"product-selection-management-v1":"product-selection-v2")||purpose==="management"&&data.status!==managementStatus)throw new Error("Selection contract unavailable");
         const row=data.items?.find(item=>item.id===value);
         if(row)setChoice({id:row.id,name:row.name});
-        else{setChoice(null);setSelectionWarning("Saved product is unavailable for this purpose. Clear it or choose an eligible product.");}
-      }).catch(()=>{if(!controller.signal.aborted&&context.isCurrent())setSelectionWarning("Cannot verify the saved product. Retry when connected before saving profile changes.");});
+        else{setChoice(null);setSelectionWarning(purpose==="management"?"Saved product is outside the current management filter or unavailable. Change the filter or choose another product; the original selection is retained.":"Saved product is unavailable for this purpose. Clear it or choose an eligible product.");}
+      }).catch(()=>{if(!controller.signal.aborted&&context.isCurrent())setSelectionWarning(purpose==="management"?"Cannot verify the saved management product. Retry when connected before editing.":"Cannot verify the saved product. Retry when connected before saving profile changes.");});
     }
     return()=>controller.abort();
-  },[client,companyId,branchId,scopeKey,purpose,value,disabled]);
+  },[client,companyId,branchId,scopeKey,purpose,managementStatus,value,disabled]);
   function choose(product: SelectionProduct) { if (busy || disabled || !visible || !resultGuard.current?.isCurrent()) return; setChoice(product); onChange(product.id, product); searchInput.current?.focus(); }
   const rows = visible?.items || [];
   return <div className="product-selector shared-tool-theme" data-tool-theme={theme}>
@@ -80,13 +82,13 @@ export default function ProductSelector({ companyId, branchId, scopeKey, value, 
     {value && <p>Selected: {choice?.id === value ? choice.name : selectedLabel || "Previously selected product"}</p>}
     {view === "cards" ? <div id={`${id}-results`} className="product-selector-cards" role="list" aria-label={`${label} results`} aria-busy={busy}>
       {rows.map((product,index)=><article role="listitem" key={product.id} className={index===cursor?"product-selector-focused":undefined}>
-        <strong>{product.name}</strong><dl><dt>SKU / Barcode</dt><dd>{product.sku||"—"} / {product.barcode||"—"}</dd><dt>Category</dt><dd>{product.category_name||"—"}</dd><dt>Unit</dt><dd>{product.unit}</dd><dt>Price</dt><dd>{product.selling_price??"Unavailable"}</dd><dt>Branch stock</dt><dd>{product.branch_stock_qty??"Not tracked"}</dd></dl>
+        <strong>{product.name}</strong>{purpose==="management"&&<span>{product.active?"Active":"Inactive"}</span>}<dl><dt>SKU / Barcode</dt><dd>{product.sku||"—"} / {product.barcode||"—"}</dd><dt>Category</dt><dd>{product.category_name||"—"}</dd><dt>Unit</dt><dd>{product.unit}</dd><dt>Price</dt><dd>{product.selling_price??"Unavailable"}</dd><dt>Branch stock</dt><dd>{product.branch_stock_qty??"Not tracked"}</dd></dl>
         <button type="button" disabled={busy||disabled} aria-label={`Select ${product.name}`} aria-pressed={value===product.id} onClick={()=>choose(product)}>Select</button>
       </article>)}
     </div> : <div className="product-selector-scroll"><table id={`${id}-results`} aria-label={`${label} results`} aria-busy={busy}>
       <thead><tr><th>Product</th><th>SKU / Barcode</th><th>Category</th><th>Unit</th><th>Price</th><th>Branch stock</th><th>Select</th></tr></thead>
       <tbody>{rows.map((product, index) => <tr key={product.id} className={index === cursor ? "product-selector-focused" : undefined}>
-        <td>{product.name}</td><td>{product.sku || "—"}<br />{product.barcode || "—"}</td><td>{product.category_name || "—"}</td><td>{product.unit}</td><td>{product.selling_price ?? "Unavailable"}</td><td>{product.branch_stock_qty ?? "Not tracked"}</td>
+        <td>{product.name}{purpose==="management"&&<span> · {product.active?"Active":"Inactive"}</span>}</td><td>{product.sku || "—"}<br />{product.barcode || "—"}</td><td>{product.category_name || "—"}</td><td>{product.unit}</td><td>{product.selling_price ?? "Unavailable"}</td><td>{product.branch_stock_qty ?? "Not tracked"}</td>
         <td><button type="button" disabled={busy || disabled} aria-label={`Select ${product.name}`} aria-pressed={value === product.id} onClick={() => choose(product)}>Select</button></td>
       </tr>)}</tbody>
     </table></div>}

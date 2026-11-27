@@ -1,3 +1,4 @@
+import TipsSettingsPanel from './pages/TipsSettingsPanel';
 import SalesReportsHub from "../../pos-web/src/navigation/SalesReportsHub";
 import { readAuthEntry } from './api/authEntry';
 import { clearBusinessContext, installBusinessContext, contextGeneration } from './api/businessSession';
@@ -28,6 +29,7 @@ import { AppIcon } from "./components/AppIcon";
 import BusinessOperations from "../../pos-web/src/business/BusinessOperations";
 
 type BackofficePage =
+  | "tip-operations"
   | "sales-reports-hub"
   | "business-operations"
   | "dashboard"
@@ -45,7 +47,7 @@ type BackofficePage =
 
 function initialBackofficePage(): BackofficePage {
   const requested = new URLSearchParams(window.location.search).get("page");
-  return (["sales-reports-hub","dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "shift-reports", "settings", "business-operations"] as BackofficePage[])
+  return (["tip-operations","sales-reports-hub","dashboard", "sales", "products", "inventory", "devices", "employees", "reports", "customers", "credit-settlements", "expenses", "shift-reports", "settings", "business-operations"] as BackofficePage[])
     .includes(requested as BackofficePage) ? requested as BackofficePage : "dashboard";
 }
 
@@ -701,6 +703,8 @@ function App() {
                       ? "Inventory Management"
                       : page === "employees"
                         ? "Employees & Permissions"
+                        : page === "tip-operations"
+                          ? "Tip operations & recovery"
                         : page === "reports"
                           ? "Sales Reports"
                           : page === "customers"
@@ -787,6 +791,7 @@ function App() {
           <EmployeesPage companyId={companyId} />
         )}
 
+        {page === "tip-operations" && <TipsSettingsPanel key={companyId} companyId={companyId} mode="operations"/>}
         {page === "sales-reports-hub" && <SalesReportsHub backoffice companyId={companyId} client={api} onSelect={item=>navigateTo(item.page as BackofficePage)}/>}
 
         {page === "reports" && (
@@ -813,6 +818,7 @@ function App() {
           <SettingsPage
             companyId={companyId}
             onDataChanged={() => void loadBackofficeData(companyId)}
+            onOpenWorkspace={target=>{navigateTo(target.page);const url=new URL(location.href);if(target.feature)url.searchParams.set('feature',target.feature);if(target.businessView)url.searchParams.set('business_view',target.businessView);if(target.inventoryTab)url.searchParams.set('inventory_tab',target.inventoryTab);if(target.workflowTab)url.searchParams.set('workflow_tab',target.workflowTab);history.replaceState(null,'',url);window.dispatchEvent(new PopStateEvent('popstate'))}}
           />
         )}
 
