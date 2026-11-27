@@ -1,0 +1,22 @@
+{
+  "company_id": "54226473-078e-4f11-b99e-42545575e277",
+  "branch_id": "65fdd998-2d21-4a0b-9eed-32a51469280c",
+  "product_id": "f7fb2733-a81c-462a-93a9-c0158c1558e6",
+  "variant_id": "68b8e3f1-f264-4e07-9665-52aaa0ab105c",
+  "device_id": "58e4c382-82e9-45b6-a049-e04b9ca04fca",
+  "employee_id": "ca223f0f-df65-4d83-a9c7-94a7984ce78f",
+  "sale_id": "f0559f71-9119-4a58-b3af-e311a3d31199",
+  "refund_id": "bde5877a-125a-4c40-9a4e-5738d2b7a5e9",
+  "batch_request_id": "14213607-7a6a-44dc-b2e3-5c469767776a",
+  "inspection_request_id": "9f84d682-68f1-4234-ad59-3f11238f0620",
+  "original_batch_id": "81f1bad2-4be6-41a7-8ae5-1a0a43965708",
+  "real_first_party_POS_and_BO": true,
+  "actual_lost_responses_exact_reload_PIN_recovery": true,
+  "concurrent_tabs_single_effect": true,
+  "late_response_cashier_change_preserves_original_frame": true,
+  "wrong_actor_tenant_BO_denied": true,
+  "register_reassignment_revokes_and_old_proof_denied": true,
+  "original_sale_and_refund_receipts_unchanged": true,
+  "page_errors": [],
+  "unexpected_origins": []
+}

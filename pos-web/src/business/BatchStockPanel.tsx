@@ -18,7 +18,7 @@ export default function BatchStockPanel({ identity, branch, products, variants =
   const [busy, setBusy] = useState(false);
   const recording = useRef(false);
   async function execute() {
-    if (recording.current || !online) return;
+    if (recording.current || !online || (recoveryOnly&&!command)) return;
     recording.current = true; setBusy(true); setMessage("");const recoveryScope=createPrintScope();
     try {
       const persisted = JSON.parse(localStorage.getItem(key) || "null") as Command | null;
