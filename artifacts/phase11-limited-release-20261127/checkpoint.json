@@ -1,0 +1,8 @@
+{
+  "development_commit": "f1adb2afff494449f82d456f30646eb3c0d83b7c",
+  "matching_rehearsal_source_files": 403,
+  "source_manifest_sha256": "8877f013aa764833ff2ac50e6da67b39c6305273adf1cb0ef967642c4be0bf7b",
+  "release_candidate_frozen": false,
+  "deployed": false,
+  "push_result": "128: GitHub HTTPS Username unavailable; local development retained"
+}
