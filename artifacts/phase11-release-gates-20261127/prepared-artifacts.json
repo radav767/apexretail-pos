@@ -46,5 +46,6 @@
       },
       "manifest_sha256": "80239df71e3dc453e8cea9f8334495cd645f61bafb1ce6dac11ab473f4a37ca2"
     }
-  }
+  },
+  "prepared_source_commit": "a9ca53bee2d8a0f59576651d2d3001e308b2fbf7"
 }

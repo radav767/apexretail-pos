@@ -1,0 +1,8 @@
+{
+  "development_commit": "a9ca53bee2d8a0f59576651d2d3001e308b2fbf7",
+  "verified_source_migration_lock_guard_files": 495,
+  "source_manifest_sha256": "0d171a8301505269602a41faf820d802deb55cb341c91d309268d3112addb1b3",
+  "release_candidate_frozen": false,
+  "deployed": false,
+  "production_changed": false
+}
