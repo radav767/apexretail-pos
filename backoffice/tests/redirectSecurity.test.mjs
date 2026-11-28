@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
+import {runInNewContext} from 'node:vm';
 const require = createRequire(resolve(process.cwd(), 'package.json'));
 const {http} = require('follow-redirects');
 
@@ -42,4 +43,12 @@ test('array-form credential headers are stripped across origins', async () => {
 test('metacharacters in custom credential header names are escaped', async () => {
   await check({'X^Key': 'SYNTHETIC', 'X|Key': 'SYNTHETIC', 'X-Public': 'synthetic-public'},
     ['X^Key', 'X|Key'], ['x^key', 'x|key']);
+});
+
+test('cross-realm custom sensitive-header arrays strip credentials on redirect', async () => {
+  const sensitive = runInNewContext("['X-Synthetic-Key']");
+  assert.equal(Array.isArray(sensitive), true);
+  assert.equal(sensitive instanceof Array, false);
+  await check({'X-Synthetic-Key': 'SYNTHETIC', 'X-Public': 'synthetic-public'},
+    sensitive, ['x-synthetic-key']);
 });

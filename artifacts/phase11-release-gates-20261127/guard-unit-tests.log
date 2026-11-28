@@ -1,0 +1,10 @@
+test_expiry_bindings_and_queue_revocation_fences (__main__.ReleaseGuardTests.test_expiry_bindings_and_queue_revocation_fences) ... ok
+test_hidden_nested_manifest_and_linked_directory_are_rejected (__main__.ReleaseGuardTests.test_hidden_nested_manifest_and_linked_directory_are_rejected) ... ok
+test_private_hash_and_symlink_checks (__main__.ReleaseGuardTests.test_private_hash_and_symlink_checks) ... ok
+test_snapshot_rejects_data_revocation_queue_or_guard_loss (__main__.ReleaseGuardTests.test_snapshot_rejects_data_revocation_queue_or_guard_loss) ... ok
+test_valid_synthetic_is_not_production_authority (__main__.ReleaseGuardTests.test_valid_synthetic_is_not_production_authority) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.006s
+
+OK

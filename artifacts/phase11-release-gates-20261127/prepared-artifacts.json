@@ -1,0 +1,50 @@
+{
+  "prepared_only_not_deployed": true,
+  "release_candidate_frozen": false,
+  "base_development_commit": "85c9ba124f8e02be8bf5033df5cfc445b2cbc572",
+  "source_manifest_sha256": "0d171a8301505269602a41faf820d802deb55cb341c91d309268d3112addb1b3",
+  "production_api_base": "/api",
+  "production_backoffice_origin": "https://backoffice.apexpos.cloud",
+  "effective_public_ring_sha256": "fae6a7d408cf0d2c6fc650bfab55159e09957ccb046cf7cbe508b462f8ed28cf",
+  "nonsecret_effective_config": {
+    "app_env": "production",
+    "backoffice_origin": "https://backoffice.apexpos.cloud",
+    "jwt_algorithm": "HS256",
+    "access_token_minutes": 1440,
+    "subscription_offline_grace_hours": 72,
+    "split_checkout_mode": "disabled",
+    "quotation_pricing_mode": "disabled",
+    "business_email_mode": "disabled",
+    "document_delivery_mode": "disabled"
+  },
+  "runtime_profile": "CPython3.11.18; patched requirements-document profile",
+  "artifacts": {
+    "pos-web": {
+      "directory": "/tmp/apex-phase11-independent-release-5lrb0b7l/source/pos-web/dist",
+      "files": {
+        "assets/cameraDetector-Ci1sur8B.js": "c497df9492b8642f903651e2efd668fe5e3c78d426f23a84d72768b86be01319",
+        "assets/index-BYaqCle5.js": "73de82f014302673476129af4bf460341f093914226474adaeb09c72428c7084",
+        "assets/index-ChTp-wL1.css": "fb0310ac08d5437476ef87c60bcfd032cfb67046a91bb656ca9c233c8a79dd11",
+        "assets/ponyfill-mSFP3S02.js": "7428447aca80b0446eeed8a51123614e66ed90176f3a760fd92d042c9830bbcf",
+        "assets/web-Bl8G4EQq.js": "a56b56d54edc2c20b812461bbffcd23868142d21a3d396639a224a25e82ef4da",
+        "assets/web-Cjzcf0IT.js": "e89740a4c17789ebc0870fac15268d9ad477bef6d768f0f8a3b3f8c4b2b918f0",
+        "assets/zxing_reader-BxB2YfIY.wasm": "2ebda08a93eea3efcd8399cda6b276e6a0b1de4fec60b4d8988a047de4c6d1ba",
+        "favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
+        "icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
+        "index.html": "125016d6f84e397a005bf1d562b079d18bdc8ee7672e3d19806ef281882be23b"
+      },
+      "manifest_sha256": "b156239f4683f12cffee2486d41c34a42cd21b296cf3af97479b23defa0e2c0e"
+    },
+    "backoffice": {
+      "directory": "/tmp/apex-phase11-independent-release-5lrb0b7l/source/backoffice/dist",
+      "files": {
+        "assets/index-XOH6p2ji.js": "9374389d13d01ddc622cd8af3673be921c80df9c0df25d4099039041889eaa3c",
+        "assets/index-lI4n1cxQ.css": "12056b0b18c07ea6ac86d19f28cad500e290044cb5b494af3674bd4941512307",
+        "favicon.svg": "61bc9a161de58248288e6905425d7180f0624c2865007b97d763fdac12043a66",
+        "icons.svg": "b45fa506195cfcdef406ba9f0c77b36ddc1a7c224040926ec70abc2fdea7b93a",
+        "index.html": "c19cf9283b235ecb6e2fd0de146fcaf343a0624b01310690fe5f31a34c360df2"
+      },
+      "manifest_sha256": "80239df71e3dc453e8cea9f8334495cd645f61bafb1ce6dac11ab473f4a37ca2"
+    }
+  }
+}

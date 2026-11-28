@@ -68,7 +68,7 @@ try:
  import sys
  sys.path.insert(0,str(Path(__file__).resolve().parents[2]/'backend'))
  from app.core.config import Settings
- supplied={name:environment[name.upper()] for name in Settings.model_fields if name.upper() in environment}
+ supplied={name:environment[name.upper()] for name in Settings.model_fields if name.upper() in environment and name not in ['entitlement_private_key','entitlement_public_key']}
  candidate=Settings(_env_file=None,**supplied)
  report['candidate_settings_valid']=True
  report['candidate_disabled_modes']={name:getattr(candidate,name) for name in ['split_checkout_mode','quotation_pricing_mode','business_email_mode','document_delivery_mode']}
@@ -78,32 +78,32 @@ except Exception as exc:
  report['candidate_settings_errors']='withheld; validator inputs may contain secrets'
 try:
  from cryptography.hazmat.primitives import serialization
- private=environment.get('ENTITLEMENT_PRIVATE_KEY')
- if environment.get('ENTITLEMENT_SIGNING_KEY_FILE'):private=Path(environment['ENTITLEMENT_SIGNING_KEY_FILE']).read_text()
- public=environment.get('ENTITLEMENT_PUBLIC_KEY')
- key=serialization.load_pem_private_key(private.replace('\\n','\n').encode(),password=None)
- pub=serialization.load_pem_public_key(public.replace('\\n','\n').encode())
- encode=lambda k:k.public_bytes(serialization.Encoding.DER,serialization.PublicFormat.SubjectPublicKeyInfo)
- report['entitlement_inline_pair_matches']=encode(key.public_key())==encode(pub)
- ring_path=Path(environment['ENTITLEMENT_PUBLIC_KEYRING_FILE']);ring_bytes=ring_path.read_bytes();ring=json.loads(ring_bytes)
- entries=ring.get('keys',[])
- report['entitlement_public_ring_sha256']=hashlib.sha256(ring_bytes).hexdigest()
- report['entitlement_ring_contains_signing_public_key']=any(encode(serialization.load_pem_public_key(entry['public_key_pem'].replace('\\n','\n').encode()))==encode(key.public_key()) for entry in entries)
-except Exception as exc:
- report['entitlement_pair_verification_error_type']=type(exc).__name__
-
-try:
  from unittest.mock import patch
  from app.auth.entitlement_keys import load_signing_key,load_public_keyring
  from datetime import datetime,timezone
+ assert candidate.entitlement_signing_key_credential or candidate.entitlement_signing_key_file, 'Protected effective signer required; inline fallback forbidden'
+ encode=lambda k:k.public_bytes(serialization.Encoding.DER,serialization.PublicFormat.SubjectPublicKeyInfo)
  with patch.dict(os.environ,environment,clear=True):
   effective_key=serialization.load_pem_private_key(load_signing_key(candidate).encode(),password=None)
   effective_ring=load_public_keyring(candidate)
   active=effective_ring.keys[candidate.entitlement_active_key_id]
   active_public=serialization.load_pem_public_key(active.public_key_pem.encode())
   report['effective_signer_matches_active_ring_key']=encode(effective_key.public_key())==encode(active_public)
-  report['effective_signer_source']='systemd credential' if candidate.entitlement_signing_key_credential else 'protected file' if candidate.entitlement_signing_key_file else 'deprecated inline'
+  report['effective_signer_source']='systemd credential' if candidate.entitlement_signing_key_credential else 'protected file'
   report['active_public_key_deadline_valid']=active.accept_until is None or active.accept_until>datetime.now(timezone.utc)
+  ring_path=Path(candidate.entitlement_public_keyring_file);ring_bytes=ring_path.read_bytes()
+  assert b'PRIVATE KEY' not in ring_bytes
+  report['entitlement_public_ring_sha256']=hashlib.sha256(ring_bytes).hexdigest()
+  assert report['effective_signer_matches_active_ring_key'] and report['active_public_key_deadline_valid']
+  if len(sys.argv)>1:
+   assert len(sys.argv)==3 and sys.argv[1]=='--export-public-ring'
+   output=Path(sys.argv[2]);assert str(output).startswith('/tmp/apex-phase11-') and output.parent.is_dir()
+   fd=os.open(output,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+   with os.fdopen(fd,'wb') as f:f.write(ring_bytes);f.flush();os.fsync(f.fileno())
+   report['public_ring_exported']=True
+ report['nonsecret_candidate_config']={name:getattr(candidate,name) for name in ['app_env','backoffice_origin','jwt_algorithm','access_token_minutes','subscription_offline_grace_hours','split_checkout_mode','quotation_pricing_mode','business_email_mode','document_delivery_mode']}
+ report['dotenv_file_sha256']=hashlib.sha256(dotenv.read_bytes()).hexdigest() if dotenv.is_file() else None
+ report['unit_file_sha256']={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in files if path.is_file()}
 except Exception as exc:
  report['effective_signer_verification_error_type']=type(exc).__name__
 
@@ -122,6 +122,13 @@ try:
   cursor.execute("SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'");tables=cursor.fetchone()[0]
   cursor.execute("SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND NOT t.tgisinternal");triggers=cursor.fetchone()[0]
   report['schema']={'inspected':True,'transaction_read_only':True,'database':database,'role':user,'version':version.split(',')[0],'revisions':revisions,'tables':tables,'user_triggers':triggers}
+ with connection.cursor() as cursor:
+  cursor.execute('SELECT rolsuper,rolcreaterole,rolcreatedb,rolcanlogin FROM pg_roles WHERE rolname=current_user')
+  report['database_role_attributes']=dict(zip(['superuser','create_role','create_database','login'],cursor.fetchone()))
+  cursor.execute("SELECT pg_get_userbyid(nspowner),has_schema_privilege(current_user,'public','CREATE') FROM pg_namespace WHERE nspname='public'")
+  owner,create=cursor.fetchone();report['schema_ownership']={'owner':owner,'app_schema_create':create}
+  cursor.execute("SELECT pg_get_userbyid(c.relowner),count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='r' GROUP BY c.relowner")
+  report['table_ownership_counts']={owner:count for owner,count in cursor.fetchall()}
  connection.rollback();connection.close()
 except Exception as exc:report['schema']={'inspected':False,'error_type':type(exc).__name__,'details':'withheld; no secret/error DSN output'}
 print(json.dumps(report,indent=2))

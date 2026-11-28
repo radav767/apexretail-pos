@@ -1,5 +1,5 @@
 -r requirements-runtime.lock
-backports-asyncio-runner==1.2.0
+backports-asyncio-runner==1.2.0; python_version < '3.11'
 iniconfig==2.3.0
 packaging==26.2
 pluggy==1.6.0

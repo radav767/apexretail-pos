@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: fresh signed challenge establishes server time independent of initial wall-clock offset
+ok 1 - fresh signed challenge establishes server time independent of initial wall-clock offset
+  ---
+  duration_ms: 51.305548
+  ...
+# Subtest: four-hour maximum cannot be extended by reloading or restoring saved storage
+ok 2 - four-hour maximum cannot be extended by reloading or restoring saved storage
+  ---
+  duration_ms: 10.079181
+  ...
+# Subtest: rollback, forward jump, monotonic reset and long sleep fail closed
+ok 3 - rollback, forward jump, monotonic reset and long sleep fail closed
+  ---
+  duration_ms: 28.915122
+  ...
+# Subtest: small tolerated wall adjustments cannot extend monotonic lifetime
+ok 4 - small tolerated wall adjustments cannot extend monotonic lifetime
+  ---
+  duration_ms: 3.169483
+  ...
+[entitlement] verification failed { category: 'snapshot_expired', kid: 'synthetic' }
+[entitlement] verification failed { category: 'offline_grace_expired', kid: 'synthetic' }
+[entitlement] verification failed { category: 'key_retired', kid: 'synthetic' }
+# Subtest: signed expiry, grace and key retirement cap the lease
+ok 5 - signed expiry, grace and key retirement cap the lease
+  ---
+  duration_ms: 33.577385
+  ...
+# Subtest: old signed responses and copied challenges cannot re-anchor a lease
+ok 6 - old signed responses and copied challenges cannot re-anchor a lease
+  ---
+  duration_ms: 9.967529
+  ...
+# Subtest: late verification cannot restore access after logout or another refresh
+ok 7 - late verification cannot restore access after logout or another refresh
+  ---
+  duration_ms: 9.726318
+  ...
+[entitlement] verification failed { category: 'subscription_not_writable', kid: 'synthetic' }
+[entitlement] verification failed { category: 'invalid_signature', kid: 'synthetic' }
+# Subtest: suspension and invalid signatures retire a previously good lease
+ok 8 - suspension and invalid signatures retire a previously good lease
+  ---
+  duration_ms: 16.810127
+  ...
+# Subtest: tenant or cashier/register context changes require a fresh online proof
+ok 9 - tenant or cashier/register context changes require a fresh online proof
+  ---
+  duration_ms: 8.833672
+  ...
+# Subtest: delayed challenge response cannot extend the lease or revive an expired request
+ok 10 - delayed challenge response cannot extend the lease or revive an expired request
+  ---
+  duration_ms: 3.314443
+  ...
+# Subtest: signed current action/actor/register rights cannot be replaced by cached PIN permissions
+ok 11 - signed current action/actor/register rights cannot be replaced by cached PIN permissions
+  ---
+  duration_ms: 21.939583
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 222.519643

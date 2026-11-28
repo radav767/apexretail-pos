@@ -1,0 +1,62 @@
+{
+  "synthetic_only": true,
+  "production_privilege_compatibility_qualified": false,
+  "preserved_original_tables": 78,
+  "preserved_original_rows": 30,
+  "preserved_original_functions": 51,
+  "initial_controls": {
+    "revision": "p10a_platform_management",
+    "open_shifts": 1,
+    "shift_enforcement": 0,
+    "app_role": {
+      "connect": false,
+      "schema_create": false
+    }
+  },
+  "interruption": {
+    "completed": [
+      "p11a_user_session_revocation",
+      "p11b_remembered_sessions",
+      "p11c_password_recovery",
+      "p11d_backoffice_handoff",
+      "p11e_sale_command_receipts"
+    ],
+    "schema": "p11e_sale_command_receipts",
+    "downgrade_allowed": false
+  },
+  "resume": {
+    "commit": "85c9ba124f8e02be8bf5033df5cfc445b2cbc572",
+    "head": "p11ac_quote_refund_evidence",
+    "completed": [
+      "p11f_order_command_proofs",
+      "p11g_financial_command_proofs",
+      "p11h_employee_session_epochs",
+      "p11i_stock_command_authority",
+      "p11j_shift_command_receipts",
+      "p11k_refund_command_receipts",
+      "p11l_credit_refund_adjustments",
+      "p11m_checkout_customer_commands",
+      "p11n_quotation_lifecycle",
+      "p11o_workflow_commands",
+      "p11p_stock_movement_revisions",
+      "p11q_workflow_cancel_fences",
+      "p11r_private_document_assets",
+      "p11s_document_sink_evidence",
+      "p11t_media_retention",
+      "p11u_quotation_revision_chain",
+      "p11v_split_tender_evidence",
+      "p11w_split_snapshot_guards",
+      "p11x_split_refund_allocations",
+      "p11y_split_credit_note_guard",
+      "p11z_split_note_ownership",
+      "p11aa_saved_quote_pricing",
+      "p11ab_saved_quote_binding",
+      "p11ac_quote_refund_evidence"
+    ],
+    "preserved": true,
+    "deployment_performed": false
+  },
+  "sealed_payload_files": 8987,
+  "plan_sha256": "acc90247414f54e98472ac6507c3f89404e777304604852430e9581241544360",
+  "private_full_snapshots": "/tmp/apex-phase11-independent-release-5lrb0b7l/guard-f22g9ywm"
+}

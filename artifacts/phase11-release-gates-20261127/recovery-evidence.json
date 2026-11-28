@@ -1,0 +1,343 @@
+{
+  "read_only": true,
+  "evidence": [
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-offhost-restore-20261105/CONFIRMATION-RECEIPT-VERIFIED.json",
+      "sha256": "cdf9989fe3954950ac890dfeacba26715418819244d770effc0143817aca1cac",
+      "summary": {
+        "classification": "INPUT_CONFIRMATION_ONLY_NOT_RESTORE_ACCEPTANCE",
+        "production_actions_authorized": false
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-offhost-restore-20261105/PREPARATION-VALIDATION.json",
+      "sha256": "370c4c801a089cbf607d5cbc37f28afde2aff07db5d3b705841d491eabde7c7b",
+      "summary": {
+        "status": "PREPARED_FOCUSED_CHECKS_PASS"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-offhost-restore-20261105/embedded-inputs.json",
+      "sha256": "717d345d7356acbb42081409431e7e0aa0553bbe95c5289dbb89e3b0bb8e16fe",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-recovery-two-path-closure-20261105/FRESH-CURRENT-BACKUP-SPEC.template.json",
+      "sha256": "9820361487005b3de185f3f3b8f9c59dd56ae1d4f234c14628ba28cd8cebcaf2",
+      "summary": {
+        "state": "PREPARED_DISABLED_PENDING_OWNER_PATH_B_AND_BINDINGS"
+      },
+      "template_only": true
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-recovery-two-path-closure-20261105/HISTORICAL-BACKUP-STATUS.json",
+      "sha256": "3a8524755d49a7f95357fb8cc789bfb09cc4d7fef097551f7b92a78a80cd22c6",
+      "summary": {
+        "status": "BLOCKED_REQUIRED_RECOVERY_KEY_NOT_LOCATED",
+        "verified_search_report.result": "EXACT_SECRET_NOT_REPORTED_IN_THIS_HOME",
+        "resume_authorized": false,
+        "historical_unrecoverable_classification.state": "PENDING_OWNER_NO_CUSTODIAN_DECLARATION"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-recovery-two-path-closure-20261105/HISTORICAL-UNRECOVERABLE.template.json",
+      "sha256": "a33f6e0b06d94265f11a413b54db40b4467850e5b759654ff310ad04e3f1c01f",
+      "summary": {
+        "state": "DRAFT_NOT_EFFECTIVE",
+        "classification": "UNRECOVERABLE_REQUIRED_KEY_UNAVAILABLE",
+        "production_actions_authorized": false
+      },
+      "template_only": true
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-recovery-two-path-closure-20261105/OWNER-DECISION.template.json",
+      "sha256": "31e578545509cc525ae07759a46008b953d4cf4fd502a5b087ac02bb922ab5d0",
+      "summary": {},
+      "template_only": true
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-recovery-two-path-closure-20261105/PREPARATION-REVIEW.json",
+      "sha256": "098b2bd04587f54923123896b4387502ed9bb65b635782f5323a129754eb1f9a",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/owner-recovery-two-path-closure-20261105/PRESERVED-EVIDENCE-PINS.json",
+      "sha256": "c518cbf732bf2866fa69c1f6340e739f239ebb994983db78a3e7ff3e24e0b8a6",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/COMMISSIONING-HOLD-20261023-2330.json",
+      "sha256": "043346b684f5d4d3b4b1aa5f8c938fe564ad778c74f999294d89f4914f9800ab",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/COMMISSIONING-HOLD.json",
+      "sha256": "a71783d7878a20be0c34b633332594268f90496d7e8fdb656181e60093d3134f",
+      "summary": {
+        "status": "HOLD_CLOSED_DEFERRED",
+        "fresh_window.status": "PROPOSED_PENDING_OWNER_APPROVAL_AND_ESCROW_VALIDATION"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/NONPRODUCTION-RECEIPT-CLASSIFICATION-0000.json",
+      "sha256": "e7c3a356d5c96e00a129c3dd07310d820b7030f620fd865ad8f473e052148bc2",
+      "summary": {
+        "classification": "NON_PRODUCTION_EVIDENCE_ONLY_NOT_ACCEPTANCE"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/OWNER-AUTHORIZATION-20261023-2300.json",
+      "sha256": "4acfcc444901ea848f792d7f95d9c94d44fac02c75fb87a1fc1d4f3f8d62aee3",
+      "summary": {
+        "operator_clearance.status": "CONFIRMED_BY_OWNER"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/OWNER-AUTHORIZATION-20261023-2330.json",
+      "sha256": "f1654bcbb263868916460e4a2f085aa7d6bfee9c4c26cc1968c54446128accf4",
+      "summary": {
+        "operator_clearance.status": "CONFIRMED_BY_OWNER",
+        "previous_attempt.status": "SUPERSEDED_SAFE_HOLD"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/OWNER-AUTHORIZATION-20261024-0000.json",
+      "sha256": "481a68de615da743d50fff016db897f47250ed627841b2313915367222e020d0",
+      "summary": {
+        "operator_clearance.status": "CONFIRMED_BY_OWNER",
+        "previous_attempt.status": "STOPPED_SAFE_HOLD"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/OWNER-AUTHORIZATION.json",
+      "sha256": "14ec1867384daa17b5e5c183c730243a3a2f92593ce11ba18037f265eefd80e6",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/PROVISIONING-PREPARED-20261023-2330.json",
+      "sha256": "c7fb45e59f8859605601a8685eddb9c5321bca041d5baf1e7cea17ae36c53c71",
+      "summary": {
+        "result": "PASS"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/PUBLIC-KEY-INSTALLATION-20261023-2300.json",
+      "sha256": "69a79e63ce1200951ea7180ad9d22b2f31956448f0f663dbf74ce17252e2b1a1",
+      "summary": {
+        "result": "PASS"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/ROLLBACK-CHECKPOINT.json",
+      "sha256": "c8a47cfab37c66489ac3e53a0b856a842ec1c37e8a00892ca4f8f22e8b62871e",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/STAGING-RECEIPT.json",
+      "sha256": "dd8fed3fab8745417a46f1321572c4dc4ca888a1c6559df7eb3e1baaad5a3b6d",
+      "summary": {
+        "result": "PASS"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/STOP-RECEIPT-20261024-0000.json",
+      "sha256": "86cb10b40bac1502abf831867ae088910723ad6a3688aebce295dd1ff7619e56",
+      "summary": {
+        "result": "PASS"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/owner-escrow-acceptance-0000.json",
+      "sha256": "563487270192a7f414d6fe4a208586e0512cf9ed471fa04b1b423c07f1d130fb",
+      "summary": {
+        "status": "PASS"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/provision-approval-2300.json",
+      "sha256": "cbbffbddfd9a6b626126752f9cb305b124aaa30589a339bbb417ba8bcd02532c",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/provision-approval-2330.json",
+      "sha256": "d0442d8deab0ef33b4cf149351264eb62009fbb2ca7d166fbd911f6c0b4e9c7f",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/ROLLBACK-RECEIPT-20261024.json",
+      "sha256": "e4cf92664ae836d1b4d5191ee712e69a27be03ab46ef4efee06273444dc769b8",
+      "summary": {
+        "result": "PASS_SAFE_STATE",
+        "http_read_only_checks.https://admin.apexpos.cloud/.status": 503,
+        "http_read_only_checks.https://admin.apexpos.cloud/api/platform/health.status": 503,
+        "http_read_only_checks.https://admin.apexpos.cloud/api/platform/invoices.status": 503,
+        "http_read_only_checks.https://admin.apexpos.cloud/api/scheduler/run.status": 503,
+        "http_read_only_checks.https://api.apexpos.cloud/api/platform/dashboard.status": 503,
+        "http_read_only_checks.https://api.apexpos.cloud/api/fiscal/test.status": 503,
+        "http_read_only_checks.https://api.apexpos.cloud/api/printing/stations.status": 503,
+        "http_read_only_checks.https://api.apexpos.cloud/api/health.status": 200,
+        "http_read_only_checks.https://pos.apexpos.cloud/.status": 200,
+        "http_read_only_checks.https://backoffice.apexpos.cloud/.status": 200,
+        "http_read_only_checks.https://pos.apexpos.cloud/assets/index-9aypoL-J.js.status": 200,
+        "http_read_only_checks.https://backoffice.apexpos.cloud/assets/index-DJcTnW_u.js.status": 200
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/approval-revocations.json",
+      "sha256": "1041eeed6f04991f09fcf0a5a12b98793ad0b2e69f3076f846302c6cdce11468",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/config-restoration.json",
+      "sha256": "8a6d8ab78661afb9407f7c56d81eebab16c8db2a4ffbea20e950a6d16dae6145",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/escrow-manifest.json",
+      "sha256": "04462b26e552771520e836ad24872b77854a85e9b4134ad0bbb2603a67777982",
+      "summary": {
+        "result": "PASS"
+      },
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/preserved-artifacts.json",
+      "sha256": "7e4a1ad6da75c98601518999c6141ae6fad832a8b5412cb5bda0dbacbb122b61",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/production-provision-receipt-0000.json",
+      "sha256": "88d9cd67e3dadcd2bfc8537cf09700abe074b7b7fa9d052bcdcb8571b7b36b11",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/rollback-preparation.json",
+      "sha256": "6150057cbde4de7fe410b184518074b34176eb945e4de375482365f6a7334e9d",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-diagnosis-20261024/service-process-evidence.json",
+      "sha256": "070be5e6df3de8ce61a53228b684278ca92facc13c43c270a81c7e144805080e",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/etc/apexretail/platform-commissioning-owner/rollback-original/COPY-MANIFEST.json",
+      "sha256": "dc62efff14ab4a8967a8131aa2c7366c6fe1c362f95707b9b350b58caa3c7b5d",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/RECOVERY-FAIL-20261023.json",
+      "sha256": "5df90c22fbd0df328d1458578ca857e0b005fd542b602053f9cf1e4a01da5d20",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/RECOVERY-FAIL-ISOLATION-20261023.json",
+      "sha256": "1e7cb1168b4fd3c51fd452d9006b4fe03e904690d96abf97aeecc725802a79b9",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/TRANSFER-BUNDLE-RECORD-20261023.json",
+      "sha256": "6e5172816e86207b661b27dff57e45d7b41c444f6ecb6a915dcd0ad6a888fc48",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/owner-snapshot-20261023T094111Z/BUNDLE-RECORD.json",
+      "sha256": "64947f9ab0d810884cadb6972b3d3d4a320a6a9c22b4bc12c3cb32d25d7c0c56",
+      "summary": {
+        "restore_verified": false
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/owner-snapshot-20261023T094111Z/encrypted-package/snapshot-manifest.json",
+      "sha256": "f7de8833aec42cd076c549fb785024869db9a2c5142f17608d9005a84d8350e7",
+      "summary": {
+        "restore_verified": false
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/owner-snapshot-20261023T101555Z/BUNDLE-RECORD.json",
+      "sha256": "c8c8c4f190fd85042318ee72127668f8ab3429721119c4bb831a625abc388f6c",
+      "summary": {
+        "restore_verified": false
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/owner-snapshot-20261023T101555Z/encrypted-package/snapshot-manifest.json",
+      "sha256": "05c4c42be5d867809bdb9acb1f82d36df12c1029fc1f162fde67f34ac4d74c81",
+      "summary": {
+        "restore_verified": false
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/owner-snapshot-20261023T101555Z/maintenance-offserver-readback/snapshot-manifest.json",
+      "sha256": "05c4c42be5d867809bdb9acb1f82d36df12c1029fc1f162fde67f34ac4d74c81",
+      "summary": {
+        "restore_verified": false
+      },
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/source-20261023T090647Z/SOURCE-RESULT.json",
+      "sha256": "b1c076ff0b9940ef3ca0e8040621287d1a94c7965ad9cf40dfc1dd2253d599bd",
+      "summary": {},
+      "template_only": false
+    },
+    {
+      "path": "/root/apexretail-pos/artifacts/current-production-recovery-20261023/source-20261023T090647Z/encrypted-package/snapshot-manifest.json",
+      "sha256": "84b652468df6d2f570a4518a45ec382ae13b106017d5618c1a92e4543f205d4a",
+      "summary": {
+        "restore_verified": false
+      },
+      "template_only": false
+    }
+  ],
+  "search_scope": [
+    "/root/apexretail-pos/artifacts/owner-offhost-restore-20261105",
+    "/root/apexretail-pos/artifacts/owner-recovery-two-path-closure-20261105",
+    "/etc/apexretail/platform-commissioning-owner",
+    "/root/apexretail-pos/artifacts/current-production-recovery-20261023"
+  ],
+  "bounded_package_paths": [],
+  "scheduled_backup_directory_empty": true,
+  "activation_file_present": false,
+  "config_presence": {
+    "/etc/apexretail/backup.json": true,
+    "/etc/apexretail/backup-offserver.json": true
+  }
+}

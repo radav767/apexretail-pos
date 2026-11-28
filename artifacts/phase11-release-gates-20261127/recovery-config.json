@@ -1,0 +1,40 @@
+{
+  "read_only": true,
+  "provider_contacted": false,
+  "source_config_valid": true,
+  "configured_public_recipient_fingerprint": "3AFF62AEFF5417B73297A5D07E4C1524BABA2793",
+  "recipient_is_historical_missing_key": false,
+  "public_keyring_present": true,
+  "source_private_key_directory_nonempty": false,
+  "copied_public_keybox_recipient_currently_valid_for_encryption": true,
+  "destination_kind": "dedicated-google-drive",
+  "destination_config_and_protected_credential_syntax_valid": true,
+  "preserved_evidence_pins": [
+    {
+      "path": "artifacts/owner-recovery-key-search-20261105/OWNER-RECOVERY-KEY-SEARCH-DAVID-PC-20261105.json",
+      "sha256_matches": true
+    },
+    {
+      "path": "artifacts/owner-recovery-diagnostics-20261105/OWNER-RECOVERY-DIAGNOSTIC-DAVID-PC-20261105.json",
+      "sha256_matches": true
+    },
+    {
+      "path": "artifacts/super-admin-owner-results-review-20261024/OWNER-RECOVERY-TARGET-CONFIRMATION-20261105.json",
+      "sha256_matches": true
+    }
+  ],
+  "historical_configured_recipient_capture": {
+    "manifest_sha256": "84b652468df6d2f570a4518a45ec382ae13b106017d5618c1a92e4543f205d4a",
+    "same_configured_recipient": true,
+    "shared_snapshot_claim": true,
+    "restore_verified": false,
+    "dump_ciphertext_hash_matches": true,
+    "baseline_ciphertext_hash_matches": true,
+    "source_pipeline_exit_codes": {
+      "encrypted_snapshot_export": 0,
+      "production_snapshot_unchanged": 0,
+      "production_configuration_unchanged": 0
+    },
+    "current_release_restore_proof": false
+  }
+}

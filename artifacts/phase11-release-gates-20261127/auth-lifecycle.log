@@ -1,0 +1,50 @@
+TAP version 13
+# Subtest: late subscription 401 cannot invalidate a newer PIN session or replay as owner
+ok 1 - late subscription 401 cannot invalidate a newer PIN session or replay as owner
+  ---
+  duration_ms: 14.250309
+  ...
+# Subtest: current employee 401 invalidates only that employee; current owner 401 requests owner sign-in
+ok 2 - current employee 401 invalidates only that employee; current owner 401 requests owner sign-in
+  ---
+  duration_ms: 1.199649
+  ...
+# Subtest: login rejection or an unauthenticated late 401 does not clear a newer owner session
+ok 3 - login rejection or an unauthenticated late 401 does not clear a newer owner session
+  ---
+  duration_ms: 11.778751
+  ...
+# Subtest: startup stops between awaits after logout rather than sending an unauthorized subscription request
+ok 4 - startup stops between awaits after logout rather than sending an unauthorized subscription request
+  ---
+  duration_ms: 0.385582
+  ...
+# Subtest: a current startup subscription failure is propagated and not hidden
+ok 5 - a current startup subscription failure is propagated and not hidden
+  ---
+  duration_ms: 0.730365
+  ...
+# Subtest: registration completes before heartbeat readiness and stale registration cannot replace company identity
+ok 6 - registration completes before heartbeat readiness and stale registration cannot replace company identity
+  ---
+  duration_ms: 21.029267
+  ...
+# Subtest: re-login with an identical JWT still invalidates old startup generations
+ok 7 - re-login with an identical JWT still invalidates old startup generations
+  ---
+  duration_ms: 0.362143
+  ...
+# Subtest: POS logout snapshots employee auth before local clear and uses owner only as revocation proof
+ok 8 - POS logout snapshots employee auth before local clear and uses owner only as revocation proof
+  ---
+  duration_ms: 1.46893
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 126.954217
